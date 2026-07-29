@@ -36,10 +36,9 @@ function writeAtomic(file, obj) {
     fs.closeSync(fd);
   }
 
-  // Cleanup on a failed replacement (P11 Sol review finding 14): an EISDIR
-  // (or any other renameSync failure — a permissions error, a cross-device
-  // rename) previously left the temp file behind in the target directory
-  // forever, since nothing after the write ever removed it on that path.
+  // Cleanup on a failed replacement: an EISDIR (or any other renameSync
+  // failure — a permissions error, a cross-device rename) must never leave
+  // the temp file behind in the target directory forever.
   // The temp file is still ours alone at this point (its unpredictable name
   // means no other writer could have raced to remove or replace it), so an
   // unconditional best-effort unlink on the throw path is safe; the
@@ -71,10 +70,10 @@ function readJson(file, fallback) {
 }
 
 // updateJson(file, fallback, updater) — a locked read-modify-write over ONE
-// json file (P11 convergence finding 21: "no shared lock or generation
-// comparison prevents two CLI invocations from atomically replacing each
-// other's updates" — per-file atomic writes stop torn files, never lost
-// updates). Takes jsonl.js's own single-writer lockfile discipline
+// json file: per-file atomic writes alone stop torn files, never lost
+// updates — two CLI invocations without a shared lock or generation
+// comparison could still clobber each other's updates. Takes jsonl.js's
+// own single-writer lockfile discipline
 // (`withLock` — exclusive create, stale-lock reclaim, bounded retry) rather
 // than a second, parallel locking mechanism invented for JSON files (one
 // native mechanism per constraint) — every caller sharing the SAME
@@ -122,9 +121,9 @@ const ARCHITECTURE_ARTIFACT_BASENAMES = Object.freeze({
   'artifact-map': 'artifact-map.json',
 });
 
-// parseArgv fails closed on a surplus positional argument (P11 Sol review
-// finding 13) — the same "every token is accounted for" discipline
-// validators.js's own parseArgv already applies to an unrecognized flag.
+// parseArgv fails closed on a surplus positional argument — the same
+// "every token is accounted for" discipline validators.js's own parseArgv
+// already applies to an unrecognized flag.
 function parseArgv(argv) {
   const [command, dir, artifact, ...rest] = argv;
   const error = rest.length > 0 ? `unexpected extra argument(s): ${rest.join(' ')}` : null;

@@ -1,11 +1,10 @@
 'use strict';
 
-// Mechanical anonymization for Maximal confrontation's reciprocal-review step
-// (ruled: "each reviews the other's convergences/divergences"; P6 Sol
-// review BLOCKING #2 — "the mutual-review step delegates an interpretive
-// projection to an unnamed third mind"). anonymizeBundle() is a pure,
-// deterministic text transform — no model, no summarizer, no judgment — so
-// each author's own session reviews an anonymized VIEW of the rival's raw
+// Mechanical anonymization for Maximal confrontation's reciprocal-review
+// step: each reviews the other's convergences/divergences without either
+// side's authorship leaking through the raw text. anonymizeBundle() is a
+// pure, deterministic text transform — no model, no summarizer, no judgment —
+// so each author's own session reviews an anonymized VIEW of the rival's raw
 // files, never a third mind's interpretation of them (the same "no
 // plan-merging by a third mind" anti-goal, applied to the
 // reviewing step itself, not only the selection step plan-judge.md already
@@ -21,11 +20,9 @@ const path = require('node:path');
 const MODEL_NAME_RE = /\b(fable|opus|sonnet|gpt|sol|claude)\b/gi;
 const MODEL_REPLACEMENT = '[model]';
 
-// UUID-shaped session identifiers (this codebase's own convention — see
-// research/reviews/p6-sol-review.md's own header: "Codex session id:
-// `019fa3e0-a89d-7e11-b0aa-5bb197ed9869`") and explicitly labeled
-// session-id fields, whether JSON ("session_id": "...") or prose
-// ("session id: ...", "Codex session id: ...").
+// UUID-shaped session identifiers and explicitly labeled session-id fields,
+// whether JSON ("session_id": "...") or prose ("session id: ...", "Codex
+// session id: ...").
 const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 const LABELED_SESSION_ID_RE = /(session[_ -]?id["']?\s*[:=]\s*["'`]?)([^"'`\n,}]+)/gi;
 
@@ -33,7 +30,7 @@ const LABELED_SESSION_ID_RE = /(session[_ -]?id["']?\s*[:=]\s*["'`]?)([^"'`\n,}]
 // content — the single biggest leak surface, since a harness reminder can
 // itself narrate which model or tool is running) and the exact CLI
 // resumption commands this codebase's own agents document
-// (product/agents/agreement-pass.md, plan-coverage-checker.md: "`codex exec
+// (agents/agreement-pass.md, agents/plan-coverage-checker.md: "`codex exec
 // resume`"), which name the dispatch mechanism a family-blind judge or rival
 // author must never see.
 const SYSTEM_REMINDER_BLOCK_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
@@ -64,10 +61,11 @@ function isNonEmptyString(value) {
 }
 
 // assertSafeRelPath(relPath, label) — rejects an absolute path or any ".."/"."
-// segment BEFORE it is ever joined against a base directory (P11 Sol review
-// finding 1: a bare `../secret.txt` reached fs.readFileSync/fs.writeFileSync
-// unchecked). Mirrors scout.js's normalizedContainedEntryPoint's own
-// posix-normalize-then-check discipline, applied here fail-closed (throws)
+// segment BEFORE it is ever joined against a base directory: an unchecked
+// relative path (e.g. a bare `../secret.txt`) would otherwise reach
+// fs.readFileSync/fs.writeFileSync directly. Mirrors scout.js's
+// normalizedContainedEntryPoint's own posix-normalize-then-check discipline,
+// applied here fail-closed (throws)
 // rather than that function's silent-drop posture — anonymizeBundle's own
 // header comment already refuses a missing source file rather than
 // skipping it, so a malformed path gets the same "refuse the whole call"
@@ -236,19 +234,18 @@ function anonymizeBundle(srcDir, destDir, files) {
   return { written };
 }
 
-// CLI entrypoint (P11 convergence finding 4 — Maximal confrontation's own
-// mechanical mid-protocol steps, product/architecture/flow.md steps 2 and 6:
-// "Maestro runs machine/src/anonymize.js's anonymizeBundle(...)" — a
-// Bash-only orchestrator has no way to call this in-process). `anonymize-
-// bundle <srcDir> <destDir>` reads the `files` relative-path array via
-// stdin (the same array anonymizeBundle itself takes — the canonical
-// five-artifact set for a candidate's own draft directory, or an arbitrary
-// report-file list for the adversarial-mission-report anonymization pass
-// flow.md step 6 also names).
-// parseArgv fails closed on a surplus positional argument (P11 Sol review
-// finding 13) rather than silently ignoring it — the same "every token is
-// accounted for" discipline validators.js's own parseArgv already applies to
-// an unrecognized flag, applied here to an extra positional instead.
+// CLI entrypoint: Maximal confrontation's own mechanical mid-protocol steps
+// (product/architecture/flow.md steps 2 and 6) run "Maestro runs
+// machine/src/anonymize.js's anonymizeBundle(...)" — a Bash-only orchestrator
+// has no way to call this in-process. `anonymize-bundle <srcDir> <destDir>`
+// reads the `files` relative-path array via stdin (the same array
+// anonymizeBundle itself takes — the canonical five-artifact set for a
+// candidate's own draft directory, or an arbitrary report-file list for the
+// adversarial-mission-report anonymization pass flow.md step 6 also names).
+// parseArgv fails closed on a surplus positional argument rather than
+// silently ignoring it — the same "every token is accounted for" discipline
+// validators.js's own parseArgv already applies to an unrecognized flag,
+// applied here to an extra positional instead.
 function parseArgv(argv) {
   const [command, srcDir, destDir, ...rest] = argv;
   const error = rest.length > 0 ? `unexpected extra argument(s): ${rest.join(' ')}` : null;

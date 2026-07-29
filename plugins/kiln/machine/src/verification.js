@@ -1,10 +1,8 @@
 'use strict';
 
-// The verification-phase machinery (the dev record's ruled
-// verification/ tree: runs/<run-id>.jsonl, runs-index.json, quarantine.json,
-// affected-map.json, suite-state.json; the mechanics adopted from the
-// dev-side verification research; P8 Sol review's revision — soundness tag
-// CURRENT-RUN-COMPLETENESS-UNBOUND, closed this pass). Six operations:
+// The verification-phase machinery (the verification/ tree:
+// runs/<run-id>.jsonl, runs-index.json, quarantine.json, affected-map.json,
+// suite-state.json). Six operations:
 //
 //   assembleSuite  — fail-closed validation: the criteria-register itself
 //                    (validators.validateCriteriaRegister) plus its strict
@@ -66,15 +64,15 @@ const HARNESSES = new Set(['playwright', 'node-test', 'pytest', 'cli']);
 
 // A journey's script_path is interpolated into a shell command string by
 // product/verification/flow.md's own harness-to-cmd derivation (`node --test
-// <script_path>`, `npx playwright test <script_path> ...`, etc.) — P8 Sol
-// review BLOCKING: an unconstrained script_path let a probe smuggle shell
-// metacharacters (`; exit 0`) through that derivation and fabricate a
-// passing journey for a test that never ran. This charset is deliberately
-// narrower than a generic "no shell metacharacters" denylist (which a novel
-// metacharacter could slip past): an ALLOWLIST of exactly the characters a
-// real relative source-file path needs closes the class of attack
-// structurally, at assembly time — before a single harness command is ever
-// derived — rather than only at execution time.
+// <script_path>`, `npx playwright test <script_path> ...`, etc.) — an
+// unconstrained script_path would let shell metacharacters (`; exit 0`)
+// smuggle through that derivation and fabricate a passing journey for a
+// test that never ran. This charset is deliberately narrower than a generic
+// "no shell metacharacters" denylist (which a novel metacharacter could
+// slip past): an ALLOWLIST of exactly the characters a real relative
+// source-file path needs closes the class of attack structurally, at
+// assembly time — before a single harness command is ever derived — rather
+// than only at execution time.
 const SAFE_SCRIPT_PATH_RE = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 
 function isNonEmptyString(value) {
@@ -102,25 +100,24 @@ function isContainedScriptPath(value) {
 
 // assembleSuite(treeRoot, criteriaRegister, journeysIndex) — the fail-closed
 // 1:1 check between architecture/criteria-register.json's criteria and
-// verification/journeys.json's journeys (ruled: "every ID gets exactly
-// one journey; phase 7 assembles, never writes"). treeRoot is accepted for
+// verification/journeys.json's journeys: every ID gets exactly one journey;
+// this phase assembles, never writes. treeRoot is accepted for
 // call-site symmetry with orderRun/startRun/recordRun/computeSuiteState (all
 // of which key off it for I/O) — assembleSuite itself is a pure computation
 // over its two JSON arguments and writes nothing.
 //
 // Fails closed on:
 //   - a criteria register that is not itself well-formed
-//     (validators.validateCriteriaRegister — P8 Sol review MAJOR: a probe
-//     with two register entries sharing one criterion id previously passed
-//     here outright).
+//     (validators.validateCriteriaRegister — two register entries sharing
+//     one criterion id are rejected here, never passed through).
 //   - missing: a register criterion with zero matching journey entries
 //   - duplicate: a register criterion with more than one matching journey
 //     entry, OR two journey entries sharing the same journey_id
 //   - orphan: a journey entry whose criterion_id names no criterion in the
 //     register
 //   - any journey entry missing a non-empty script_path, an unsafe/
-//     uncontained script_path (P8 Sol review BLOCKING, see
-//     SAFE_SCRIPT_PATH_RE above), or any other required field
+//     uncontained script_path (see SAFE_SCRIPT_PATH_RE above), or any other
+//     required field
 //
 // Returns { ok: false, errors } on any violation, else
 // { ok: true, errors: [], journeys: [<assembled journey descriptors>] }.
@@ -216,18 +213,18 @@ function assembleSuite(treeRoot, criteriaRegister, journeysIndex) {
 
 // orderRun(previousResults, affectedMap, allJourneys) — the failing-first
 // dance: previously-failed journeys first, then affected (per
-// affected-map.json's own "pending"-status entries only — P8 Sol review
-// MAJOR: a "green" affected-map entry was previously still prioritized,
-// weakening the signal), then everything else. Stable within each bucket
+// affected-map.json's own "pending"-status entries only — a "green"
+// affected-map entry never re-prioritizes, since re-running it would only
+// weaken the signal), then everything else. Stable within each bucket
 // (allJourneys' own relative order is preserved), so two callers given the
 // same three inputs always get the same order — no judgment, no randomness.
 //
 // A present, non-null affectedMap is validated via
-// validators.validateAffectedMap and rejected (thrown) if malformed —
-// "validate the document before ordering" (P8 required revision #7). A
-// null/undefined affectedMap (the very first pass, before the file exists)
-// is tolerated as "no affected entries," per product/verification/flow.md's
-// own documented first-pass default.
+// validators.validateAffectedMap and rejected (thrown) if malformed — the
+// document is validated before ordering ever runs. A null/undefined
+// affectedMap (the very first pass, before the file exists) is tolerated as
+// "no affected entries," per product/verification/flow.md's own documented
+// first-pass default.
 function orderRun(previousResults, affectedMap, allJourneys) {
   if (!Array.isArray(previousResults)) {
     throw new TypeError('verification: previousResults must be an array');
@@ -296,8 +293,8 @@ function readRunsIndex(treeRoot) {
 
 // A deterministic digest of the assembled suite's own identity-bearing
 // fields, independent of array order — this is the "immutable assembled-
-// suite manifest" a run binds itself to at startRun time (P8 required
-// revision #1): two suites are the "same suite" iff every journey's own
+// suite manifest" a run binds itself to at startRun time: two suites are
+// the "same suite" iff every journey's own
 // {journey_id, criterion_id, script_path, harness, added_in_milestone}
 // agrees, regardless of the order assembleSuite happened to return them in.
 function digestSuite(suite) {
@@ -317,10 +314,9 @@ function digestSuite(suite) {
 // each carrying a unique, non-empty journey_id — shared by startRun and
 // computeSuiteState, both of which need the same fixed universe of
 // journey_ids to bind a run to. Throws on any violation: the suite argument
-// is a caller-assembled fact (assembleSuite's own output, or its
-// equivalent from the CLI or the dev-side replay harness), and a malformed
-// one is a caller defect, not
-// a legitimate red verdict.
+// is a caller-assembled fact (assembleSuite's own output, or an equivalent
+// caller-supplied array), and a malformed one is a caller defect, not a
+// legitimate red verdict.
 function validateSuiteShape(suite) {
   if (!Array.isArray(suite) || suite.length === 0) {
     throw new TypeError('verification: suite must be a non-empty array of assembled journey descriptors');
@@ -341,8 +337,8 @@ function validateSuiteShape(suite) {
 }
 
 // startRun(treeRoot, runId, suite) — the sole writer of a run's own
-// "run-start" record and of verification/runs-index.json (P8 required
-// revision #2: run currency). Binds runId to an immutable digest of the
+// "run-start" record and of verification/runs-index.json (the run-currency
+// law). Binds runId to an immutable digest of the
 // assembled suite it is about to exercise, and enforces a monotonic run
 // identity: a runId already present in runs-index.json — or one whose own
 // runs/<run-id>.jsonl already carries records — refuses to start again
@@ -391,12 +387,12 @@ function startRun(treeRoot, runId, suite) {
 
 // recordRun(treeRoot, runId, results, ledgerPath, opts) — the sole writer of
 // verification/runs/<run-id>.jsonl. Every result MUST carry a non-empty
-// gate_id, AND — the execution-evidence law, tightened this pass (P8 Sol
-// review BLOCKING: a caller-attested "pass" with no ledger record behind it
-// previously recorded outright) — a matching ledger record (kind "gate",
-// this exact gate_id, a present exit_code) proving that gate actually ran.
-// A batch is validated up front, before any record is appended, so a
-// malformed batch never leaves a partial write behind.
+// gate_id, AND — the execution-evidence law — a matching ledger record
+// (kind "gate", this exact gate_id, a present exit_code) proving that gate
+// actually ran: a caller-attested "pass" with no ledger record behind it is
+// refused outright, never merely logged as such. A batch is validated up
+// front, before any record is appended, so a malformed batch never leaves a
+// partial write behind.
 //
 // opts.unverifiedImport (default false) is a deliberate escape hatch for
 // scenario/mock use ONLY (documented in product/verification/flow.md) —
@@ -478,9 +474,8 @@ function recordRun(treeRoot, runId, results, ledgerPath, opts = {}) {
 //
 // green IFF EVERY journey in the assembled `suite` — the required fixed
 // universe this pass must cover, not merely whatever records happen to
-// exist (P8 Sol review BLOCKING: the prior version derived its own universe
-// from the run's records, so a nonexistent or partial run was vacuously
-// green) — is either:
+// exist (deriving the universe from the run's own records instead would
+// let a nonexistent or partial run report vacuously green) — is either:
 //   (a) decided-quarantined (quarantine.json carries an entry for it with
 //       >= 2 outcomes — a PENDING single-outcome entry still votes, see
 //       below), or
@@ -514,8 +509,8 @@ function recordRun(treeRoot, runId, results, ledgerPath, opts = {}) {
 // never registered via startRun — computing suite state for a run that was
 // never started is not a valid state to be in.
 //
-// Quarantine PENDING vs. DECIDED (P8 required revision #5): a quarantine.json
-// entry with history.length === 1 is a journey mid-incident, one outcome in,
+// Quarantine PENDING vs. DECIDED: a quarantine.json entry with
+// history.length === 1 is a journey mid-incident, one outcome in,
 // awaiting its one re-run — it still votes normally, exactly like any other
 // journey. Only history.length >= 2 (a "quarantine" verdict was actually
 // reached and persisted) removes a journey's vote.
@@ -628,12 +623,10 @@ function computeSuiteState(treeRoot, runId, quarantine, suite, opts = {}) {
 }
 
 // recordAffected(treeRoot, entries) — the sole sanctioned writer of
-// verification/affected-map.json (P8 required revision #7: no machine
-// operation previously wrote this file at all — it was left to an unnamed
-// worker's own generic atomicJson.writeAtomic call). Validates the
-// assembled document via validators.validateAffectedMap before it ever
-// reaches disk; generated_at is stamped here, by the writer, never
-// caller-supplied.
+// verification/affected-map.json: no other code path may write this file
+// through a generic writeAtomic call. Validates the assembled document via
+// validators.validateAffectedMap before it ever reaches disk; generated_at
+// is stamped here, by the writer, never caller-supplied.
 function recordAffected(treeRoot, entries) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('verification: treeRoot must be a non-empty string');
@@ -667,7 +660,7 @@ function recordAffected(treeRoot, entries) {
 // gate_id} straight through recordRun, in a single call, passing the SAME
 // ledgerPath through so recordRun's own evidence-binding check always finds
 // the record runGate just wrote. This is what lets Maestro's own narrowly-
-// scoped, named-CLI-only Bash (product/agents/maestro.md) drive the entire
+// scoped, named-CLI-only Bash (agents/maestro.md) drive the entire
 // per-journey execution loop directly, the same way it already drives
 // milestones.js's create/record-chunk/close, rather than requiring a new
 // execution-only worker seat this build has no chartered agent for.

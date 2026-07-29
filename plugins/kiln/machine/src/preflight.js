@@ -36,8 +36,8 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value !== '';
 }
 
-// P11 convergence parked question (b) AMEND: downstream routing stays
-// binary (opts.workflowTool/opts.agentTeams, unchanged above), but the
+// Downstream routing stays binary (opts.workflowTool/opts.agentTeams,
+// unchanged above), but the
 // FACT of how that boolean was arrived at is preserved separately —
 // "unknown" (an introspection source that could not be resolved) is not
 // the same recorded fact as a measured "absent", even though both route
@@ -64,14 +64,13 @@ function resolveObserved(explicit, routingBoolean, flagName) {
   return explicit;
 }
 
-// preflight.md check 2's exact pipeline — the same base command the dev
-// record froze as "codex-preflight" at project kickoff,
-// with the exact-match `grep -qx codex-ok` addition preflight.md documents
-// (P3 Sol review finding 9) so the gate's own exit code IS the semantic
-// check, closing the "a false semantic pass written into state is
-// indistinguishable from a real one" hole — nothing left for a second,
-// script-side comparison to get wrong. Overridable ONLY via --codex-cmd, a
-// documented test seam; preflight.md sanctions no other override path.
+// preflight.md check 2's exact pipeline — "codex-preflight" — with the
+// exact-match `grep -qx codex-ok` addition preflight.md documents, so the
+// gate's own exit code IS the semantic check, closing the "a false
+// semantic pass written into state is indistinguishable from a real one"
+// hole — nothing left for a second, script-side comparison to get wrong.
+// Overridable ONLY via --codex-cmd, a documented test seam; preflight.md
+// sanctions no other override path.
 const DEFAULT_CODEX_CMD =
   'timeout 30 codex exec -m gpt-5.6-sol -c \'model_reasoning_effort="low"\' -s read-only --skip-git-repo-check --ephemeral "Reply with exactly: codex-ok" 2>/dev/null | tail -1 | grep -qx codex-ok';
 
@@ -113,9 +112,8 @@ function run(projectRoot, opts = {}) {
   // checks below, on a tree that was never scaffolded — this read is
   // advisory only (a cheap precondition check); the state.json read that
   // actually decides what gets WRITTEN happens fresh, inside updateJson's
-  // own lock, at the bottom of this function (P11 convergence finding 21 —
-  // a stale pre-lock read must never be what a concurrent writer's update
-  // gets built on top of).
+  // own lock, at the bottom of this function: a stale pre-lock read must
+  // never be what a concurrent writer's update gets built on top of.
   const precheckState = readJson(statePath, MISSING_STATE);
   if (precheckState === MISSING_STATE) {
     throw new Error(`preflight: no state.json found at ${statePath} — scaffold the tree first`);
@@ -135,9 +133,8 @@ function run(projectRoot, opts = {}) {
 
   // Check 1: node present (preflight.md #1). Pass criterion is
   // exitCode===0, driven by the REAL exit code runGate returns — never
-  // hardcoded to 'pass' (preflight.md's own P3 review citation: a script
-  // that always wrote 'pass' here would make "none possible in practice"
-  // unfalsifiable rather than merely rare).
+  // hardcoded to 'pass': a script that always wrote 'pass' here would make
+  // "none possible in practice" unfalsifiable rather than merely rare.
   const nodeCmd = 'node --version';
   const nodeResult = runGate({ gateId: 'preflight-node', cmd: nodeCmd, ledgerPath });
   freshGates.push({ name: 'preflight-node', cmd: nodeCmd, last_result: nodeResult.exitCode === 0 ? 'pass' : 'fail' });
@@ -208,12 +205,12 @@ function run(projectRoot, opts = {}) {
   };
 
   // Written once, after all five checks resolve (preflight.md "The
-  // state.json.preflight block"), through atomic-json.js's updateJson (P11
-  // convergence finding 21) — the read of state.gates[] to append onto and
-  // the write of the merged result happen inside the SAME lock, so a
-  // concurrent state.json writer (another preflight run, a phases.js
-  // transition, a handoff.js stop) can never have its own update silently
-  // overwritten by this one landing on a stale read.
+  // state.json.preflight block"), through atomic-json.js's updateJson — the
+  // read of state.gates[] to append onto and the write of the merged
+  // result happen inside the SAME lock, so a concurrent state.json writer
+  // (another preflight run, a phases.js transition, a handoff.js stop) can
+  // never have its own update silently overwritten by this one landing on
+  // a stale read.
   const preflightBlock = {
     ran_utc: new Date().toISOString(),
     mode,
@@ -242,15 +239,13 @@ function parsePresence(value, flagName) {
   throw new Error(`${flagName} must be "present" or "absent" (got ${JSON.stringify(value)})`);
 }
 
-// parseArgv fails closed on any token outside its five recognized flags
-// (P11 Sol review finding 11 / convergence parked question (b) STILL-OPEN):
-// the loop previously had no rejection branch, so a misspelled
-// `--workflow-tool-obesrved` silently fell through unconsumed, and `run`
-// then defaulted that flag's own value to the routing boolean's own
-// present/absent reading — recreating exactly the measured-absence/unknown
-// collapse the amendment required this module to prevent. Every token past
-// `<command> <projectRoot>` is now either one of the five known flags (with
-// its value consumed) or an outright refusal — the same "every token
+// parseArgv fails closed on any token outside its five recognized flags: a
+// misspelled `--workflow-tool-obesrved` must never silently fall through
+// unconsumed and let `run` default that flag's own value to the routing
+// boolean's own present/absent reading — that would recreate exactly the
+// measured-absence/unknown collapse this module must prevent. Every token
+// past `<command> <projectRoot>` is either one of the five known flags
+// (with its value consumed) or an outright refusal — the same "every token
 // accounted for" discipline validators.js's own parseArgv already applies
 // to an unrecognized flag.
 function parseArgv(argv) {

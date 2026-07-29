@@ -1,16 +1,13 @@
 'use strict';
 
-// Brownfield scout machinery (the ruled "Brownfield: scout-and-inventory
-// pass, then create all artifacts, then re-enter where state says"; §4
-// scope-neutral — scout inventories whatever is there, makes no keep/drop
-// decisions itself; the dev record's ruled "scout/" tree shape and
-// brownfield rules). Three writers, one shared law: every inherited fact
-// this module records about a target repo carries one of validators.js's two
-// trust flags (reuse-map.json) or goes through
-// validators.validateScoutConstraints (constraints.json) before it reaches
-// disk — inherited material never lands in a decision artifact unflagged
-// (synthesis §6, "inherited material never enters decision artifacts
-// directly").
+// Brownfield scout machinery: scout-and-inventory pass, then create all
+// artifacts, then re-enter where state says. Scope-neutral — scout
+// inventories whatever is there, makes no keep/drop decisions itself.
+// Three writers, one shared law: every inherited fact this module records
+// about a target repo carries one of validators.js's two trust flags
+// (reuse-map.json) or goes through validators.validateScoutConstraints
+// (constraints.json) before it reaches disk — inherited material never
+// lands in a decision artifact unflagged.
 //
 // treeRoot vs. projectRoot, matching this codebase's existing convention
 // (milestones.js/verification.js/phases.js): treeRoot is the
@@ -20,12 +17,11 @@
 // writeReuseMap/writeConstraints only ever touch the tree, so they take
 // treeRoot directly, like every other writer in this codebase.
 //
-// P9 Sol review finding 4 (TERMINAL-READINESS-AND-SCOUT-TRUST-UNBOUND):
-// none of the three writers checked what they were writing through. A
-// pre-planted `scout/` symlink let all three land their output outside the
-// target tree, and writeReuseMap accepted claims naming files that were
-// never walked or no longer exist. Required revisions 5-6 close both: every
-// writer now runs entries through ensureScoutDir (below) before touching
+// None of the three writers may skip checking what they are writing
+// through: a pre-planted `scout/` symlink must never let any of them land
+// its output outside the target tree, and writeReuseMap must never accept
+// claims naming files that were never walked or no longer exist. Every
+// writer runs entries through ensureScoutDir (below) before touching
 // `scout/`, and writeReuseMap revalidates each entry's path against the
 // recorded inventory and the disk itself before it ever reaches
 // reuse-map.json.
@@ -44,7 +40,7 @@ const DEFAULT_MAX_ENTRIES = 5000;
 // node_modules is skipped by name; .git and every other dot-directory
 // (including the target's own .kiln/, preventing a scout run from
 // inventorying its own prior output) are skipped by the leading-dot check
-// in walk(), below — the same two-part rule the build instruction states.
+// in walk(), below.
 const SKIP_DIR_NAMES = new Set(['node_modules']);
 
 const EXT_LANG = {
@@ -113,8 +109,8 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-// One lowercase basename, and nothing else (legacy-intake design §9.2.2).
-// This single regex is what makes `name` unable to name anything but a
+// One lowercase basename, and nothing else. This single regex is what
+// makes `name` unable to name anything but a
 // direct child of treeRoot: it rejects an absolute path, `.`, `..`, a
 // separator in either direction, the empty string, a leading dot, and an
 // uppercase letter — so no caller can reach a parent, a nested path, or a
@@ -122,23 +118,22 @@ function isPlainObject(value) {
 const TREE_SUBDIR_NAME_RE = /^[a-z][a-z0-9-]*$/;
 
 // ensureTreeSubdir(treeRoot, name) -> the `<treeRoot>/<name>` directory's
-// path, verified to already sit inside treeRoot with no symlink hop (P9 Sol
-// review finding 4, ruling 5; generalized from `scout/` to any one tree
-// subdirectory by the legacy-intake design §7.1/§9.2.2). atomic-json.js's
+// path, verified to already sit inside treeRoot with no symlink hop —
+// generalized from `scout/` to any one tree subdirectory. atomic-json.js's
 // writeAtomic does `fs.mkdirSync(dir, {recursive:true})` on whatever parent
 // it is handed — symlink or real directory alike — before it ever opens the
 // destination file, so a pre-planted `scout/` (or `intake/`) symlink
-// pointing outside the target tree silently redirected every one of that
-// namespace's writers there. ONE guard, called by every writer before its
-// writeAtomic call (never a second copy of this check in another module —
-// `intake.js` is a CALLER of this function, not a reimplementation of it):
-// requires treeRoot to already exist (scaffoldTree/detect create it ahead of
-// scout in the brownfield sequence — product/brownfield/flow.md's detect ->
-// scaffold -> scout order — and intake's own transaction ladder scaffolds it
-// before the harvest; this module never invents its own tree root), refuses
-// outright if the subdirectory is already a symlink, creates it if genuinely
-// missing, then re-resolves it and refuses unless the resolved path still
-// sits under the resolved tree root.
+// pointing outside the target tree would silently redirect every one of
+// that namespace's writers there. ONE guard, called by every writer before
+// its writeAtomic call (never a second copy of this check in another
+// module — `intake.js` is a CALLER of this function, not a reimplementation
+// of it): requires treeRoot to already exist (scaffoldTree/detect create it
+// ahead of scout in the brownfield sequence — product/brownfield/flow.md's
+// detect -> scaffold -> scout order — and intake's own transaction ladder
+// scaffolds it before the harvest; this module never invents its own tree
+// root), refuses outright if the subdirectory is already a symlink,
+// creates it if genuinely missing, then re-resolves it and refuses unless
+// the resolved path still sits under the resolved tree root.
 function ensureTreeSubdir(treeRoot, name) {
   if (typeof name !== 'string' || !TREE_SUBDIR_NAME_RE.test(name)) {
     throw new Error(
@@ -256,10 +251,10 @@ function readPackageJson(projectRoot) {
   }
 }
 
-// A package.json main/bin string is untrusted target-repo content (P11 Sol
-// review finding 2): `agents/scout-agent.md:31` commands the agent to read
-// every entry_points value in full, so an unnormalized/uncontained value
-// becomes an instructed read target outside the project (`../../secret`,
+// A package.json main/bin string is untrusted target-repo content:
+// `agents/scout-agent.md:31` commands the agent to read every entry_points
+// value in full, so an unnormalized/uncontained value would become an
+// instructed read target outside the project (`../../secret`,
 // `/etc/passwd`) the moment it reaches this summary. Returns the candidate's
 // own normalized, posix-relative form when it is safe to return at all:
 // non-absolute, no ".." segment before or after normalization, actually
@@ -318,8 +313,8 @@ function testDirsOf(relDirs) {
 }
 
 // inventoryTarget(projectRoot, opts) -> {schema_version, generated_ts,
-// files[], summary{}, truncated} — synthesis §2's "scout/inventory.json...
-// existing assets map." Walks the TARGET repo (never its own
+// files[], summary{}, truncated} — scout/inventory.json's own existing
+// assets map. Walks the TARGET repo (never its own
 // .kiln/), atomic-writes the result to
 // <projectRoot>/.kiln/scout/inventory.json, and returns the same
 // document. opts.maxEntries (default 5000) is a breadth cap: the full file
@@ -329,9 +324,9 @@ function testDirsOf(relDirs) {
 // dropping the excess. Requires <projectRoot>/.kiln to already
 // exist and derives treeRoot from it, then runs that treeRoot through
 // ensureScoutDir before ever walking the target — the same containment
-// guard writeReuseMap/writeConstraints use (ruling 5), applied here too
-// since this is the writer that would otherwise create scout/ through
-// whatever a pre-planted symlink pointed at.
+// guard writeReuseMap/writeConstraints use, applied here too since this is
+// the writer that would otherwise create scout/ through whatever a
+// pre-planted symlink pointed at.
 function inventoryTarget(projectRoot, opts = {}) {
   if (!isNonEmptyString(projectRoot)) {
     throw new TypeError('scout: projectRoot must be a non-empty string');
@@ -393,14 +388,13 @@ function inventoryTarget(projectRoot, opts = {}) {
 
 // writeReuseMap(treeRoot, entries) -> the written document. Every entry
 // {path, trust, note} maps one inventory item to the artifact slot it feeds
-// and the trust flag it carries there (synthesis §2/§6: "inventory item ->
-// artifact slot + trust flag") — checked inline against validators.js's
-// TRUST_FLAGS taxonomy since reuse-map.json has no dedicated
-// validators.js function of its own (constraints.json is the one scout
-// artifact that does — see writeConstraints, below).
+// and the trust flag it carries there — checked inline against
+// validators.js's TRUST_FLAGS taxonomy since reuse-map.json has no
+// dedicated validators.js function of its own (constraints.json is the one
+// scout artifact that does — see writeConstraints, below).
 //
-// P9 Sol review finding 4, ruling 6: shape-valid is not the same as real.
-// After every entry passes the structural checks above, a second pass
+// Shape-valid is not the same as real. After every entry passes the
+// structural checks above, a second pass
 // revalidates each entry.path against two independent sources of truth
 // before any of them reach disk — the recorded scout/inventory.json (so a
 // reuse claim can never name a file the walk never saw) and the project
@@ -487,9 +481,9 @@ function writeReuseMap(treeRoot, entries) {
 }
 
 // writeConstraints(treeRoot, constraints) -> the written document.
-// constraints.json's five typed fields (Sol's field-shape borrow, synthesis
-// §6 [S6, steal #17-part]) go through validators.validateScoutConstraints
-// before they ever reach disk — the sole gate, never re-implemented here.
+// constraints.json's five typed fields go through
+// validators.validateScoutConstraints before they ever reach disk — the
+// sole gate, never re-implemented here.
 function writeConstraints(treeRoot, constraints) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('scout: treeRoot must be a non-empty string');
@@ -503,16 +497,16 @@ function writeConstraints(treeRoot, constraints) {
   return constraints;
 }
 
-// CLI entrypoint (P11 finding F2: a shipped document had no lawful way to
-// invoke `inventoryTarget` except a cwd-relative `node -e` require, which
-// broke under the plugin layout, plus a false "from the project root"
-// assertion; P11 convergence finding 3 added writeReuseMap/writeConstraints'
-// own executable forms — agents/scout-agent.md's own reading/authoring
-// judgment over their `entries`/`constraints` arguments now arrives as one
-// stdin-JSON argument, the same shape this tree's other structured-input
-// CLIs already take). `inventory <projectRoot> [maxEntries]`, `write-reuse-
-// map <treeRoot>` (entries JSON array via stdin), and `write-constraints
-// <treeRoot>` (constraints JSON object via stdin).
+// CLI entrypoint: invoking `inventoryTarget` must never depend on a
+// cwd-relative `node -e` require, which breaks under the plugin layout, or
+// a false "from the project root" assertion. writeReuseMap/writeConstraints
+// need their own executable forms too — agents/scout-agent.md's own
+// reading/authoring judgment over their `entries`/`constraints` arguments
+// arrives as one stdin-JSON argument, the same shape this tree's other
+// structured-input CLIs already take. `inventory <projectRoot>
+// [maxEntries]`, `write-reuse-map <treeRoot>` (entries JSON array via
+// stdin), and `write-constraints <treeRoot>` (constraints JSON object via
+// stdin).
 function parseArgv(argv) {
   const [command, ...rest] = argv;
   return { command, rest };
@@ -545,10 +539,10 @@ function main(argv) {
       const opts = {};
       if (maxEntriesArg !== undefined) {
         // Number.parseInt accepts a numeric prefix and silently discards
-        // trailing garbage ("1garbage" -> 1) — P11 Sol review finding 9. A
-        // strict all-digits match is required before parsing, matching
-        // inventoryTarget's own strict Number.isInteger check on the parsed
-        // opts.maxEntries value one level down.
+        // trailing garbage ("1garbage" -> 1). A strict all-digits match is
+        // required before parsing, matching inventoryTarget's own strict
+        // Number.isInteger check on the parsed opts.maxEntries value one
+        // level down.
         if (!/^\d+$/.test(maxEntriesArg)) {
           throw new TypeError(`scout: maxEntries must be a non-negative integer string (got ${JSON.stringify(maxEntriesArg)})`);
         }
@@ -563,11 +557,10 @@ function main(argv) {
     return;
   }
 
-  // write-reuse-map/write-constraints (P11 convergence finding 3):
-  // agents/scout-agent.md's own writeReuseMap/writeConstraints calls, each
-  // taking its own single stdin-JSON argument — the entries array or the
-  // constraints object, respectively, exactly as the library functions
-  // themselves take them.
+  // write-reuse-map/write-constraints: agents/scout-agent.md's own
+  // writeReuseMap/writeConstraints calls, each taking its own single
+  // stdin-JSON argument — the entries array or the constraints object,
+  // respectively, exactly as the library functions themselves take them.
   if (command === 'write-reuse-map' || command === 'write-constraints') {
     const [treeRoot] = rest;
     if (typeof treeRoot !== 'string' || treeRoot === '') {

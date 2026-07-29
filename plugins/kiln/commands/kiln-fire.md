@@ -3,7 +3,7 @@ description: Open Kiln's door — check the room, report where this project stan
 argument-hint: "[optional: one line on what you want built]"
 ---
 
-Invoke the `kiln` skill with the Skill tool and follow it exactly as written. That entry is the whole instruction set for this command; nothing here restates any part of it.
+Invoke the `kiln` skill with the Skill tool and follow it exactly as written. That entry is the whole instruction set for this command.
 
 It checks what this room has, reports where this project stands, and prints the single command that starts the build session with the orchestrator identity set from the start. It writes nothing and builds nothing. Do not anticipate its findings, do not adopt the orchestrator identity in this turn, and do not begin the build here — the door checks, the fire is lit next door.
 

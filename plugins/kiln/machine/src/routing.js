@@ -1,10 +1,10 @@
 'use strict';
 
-// Pointer shape is synthesis §2's literal spec ("atomic pointer:
-// {active_config, digest}") — matches what machine/src/scaffold.js already
-// writes into every scaffolded tree's routing/active.json, so this module
-// interoperates with both the dev-repo's own machine/routing/ directory and
-// every target project's .kiln/routing/ directory.
+// Pointer shape: an atomic pointer of {active_config, digest} — matches
+// what machine/src/scaffold.js already writes into every scaffolded tree's
+// routing/active.json, so this module interoperates with both this
+// product's own machine/routing/ directory and every target project's
+// .kiln/routing/ directory.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,10 +15,10 @@ const { readJson, writeAtomic } = require('./atomic-json.js');
 const ACTIVE_FILENAME = 'active.json';
 const SCHEMA_VERSION = 1;
 
-// synthesis §7: "immutable dated configs (routing-YYYY-MM-DD-N.json, pointer
-// rollback)" — this is the ONE place the filename shape is defined;
-// scaffold.js imports it rather than keeping a second copy (anti-redundant-
-// enforcement). Being a strict basename-only pattern (no path separators),
+// Immutable dated configs (routing-YYYY-MM-DD-N.json, pointer rollback) —
+// this is the ONE place the filename shape is defined; scaffold.js imports
+// it rather than keeping a second copy (anti-redundant-enforcement). Being
+// a strict basename-only pattern (no path separators),
 // it also structurally rejects traversal ('../x') and absolute/foreign
 // targets by construction: anything matching this regex cannot escape the
 // directory it is joined against.
@@ -54,10 +54,9 @@ function assertNotSymlink(targetPath, filename) {
 }
 
 // Validates the dated routing config's own minimal envelope: schema_version,
-// an integer revision, and object-shaped seats/bans. Synthesis's own
-// committed config (machine/routing/routing-YYYY-MM-DD-N.json) exercises
-// this exact shape; the review flagged that revision/seats/bans previously
-// went entirely unchecked at the read boundary.
+// an integer revision, and object-shaped seats/bans — revision/seats/bans
+// must never go unchecked at the read boundary. The committed config
+// (machine/routing/routing-YYYY-MM-DD-N.json) exercises this exact shape.
 function validateRoutingConfig(config) {
   if (config === null || typeof config !== 'object' || Array.isArray(config)) {
     return { ok: false, errors: ['routing config must be a JSON object'] };
@@ -172,12 +171,12 @@ function setActive(dirPath, filename) {
   });
 }
 
-// CLI entrypoint (P11 finding F1: a shipped document had no lawful way to
-// resolve the active dated config except a cwd-relative `node -e` require,
-// which broke under the plugin layout). `active <dirPath>` is this module's
-// one command, printing `loadRouting(dirPath)`'s own result — the resolved
-// `activeFile` plus the dated config it points at — so a caller composes the
-// absolute path to that file itself rather than this module guessing at one.
+// CLI entrypoint: resolving the active dated config must never depend on a
+// cwd-relative `node -e` require, which breaks under the plugin layout.
+// `active <dirPath>` is this module's one command, printing
+// `loadRouting(dirPath)`'s own result — the resolved `activeFile` plus the
+// dated config it points at — so a caller composes the absolute path to
+// that file itself rather than this module guessing at one.
 function parseArgv(argv) {
   const [command, dirPath] = argv;
   return { command, dirPath };

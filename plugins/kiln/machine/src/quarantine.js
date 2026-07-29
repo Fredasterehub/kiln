@@ -1,15 +1,14 @@
 'use strict';
 
-// The flake protocol (ruled: "flake quarantine re-run-once";
-// research/phase7-verification-research.md: "failure -> immediate single
-// re-run. Consistent red = real fix task. Inconsistent = quarantine lane +
-// flake-fix task + flip counter in state (PFS-lite)."). quarantine.json
-// {schema_version, entries:[{journey_id, since_run, reason, history}]} holds
-// exactly the journeys currently under active flake tracking. `history` is
-// an array of {outcome, run_id} objects (P8 required revision #5, tightened
-// this pass) rather than bare outcome strings — decideFlake now needs each
-// outcome's own run_id to enforce that a verdict is reached over two
-// DISTINCT runs, never the same run counted twice.
+// The flake protocol: flake quarantine re-run-once. On failure, run
+// immediately once more: consistent red is a real fix task; inconsistent
+// is quarantine lane + flake-fix task + flip counter in state.
+// quarantine.json {schema_version, entries:[{journey_id, since_run, reason,
+// history}]} holds exactly the journeys currently under active flake
+// tracking. `history` is an array of {outcome, run_id} objects rather than
+// bare outcome strings — decideFlake needs each outcome's own run_id to
+// enforce that a verdict is reached over two DISTINCT runs, never the same
+// run counted twice.
 //
 // PENDING vs. DECIDED (verification.js's own computeSuiteState reads this
 // distinction directly): an entry with history.length === 1 is a journey
@@ -23,11 +22,12 @@
 // recordOutcome call for the same journey is refused — release() (the
 // repaired path) is the only sanctioned way to reopen tracking.
 //
-// Fix-loop cap (ruled: "fix loops capped 2 passes per same/similar
-// problem -> agreement pass") lives in the same module as a second, smaller
-// concern (capTracker) — it shares this file's "count occurrences in a
-// verification/ JSONL stream, decide against a small threshold" shape with
-// the flake protocol above, without duplicating either one's mechanism.
+// Fix-loop cap: fix loops are capped at 2 passes per same/similar problem,
+// beyond which an agreement pass is required. It lives in the same module
+// as a second, smaller concern (capTracker) — it shares this file's "count
+// occurrences in a verification/ JSONL stream, decide against a small
+// threshold" shape with the flake protocol above, without duplicating
+// either one's mechanism.
 
 const path = require('node:path');
 
@@ -61,8 +61,8 @@ function suiteStatePathFromQuarantinePath(quarantinePath) {
 // status invalidates whatever green/red verdict is currently persisted in
 // suite-state.json — that verdict was computed against a DIFFERENT
 // quarantine membership than the one that now exists, and a stale green
-// must never be consumable by the "suite-state-green" exit check (P8
-// required revision #5). Marking `status: "stale"` (rather than deleting
+// must never be consumable by the "suite-state-green" exit check. Marking
+// `status: "stale"` (rather than deleting
 // the file) is deliberately non-destructive: it fails the exit check's
 // existing `status !== "green"` branch with no changes needed there, while
 // preserving the prior snapshot's audit trail. A no-op when suite-state.json
@@ -75,8 +75,8 @@ function markSuiteStateStale(quarantinePath) {
 }
 
 // decideFlake(history) -> "fix-task" | "quarantine" | "clear". Requires
-// EXACTLY 2 outcomes (P8 required revision #5: the re-run-once protocol is
-// "the original failure and ONE re-run," never an open-ended trailing
+// EXACTLY 2 outcomes (the re-run-once protocol is "the original failure
+// and ONE re-run," never an open-ended trailing
 // window), each an {outcome, run_id} object, and the two run_ids must be
 // DISTINCT — a verdict decided over the same run counted twice is not a
 // re-run at all, and fails closed by throwing rather than guessing.
@@ -113,9 +113,9 @@ function decideFlake(history) {
 }
 
 // recordOutcome(quarantinePath, journeyId, outcome, opts) — tracks a
-// journey's outcomes across the re-run-once protocol. opts.runId is now
-// REQUIRED (P8 required revision #5) — every recorded outcome must be
-// traceable to the run that produced it, since decideFlake needs it to
+// journey's outcomes across the re-run-once protocol. opts.runId is
+// REQUIRED — every recorded outcome must be traceable to the run that
+// produced it, since decideFlake needs it to
 // enforce distinct-run re-runs. A passing outcome for a journey with no
 // open tracking entry needs no bookkeeping (nothing to decide, nothing to
 // record). A journey already carrying a DECIDED quarantine entry (2
@@ -223,16 +223,16 @@ function fixAttemptsPathOf(treeRoot) {
   return path.join(treeRoot, 'verification', 'fix-attempts.jsonl');
 }
 
-// capTracker(treeRoot) — the fix-loop cap (ruled: "capped 2 passes per
-// same/similar problem -> agreement pass"). recordAttempt logs one fix
-// attempt against a problemKey (the caller's own identity for "same/similar
-// problem" — this identity remains caller judgment, a semantic boundary the
-// machine cannot itself draw: two failures the caller judges to share a
-// root cause must be given the SAME problemKey for the cap to bind them
-// together, and nothing here can verify that judgment was made honestly);
-// atCap reports whether that key has reached the cap. checkAndRecord
-// (P8 required revision #6) is the atomic combined operation: it checks the
-// cap BEFORE recording, so a third attempt can never slip in between a
+// capTracker(treeRoot) — the fix-loop cap: capped 2 passes per
+// same/similar problem, then an agreement pass is required.
+// recordAttempt logs one fix attempt against a problemKey (the caller's own
+// identity for "same/similar problem" — this identity remains caller
+// judgment, a semantic boundary the machine cannot itself draw: two
+// failures the caller judges to share a root cause must be given the SAME
+// problemKey for the cap to bind them together, and nothing here can
+// verify that judgment was made honestly); atCap reports whether that key
+// has reached the cap. checkAndRecord is the atomic combined operation: it
+// checks the cap BEFORE recording, so a third attempt can never slip in between a
 // caller's own separate atCap-then-recordAttempt calls — it refuses instead
 // of recording. Record only — the machine never spawns the agreement pass
 // itself, it only makes the fact machine-checkable for whatever flow

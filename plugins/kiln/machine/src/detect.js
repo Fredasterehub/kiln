@@ -1,10 +1,10 @@
 'use strict';
 
-// Onboarding mode detection (the ruled "greenfield / brownfield / resume
-// detection", widened by the legacy-intake design to the three-tier
-// recognition ladder). Pure evidence-gathering — this module makes no
-// decisions beyond the five-way classification and its honest refusals; the
-// onboarding phase itself owns what happens next in each mode.
+// Onboarding mode detection: greenfield / brownfield / resume detection,
+// extended to a three-tier legacy recognition ladder. Pure
+// evidence-gathering — this module makes no decisions beyond the five-way
+// classification and its honest refusals; the onboarding phase itself owns
+// what happens next in each mode.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,26 +15,26 @@ const { checkIntakeTxn } = require('./validators.js');
 const TREE_NAME = '.kiln';
 const STATE_FILENAME = 'state.json';
 
-// The intake transaction's marker sibling (legacy-intake design §9.1.1). The
-// name is FIXED, never timestamped, so its cardinality is zero-or-one by
-// construction — "several sibling markers" is unreachable rather than
-// handled. Derived from TREE_NAME so the package rename carries both names
-// together, with no second literal to keep in sync.
+// The intake transaction's marker sibling. The name is FIXED, never
+// timestamped, so its cardinality is zero-or-one by construction —
+// "several sibling markers" is unreachable rather than handled. Derived
+// from TREE_NAME so the package rename carries both names together, with
+// no second literal to keep in sync.
 const INTAKE_MARKER_NAME = `${TREE_NAME}-intake`;
 const INTAKE_TXN_FILENAME = 'txn.json';
 
-// The v3 Law shape, partitioned (design §9.3.1). Recognition asks one
-// question and never asks a version: does this tree's shape support a typed
-// harvest? A STRONG marker is a shape only the Kiln v3 family writes; a
-// CORROBORATING marker is present in that family without being exclusive to
-// it. Tier 1 requires >=1 strong AND >=2 slots total — one stray LAW.md is
-// not the v3 Law shape, and `decisions.md` + `posture.json` is not either.
-// Nothing is refused either way: a tree under the bar lands in tier 2 and is
-// still archived whole and harvested generically.
+// The v3 Law shape, partitioned. Recognition asks one question and never
+// asks a version: does this tree's shape support a typed harvest? A STRONG
+// marker is a shape only the Kiln v3 family writes; a CORROBORATING marker
+// is present in that family without being exclusive to it. Tier 1 requires
+// >=1 strong AND >=2 slots total — one stray LAW.md is not the v3 Law
+// shape, and `decisions.md` + `posture.json` is not either. Nothing is
+// refused either way: a tree under the bar lands in tier 2 and is still
+// archived whole and harvested generically.
 //
 // Each slot declares the node type its marker must be. A slot listing two
 // names is satisfied by either one (the seal record is `seals.log` at
-// v3.1.8, `seals.jsonl` at kiln's dev HEAD) and counts exactly once.
+// v3.1.8, `seals.jsonl` in the current version) and counts exactly once.
 const TIER1_STRONG = [
   { names: ['LAW.md'], type: 'file' },
   { names: ['slices.json'], type: 'file' },
@@ -69,11 +69,11 @@ function hasGitCommits(projectRoot) {
 // found. Dot-directories (and dot-files) are excluded at every level — this
 // also keeps the walk out of .git and .kiln without special-casing
 // either by name. ANY regular file outside a dot-dir counts as evidence of
-// pre-existing project material (P3 Sol review finding 7: a narrow
-// source-extension allowlist called HTML/CSS/Vue/Svelte/Terraform/config/
-// package-only and extensionless projects "greenfield" even though real
-// project material already exists there — this is a deliberately broad,
-// fail-closed heuristic, not a language registry).
+// pre-existing project material: a narrow source-extension allowlist would
+// call HTML/CSS/Vue/Svelte/Terraform/config/package-only and extensionless
+// projects "greenfield" even though real project material already exists
+// there — this is a deliberately broad, fail-closed heuristic, not a
+// language registry.
 function hasProjectMaterial(dir, depth = 0) {
   if (depth > MAX_SCAN_DEPTH) return false;
   let entries;
@@ -95,16 +95,15 @@ function hasProjectMaterial(dir, depth = 0) {
   return false;
 }
 
-// A resume claim needs more than "a path exists at state.json" (P3 Sol
-// review finding 7: a directory, unparseable text, or `{}` at that path all
-// satisfied the old check and were reported as a resumable build). Requires
-// a regular file, parseable JSON, a plain object, and non-empty string
-// `phase`/`next_action` fields — the two fields SKILL.md step 2 promises to
-// report to the operator on resume.
+// A resume claim needs more than "a path exists at state.json": a
+// directory, unparseable text, or `{}` at that path must never be reported
+// as a resumable build. Requires a regular file, parseable JSON, a plain
+// object, and non-empty string `phase`/`next_action` fields — the two
+// fields SKILL.md step 2 promises to report to the operator on resume.
 function isValidStateFile(statePath) {
   let stat;
   try {
-    // lstat, never stat: §9.3.2 requires a REGULAR FILE, and this module
+    // lstat, never stat: a marker must be a REGULAR FILE, and this module
     // already reads every tier-1 marker that way — a symlink is never the
     // marker, it is a pointer at something else. Following one here would
     // let a planted link win row 1 over a genuine legacy tree, suppressing a
@@ -133,12 +132,12 @@ function isValidStateFile(statePath) {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
   if (typeof parsed.phase !== 'string' || parsed.phase === '') return false;
   if (typeof parsed.next_action !== 'string' || parsed.next_action === '') return false;
-  // The stricter current-tree proof (legacy-intake design §9.3.2): scaffold.js
-  // stamps `schema_version: 1` at genesis and every later state writer spreads
-  // `...state` forward, so it survives every write of a real current tree. No
-  // legacy shape carries it — released v3.1.8 has no state.json at all, and
-  // kiln's dev HEAD writes stage/next_action_key/revision. This one field is
-  // what keeps row 1 from claiming a foreign state file as a resumable build.
+  // The stricter current-tree proof: scaffold.js stamps `schema_version: 1`
+  // at genesis and every later state writer spreads `...state` forward, so
+  // it survives every write of a real current tree. No legacy shape carries
+  // it — released v3.1.8 has no state.json at all, and other kiln versions
+  // write stage/next_action_key/revision instead. This one field is what
+  // keeps row 1 from claiming a foreign state file as a resumable build.
   if (parsed.schema_version !== 1) return false;
   return true;
 }
@@ -155,7 +154,7 @@ function isResumableTree(treeDir) {
 // at that path points at. `null` means "not there" (ENOENT, or ENOTDIR when
 // an expected parent directory is a regular file). Any other errno is a
 // REFUSAL naming the path and the code: an unreadable tree is not evidence
-// of absence, and detect never guesses past an errno (design §6).
+// of absence, and detect never guesses past an errno.
 function nodeTypeOf(target) {
   let lst;
   try {
@@ -172,7 +171,7 @@ function nodeTypeOf(target) {
 
 // One marker slot -> the name actually found, or null. Every counted marker
 // must match its declared node type, and a symlink is NEVER counted: it is
-// not the marker, it is a pointer at something else (design §9.3.1).
+// not the marker, it is a pointer at something else.
 function markerFound(treeDir, slot) {
   for (const name of slot.names) {
     if (nodeTypeOf(path.join(treeDir, name)) === slot.type) return name;
@@ -182,11 +181,11 @@ function markerFound(treeDir, slot) {
 
 // collectTier1Markers(treeDir) -> {markers, strong}. `markers` carries what
 // was actually found, in declaration order, one entry per satisfied slot —
-// so the operator line (design §5) names real evidence rather than a bare
-// verdict, and `markers.length` is exactly the count the tier bar reads.
-// Only depth-1 paths plus the `law/` and `docs/` probes are ever consulted:
-// no path under `archive/` is a marker, so a tree that has already been
-// through intake cannot re-trigger it (design §1.5).
+// so the operator line names real evidence rather than a bare verdict, and
+// `markers.length` is exactly the count the tier bar reads. Only depth-1
+// paths plus the `law/` and `docs/` probes are ever consulted: no path
+// under `archive/` is a marker, so a tree that has already been through
+// intake cannot re-trigger it.
 function collectTier1Markers(treeDir) {
   const markers = [];
   let strong = 0;
@@ -208,10 +207,10 @@ function collectTier1Markers(treeDir) {
 //
 // Row 0 of the decision table: an interrupted intake transaction must be
 // resumed before any other reading of the tree, because during its window the
-// tree can look like row 1 and still have its predecessor set aside (design
-// §9.3.4). The probe fires ONLY on a proven in-flight transaction; anything
-// else at that path is a refusal, never a classification — and the marker is
-// never followed, never removed, and never repaired here.
+// tree can look like row 1 and still have its predecessor set aside. The
+// probe fires ONLY on a proven in-flight transaction; anything else at that
+// path is a refusal, never a classification — and the marker is never
+// followed, never removed, and never repaired here.
 //
 // This runs the same pre-mutation validation discipline handoff.js:90-108
 // holds, for the same reason: intake's own `withLock` does a recursive
@@ -266,9 +265,9 @@ function probeIntakeMarker(projectRoot, projectRootReal) {
 // detect(projectRoot) -> {mode, evidence}
 //
 // mode is exactly one of "resume" | "legacy" | "broken-install" |
-// "brownfield" | "greenfield", decided by the ordered table of the
-// legacy-intake design (§1.3, as amended by §9.3.4). No shape and no version
-// is ever refused; refusal is a property of the filesystem alone (§6).
+// "brownfield" | "greenfield", decided by an ordered decision table. No
+// shape and no version is ever refused; refusal is a property of the
+// filesystem alone.
 //
 //   row 0  legacy         = an authenticated .kiln-intake marker is on disk —
 //                           an intake transaction is in flight and must be
@@ -298,8 +297,7 @@ function probeIntakeMarker(projectRoot, projectRootReal) {
 // evidence.has_git / has_code are `null` when NOT COMPUTED — an honest third
 // value, never a fabricated `false`. Rows 0-4 are decided from .kiln facts
 // alone, so they are decided before isGitRepo/hasGitCommits/hasProjectMaterial
-// run at all: a resume costs zero git subprocesses and no depth-six scan
-// (design §9.3.5).
+// run at all: a resume costs zero git subprocesses and no depth-six scan.
 function detect(projectRoot) {
   if (typeof projectRoot !== 'string' || projectRoot === '') {
     throw new TypeError('detect: projectRoot must be a non-empty string');
@@ -374,14 +372,14 @@ function detect(projectRoot) {
   return { mode: evidence.has_code ? 'brownfield' : 'greenfield', evidence };
 }
 
-// CLI entrypoint (P9 brownfield-flow need, widened in P11 to root SKILL.md's
-// own call): every caller of `detect()` — root `SKILL.md`'s pre-Maestro
-// preflight, `product/onboarding/flow.md`'s own scripted classification
-// step, and (downstream of a "brownfield" result) `product/brownfield/
-// flow.md`'s own entry step — uses this one `detect <projectRoot>` CLI
-// subcommand, the same flat one-command convention `milestones.js`/
-// `phases.js`/`verification.js`/`quarantine.js`/`delivery.js` already
-// establish. This is purely additive — `detect()` itself is unchanged.
+// CLI entrypoint: every caller of `detect()` — root `SKILL.md`'s
+// pre-Maestro preflight, `product/onboarding/flow.md`'s own scripted
+// classification step, and (downstream of a "brownfield" result)
+// `product/brownfield/flow.md`'s own entry step — uses this one
+// `detect <projectRoot>` CLI subcommand, the same flat one-command
+// convention `milestones.js`/`phases.js`/`verification.js`/`quarantine.js`/
+// `delivery.js` already establish. This is purely additive — `detect()`
+// itself is unchanged.
 function parseArgv(argv) {
   const [command, projectRoot] = argv;
   return { command, projectRoot };

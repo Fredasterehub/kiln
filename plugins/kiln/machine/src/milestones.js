@@ -1,23 +1,22 @@
 'use strict';
 
-// Milestone lifecycle bookkeeping for the implementation phase (the dev
-// record's ruled "milestones/<id>/" tree shape). This
-// module owns exactly three operations — createMilestone, recordChunk,
-// closeMilestone — the same "thin scaffolding, model authors the content"
-// division scaffold.js already draws for architecture: it never authors
-// spec.md (the kept-warm designer's own anchor source) and it
-// never runs git as a general mechanism — the ruled rollback protocol's
-// own branch/merge/tag commands stay Maestro's narrowly-scoped Bash, never
-// JS-layer machinery (one native mechanism per constraint). The
-// one exception is closeMilestone's own git READ-ONLY verification below —
-// it never runs a mutating git command, only `git rev-parse --verify`, to
-// close the "milestone green persisted before merge/tag really happened"
-// hole a prior revision left open (P7 Sol review BLOCKING).
+// Milestone lifecycle bookkeeping for the implementation phase (the
+// "milestones/<id>/" tree shape). This module owns exactly three
+// operations — createMilestone, recordChunk, closeMilestone — the same
+// "thin scaffolding, model authors the content" division scaffold.js
+// already draws for architecture: it never authors spec.md (the kept-warm
+// designer's own anchor source) and it never runs git as a general
+// mechanism — the rollback protocol's own branch/merge/tag commands stay
+// Maestro's narrowly-scoped Bash, never JS-layer machinery (one native
+// mechanism per constraint). The one exception is closeMilestone's own git
+// READ-ONLY verification below — it never runs a mutating git command,
+// only `git rev-parse --verify`, so a milestone can never report green
+// before its merge or tag has actually landed in the repository.
 //
 // milestones/index.json is the top-level restart-anytime index
 // (machine/phases-registry.json's "implementation" exit_emits); each
 // milestones/<id>/chunks.jsonl is the per-milestone chunk-record stream
-// synthesis §2 names ({chunk_id, brief_ref, commit, review, journeys_added}).
+// ({chunk_id, brief_ref, commit, review, journeys_added}).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -38,15 +37,15 @@ const INDEX_SCHEMA_VERSION = 1;
 // notices) — they carry a chunk_id and require the chunk to already exist,
 // but they never participate in the strict spec->start->review->green
 // precedence check, and never become the "latest lifecycle record" a
-// precedence check reads (P7 build instruction: "the designer file must use
-// recordChunk API only" for exactly these two kinds; milestone-designer.md
-// never writes "chunk-green" — that stays orchestrator-only, below).
+// precedence check reads. The designer file uses the recordChunk API only
+// for these two kinds; milestone-designer.md never writes "chunk-green" —
+// that stays orchestrator-only, below.
 const LIFECYCLE_KINDS = ['chunk-spec', 'chunk-start', 'chunk-review', 'chunk-green'];
 const CHUNK_RECORD_KINDS = [...LIFECYCLE_KINDS, 'chunk-consult', 'chunk-journeys'];
 
-// Closed set (P7 Sol review BLOCKING: reviewer contracts and the flow both
-// produce approve|revise; "green" was a third, incompatible vocabulary this
-// module alone spoke). "approve" is the only verdict chunk-green may itself
+// Closed set: reviewer contracts and the flow both produce approve|revise,
+// so this module speaks the same vocabulary rather than a third,
+// incompatible one. "approve" is the only verdict chunk-green may itself
 // carry AND the only verdict the immediately-preceding chunk-review may
 // carry for a chunk to reach green — see assertLifecycleAndCrossChecks.
 const REVIEW_VERDICTS = new Set(['approve', 'revise']);
@@ -54,11 +53,11 @@ const MILESTONE_STATUSES = { OPEN: 'open', GREEN: 'green' };
 
 // A chunk-green's own "commit" must at least look like a real git SHA (7-40
 // hex characters, git's own abbreviation floor through a full sha1/sha256
-// object id) — closes the named forgery example ("commit: not-a-sha") the
-// P7 Sol review's forged-green probe used directly. This is a format check
-// only; milestones.js still never shells out to verify a CHUNK commit
-// against git (that stays Maestro's own real `git rev-parse HEAD` at commit
-// time) — only closeMilestone's merge_sha/tag verification, below, does.
+// object id) — refuses an obviously fabricated value like "commit:
+// not-a-sha". This is a format check only; milestones.js still never
+// shells out to verify a CHUNK commit against git (that stays Maestro's
+// own real `git rev-parse HEAD` at commit time) — only closeMilestone's
+// merge_sha/tag verification, below, does.
 const COMMIT_SHA_RE = /^[0-9a-f]{7,40}$/i;
 
 function isNonEmptyString(value) {
@@ -92,17 +91,15 @@ function findIndexEntry(index, milestoneId) {
 
 // createMilestone(treeRoot, entry) — entry: {id, title, designer_family,
 // toolchain_profile?}. designer_family names which family dominates this
-// milestone's implementation (ruled: "milestone designed by the family
-// that dominates its implementation"); toolchain_profile is R3's single
-// closed-enum field (null | 'node-web' | 'node-cli' | 'python-pytest'),
-// defaulting to null ("this milestone needs nothing beyond what's already
-// installed" — research/r3/toolchain-scaffolding.md §2).
+// milestone's implementation; toolchain_profile is a single closed-enum
+// field (null | 'node-web' | 'node-cli' | 'python-pytest'), defaulting to
+// null when a milestone needs nothing beyond what's already installed.
 //
 // Refuses (throws) if the milestone directory already exists or the id is
 // already present in milestones/index.json — createMilestone is a one-shot
 // genesis operation, never an upsert; a repeat call for the same id is a
 // caller defect, not a resume case (resume reads chunks.jsonl/index.json
-// directly, per synthesis §4's restart-anytime boundary table).
+// directly, per the restart-anytime boundary table).
 function createMilestone(treeRoot, entry) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('milestones: treeRoot must be a non-empty string');
@@ -171,13 +168,13 @@ function createMilestone(treeRoot, entry) {
 // Per-kind required-field checks — shape only (no reference to prior
 // records; that cross-referencing is assertLifecycleAndCrossChecks, below,
 // since it needs the chunk's full record history). chunk-green's
-// verification requirement is the load-bearing one (P7 build instruction's
-// own named rejection case): a chunk cannot report green without a real,
-// exit_code-0 verification record attached — the same "a gate passes only
-// with ledger evidence" law check-honesty.js already enforces for phase
-// gates, applied here to chunk gates. This does not re-run the gate itself
-// (that stays check-honesty.js's runGate, one native mechanism) — it only
-// refuses to LOG a green chunk that carries no evidence of one.
+// verification requirement is the load-bearing one: a chunk cannot report
+// green without a real, exit_code-0 verification record attached — the
+// same "a gate passes only with ledger evidence" law check-honesty.js
+// already enforces for phase gates, applied here to chunk gates. This does
+// not re-run the gate itself (that stays check-honesty.js's runGate, one
+// native mechanism) — it only refuses to LOG a green chunk that carries no
+// evidence of one.
 function assertChunkRecordShape(record) {
   if (!CHUNK_RECORD_KINDS.includes(record.kind)) {
     throw new TypeError(
@@ -199,9 +196,9 @@ function assertChunkRecordShape(record) {
       throw new TypeError('milestones: "chunk-start" record requires a non-empty "implementer_seat"');
     }
     // implementer_family — the family this chunk's implementation belongs
-    // to (P7 Sol review BLOCKING: chunk-green's cross-family check has
-    // nothing to validate against without this recorded at start time).
-    // Reuses DESIGNER_FAMILIES' exact closed {claude, gpt} vocabulary rather
+    // to: chunk-green's cross-family check has nothing to validate against
+    // without this recorded at start time. Reuses DESIGNER_FAMILIES' exact
+    // closed {claude, gpt} vocabulary rather
     // than a second, parallel family enum for the same concept.
     if (!DESIGNER_FAMILIES.has(record.implementer_family)) {
       throw new TypeError(
@@ -302,9 +299,9 @@ function findChunkStartRecord(records, chunkId) {
   return found;
 }
 
-// Enforces the strict lifecycle precedence (P7 build instruction: "recordChunk
-// enforces lifecycle precedence per chunk_id (spec -> start -> review ->
-// green; out-of-order rejected)") plus chunk-green's cross-record checks:
+// Enforces the strict lifecycle precedence per chunk_id (spec -> start ->
+// review -> green; out-of-order rejected) plus chunk-green's cross-record
+// checks:
 // the immediately-preceding chunk-review must carry verdict "approve", that
 // same review's family/ref is what chunk-green's own "review" must match
 // exactly (never a caller-invented family/ref disconnected from a real
@@ -384,10 +381,11 @@ function assertLifecycleAndCrossChecks(records, record) {
 }
 
 // Reads chunks.jsonl and fails closed on any parse error or common-header
-// violation (P7 Sol review MAJOR: closeMilestone previously discarded both
-// reports from readRecords). recordChunk applies this too — appending on
-// top of a stream this module cannot trust to parse cleanly would let a
-// corrupt tail silently continue accumulating rather than surfacing loud.
+// violation, rather than silently discarding the errors/headerViolations
+// reports readRecords already returns. recordChunk applies this too —
+// appending on top of a stream this module cannot trust to parse cleanly
+// would let a corrupt tail silently continue accumulating rather than
+// surfacing loud.
 function readChunkRecordsOrThrow(chunksPath) {
   const { records, errors, headerViolations } = readRecords(chunksPath);
   if (errors.length > 0) {
@@ -405,13 +403,12 @@ function readChunkRecordsOrThrow(chunksPath) {
 // record to milestones/<id>/chunks.jsonl. `record` carries `kind`/`chunk_id`
 // plus the kind-specific fields assertChunkRecordShape checks; every field
 // besides `kind` becomes payload (chunk_id doubles as the record's
-// correlation_id, per synthesis §2's common-header sketch).
+// correlation_id, per the common-header sketch).
 //
 // Refuses (throws) when the milestone's index entry already reports status
 // "green" — closeMilestone is the sole writer of that status, and a
-// milestone it has already closed accepts no further chunk writes (P7 Sol
-// review: recordChunk previously had no such refusal, leaving a nominally
-// "done" milestone's own evidence stream still mutable).
+// milestone it has already closed accepts no further chunk writes: a
+// nominally "done" milestone's own evidence stream must never stay mutable.
 function recordChunk(treeRoot, milestoneId, record) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('milestones: treeRoot must be a non-empty string');
@@ -474,17 +471,17 @@ function verifyCommitExists(repoRoot, sha) {
 // recorded chunks, or any chunk whose last lifecycle record is
 // spec/start/review-not-yet-green, is not closeable.
 //
-// All three of {tag, merge_sha, review_evidence} are REQUIRED (P7 Sol review
-// BLOCKING: milestone green was previously persisted before the required
-// merge/tag existed, with no durable bridge). `tag` and `merge_sha` are
-// cross-checked against the real git repository via read-only `git
-// rev-parse --verify` (cwd = opts.repoRoot, defaulting to treeRoot/.. — the
-// project root the .kiln tree sits inside) — a merge_sha or tag this
-// call cannot verify refuses the close outright (fail closed). The one
-// escape hatch is opts.skipGitVerify === true, which must be passed
-// EXPLICITLY by the caller (dev-side replay scenarios with no real git repo
-// behind them, never production use) and always persists `verified: false`
-// on the index entry rather than silently pretending verification ran.
+// All three of {tag, merge_sha, review_evidence} are REQUIRED — a milestone
+// can never report green before the required merge/tag actually exists,
+// with no durable bridge left open. `tag` and `merge_sha` are cross-checked
+// against the real git repository via read-only `git rev-parse --verify`
+// (cwd = opts.repoRoot, defaulting to treeRoot/.. — the project root the
+// .kiln tree sits inside) — a merge_sha or tag this call cannot verify
+// refuses the close outright (fail closed). The one escape hatch is
+// opts.skipGitVerify === true, which must be passed EXPLICITLY by the
+// caller (an environment with no real git repository behind it, never
+// production use) and always persists `verified: false` on the index entry
+// rather than silently pretending verification ran.
 //
 // On success, flips the milestone's milestones/index.json entry to status
 // "green" and records tag/merge_sha/review_evidence/verified alongside it —

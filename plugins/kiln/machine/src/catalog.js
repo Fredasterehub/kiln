@@ -1,12 +1,12 @@
 'use strict';
 
 // Scoped serving discipline for the brainstorm technique catalog
-// (product/brainstorm/catalog.json), per the BMAD-brainstorm study §e/§b:
-// NEVER dump the whole library into a caller's context. _load() validates
-// the shape once, fail-closed, and is the only function in this module that
-// returns the unscoped whole catalog — it is deliberately underscore-named
-// and never wired into the dev-side replay harness's OPS dispatch table (P4
-// Sol review BLOCKING-1). Every other function here takes the already-loaded
+// (product/brainstorm/catalog.json): NEVER dump the whole library into a
+// caller's context. _load() validates the shape once, fail-closed, and is
+// the only function in this module that returns the unscoped whole
+// catalog — it is deliberately underscore-named and has no CLI subcommand
+// of its own, so it is never reachable the way categories()/list()/show()/
+// sample() are. Every other function here takes the already-loaded
 // catalog and returns only the slice a caller asked for — categories()
 // (names+counts), list()/sample() (id+name+mechanics, the "pick a
 // technique" view — both REQUIRE a scoping filter and REFUSE a call wide
@@ -21,12 +21,11 @@ const fs = require('node:fs');
 const PHASES = new Set(['divergent', 'convergent', 'critique']);
 const SCOPED_LIST_KEYS = ['id', 'name', 'mechanics'];
 
-// Hard caps on the scoped-serving discipline (P4 Sol review BLOCKING-1):
-// list() and sample() must never be usable to reconstruct the whole catalog
-// in one call. Exceeding either cap is a refusal, not a silent truncation —
-// the caller narrows the filter and calls again, the same "hard refusal on
-// any command that would dump the whole catalog" shape the r2 BMAD study
-// documents for the baseline's own CLI (§b line 247).
+// Hard caps on the scoped-serving discipline: list() and sample() must
+// never be usable to reconstruct the whole catalog in one call. Exceeding
+// either cap is a refusal, not a silent truncation — the caller narrows the
+// filter and calls again, never a path back to the whole roster in one
+// call.
 const LIST_CAP = 12;
 const SAMPLE_CAP = 5;
 const LIST_FILTER_KEYS = new Set(['category', 'phase', 'goal_tag']);
@@ -82,15 +81,14 @@ function validateTechniqueShape(technique, index, categoryIds) {
 // technique referencing an unknown category all throw rather than returning
 // a partially-usable catalog.
 //
-// Deliberately underscore-named and NEVER added to the dev-side replay
-// harness's OPS dispatch table (P4 Sol review BLOCKING-1): this is the one function in
-// the module that returns the unscoped whole catalog, so it is not part of
-// the scoped-serving surface a session/scenario can reach by name — only
-// categories()/list()/show()/sample() are. A caller that needs a `cat`
-// handle (the facilitator, running this module directly via Bash, or a test)
-// calls _load() once, then passes the handle to the scoped functions below;
-// that direct-require call is not the same reachability surface the
-// dispatcher's OPS table stands in for.
+// Deliberately underscore-named and NOT one of this module's CLI
+// subcommands: this is the one function in the module that returns the
+// unscoped whole catalog, so it is not part of the scoped-serving surface a
+// caller can reach by name — only categories()/list()/show()/sample() are.
+// A caller that needs a `cat` handle (the facilitator, running this module
+// directly via Bash, or a test) calls _load() once, then passes the handle
+// to the scoped functions below; that direct-require call is not the same
+// reachability surface the CLI's own subcommand dispatch stands in for.
 function _load(catalogPath) {
   if (!isNonEmptyString(catalogPath)) {
     throw new TypeError('catalog: catalogPath must be a non-empty string');
@@ -194,7 +192,7 @@ function matchesFilter(technique, filter) {
 // scoping — it can still span every category) and REFUSES a filtered result
 // wider than LIST_CAP entries rather than truncating it silently: either
 // case is the caller's cue to narrow the filter and call again, never a
-// path back to the whole roster in one call (P4 Sol review BLOCKING-1).
+// path back to the whole roster in one call.
 function list(cat, filter = {}) {
   assertCatalog(cat);
   if (!isPlainObject(filter)) {
@@ -258,9 +256,9 @@ function seedToInt(seed) {
 // the filtered pool via a seeded Fisher-Yates shuffle. seed is REQUIRED (no
 // default, no Math.random fallback) so every draw is deterministic and
 // replayable; the same {phase, category, n, seed} always returns the same
-// technique batch in the same order. phase is also REQUIRED (P4 Sol review
-// BLOCKING-1: an unscoped draw is still a whole-catalog-adjacent call), and
-// n is capped at SAMPLE_CAP — refused, not clamped, past that ceiling.
+// technique batch in the same order. phase is also REQUIRED — an unscoped
+// draw is still a whole-catalog-adjacent call — and n is capped at
+// SAMPLE_CAP — refused, not clamped, past that ceiling.
 function sample(cat, opts = {}) {
   assertCatalog(cat);
   if (!isPlainObject(opts)) {
@@ -293,16 +291,16 @@ function sample(cat, opts = {}) {
   return shuffled.slice(0, n).map(toScopedRow);
 }
 
-// CLI entrypoint (P11 convergence finding 3: agents/brainstorm-facilitator.md
-// names _load/categories/list/show/sample as commanded runtime calls with no
+// CLI entrypoint: agents/brainstorm-facilitator.md names
+// _load/categories/list/show/sample as commanded runtime calls with no
 // executable form under a real plugin install — an LLM agent's Bash tool can
 // only run a shell command, never hold an in-process JS handle across
 // separate calls the way the facilitator's own prose describes "keeping a
-// handle in working memory"). Every subcommand loads the catalog internally
+// handle in working memory". Every subcommand loads the catalog internally
 // via _load and returns ONLY a scoped view — there is deliberately no bare
 // "load" command that would print the whole catalog raw; that would defeat
 // the exact scoped-serving discipline categories()/list()/show()/sample()
-// already hold in-process (P4 Sol review BLOCKING-1).
+// already hold in-process.
 function readStdinJson(label) {
   const text = fs.readFileSync(0, 'utf8'); // fd 0 = stdin
   let parsed;

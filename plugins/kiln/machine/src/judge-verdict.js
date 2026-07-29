@@ -1,18 +1,18 @@
 'use strict';
 
-// The ONE sanctioned way plan-judge.md's verdict reaches disk (P6 Sol review
-// BLOCKING #5: "the judge is permitted to touch a winning content
-// artifact"). plan-judge.md's tools are `Read` only — it cannot write
-// anything itself, by construction, so it structurally cannot touch
-// `architecture/protocol-record.md` or any of the other four content
-// artifacts even by accident. Its full verdict is returned as response text
-// to whoever spawned it (Maestro), which relays it here via Bash — one of
-// the narrow, named machine-layer CLIs `product/agents/maestro.md`'s
-// "Bash is for machine-layer CLIs only" law permits, never an ad-hoc file
-// write. This module does not parse, summarize, or interpret the verdict
-// text it's given — it writes exactly what it received, a mechanical relay,
-// so no third mind stands between the judge's selection and the record of
-// it (the anti-merge law applies to this relay step too).
+// The ONE sanctioned way plan-judge.md's verdict reaches disk: the judge
+// must never itself touch a winning content artifact. plan-judge.md's
+// tools are `Read` only — it cannot write anything itself, by construction,
+// so it structurally cannot touch `architecture/protocol-record.md` or any
+// of the other four content artifacts even by accident. Its full verdict is
+// returned as response text to whoever spawned it (Maestro), which relays
+// it here via Bash — one of the narrow, named machine-layer CLIs
+// `agents/maestro.md`'s "Bash is for machine-layer CLIs only" law permits,
+// never an ad-hoc file write. This module does not parse, summarize, or
+// interpret the verdict text it's given — it writes exactly what it
+// received, a mechanical relay, so no third mind stands between the
+// judge's selection and the record of it (the anti-merge law applies to
+// this relay step too).
 
 const fs = require('node:fs');
 const path = require('node:path');

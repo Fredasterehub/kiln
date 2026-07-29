@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // Design ceiling for a single JSONL line / envelope, in bytes, INCLUDING the
-// trailing newline. Proven in the dev record (8KB is where
-// POSIX O_APPEND atomicity is no longer guaranteed on the target
-// filesystems) and adopted as the product's enforced line-size ceiling.
+// trailing newline: 8KB is where POSIX O_APPEND atomicity is no longer
+// guaranteed on the target filesystems, so this is the product's enforced
+// line-size ceiling.
 const LINE_CEILING = 8192;
 
 function serializeLine(obj) {
@@ -84,10 +84,10 @@ function sleepSync(ms) {
 // value. A single-writer lockfile (exclusive create, not append-based)
 // serializes the whole read+append transaction across processes.
 //
-// Exported (P11 convergence finding 21) so atomic-json.js's updateJson can
-// take the SAME per-file lock discipline for a JSON read-modify-write —
-// one native mechanism per constraint, never a second locking
-// layer invented for JSON files alongside this one for JSONL streams.
+// Exported so atomic-json.js's updateJson can take the SAME per-file lock
+// discipline for a JSON read-modify-write — one native mechanism per
+// constraint, never a second locking layer invented for JSON files
+// alongside this one for JSONL streams.
 function withLock(file, fn) {
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true });

@@ -9,7 +9,7 @@ runs_in: Maestro's top-level session only.
 
 `AskUserQuestion` exists only in the top-level session. No subagent, worker, or
 delegated task can call it — the interview runs in the main skill context,
-never a subagent, settled by ruling in the dev record. `agents/maestro.md`'s
+never a subagent. `agents/maestro.md`'s
 Do/route boundary otherwise sends anything that touches disk or costs more
 than a handful of tool calls to a worker; this file is the deliberate
 exception. **Maestro executes every step below directly, in its own turn. No
@@ -43,10 +43,9 @@ Every knob's question text, option meaning, and cost line come from
 copied into this document as static prose. That file is loaded with
 `loadProductSchema(file)` (`machine/src/settings.js:115-124`), which throws
 if it is missing or malformed rather than defaulting silently. This keeps
-exactly one place where a knob's wording and dollar-placeholder tokens live —
-one native mechanism per constraint, never two: a future dogfood calibration
-pass that replaces a `$PLACEHOLDER-*` token with a measured number updates the
-interview automatically, with no edit to this file.
+exactly one place where a knob's wording and its cost tokens live — one
+native mechanism per constraint, never two: an edit there reaches the
+interview with no change to this file.
 
 ### Rendering one knob panel
 
@@ -59,29 +58,18 @@ For a flat knob (`facilitator`, `research_width`, `planning`, `reviews`,
 3. **Option label** = the enum value rendered in plain language per the
    Label lookup table below — never the raw token (`opus-5`, `x3`,
    `auto_remedy`, ...) shown to the operator.
-4. **Option cost line** = derived from `knobs.<key>.cost_note`, by an
-   **explicit allowlist, never an automatic pattern-detection rule** — a
-   "split on `; ` when the clause count matches `enum.length`" heuristic
-   was tried while writing this document and rejected: it misfires on
-   `checkpoints`, whose cost_note ("No direct cost difference between the
-   two options; both run the same verification floor.") happens to split
-   into exactly 2 clauses for its exactly-2 options without either clause
-   actually being option-specific — clause count matching option count is
-   not evidence the split is meaningful. Use this instead:
+4. **Option cost line** = derived from `knobs.<key>.cost_note`, by this
+   **explicit allowlist**, never by pattern-detection over the note's text:
    - **`facilitator`, `research_width`, `planning`, `reviews`** — these four
-     `cost_note`s were hand-verified (see this document's self-check) to be
-     written one clause per enum value, in enum order, each clause starting
-     with that option's own label. Split on `; `, clause *i* (trailing
+     `cost_note`s are written one clause per enum value, in enum order, each
+     clause starting with that option's own label. Split on `; `, clause *i* (trailing
      period trimmed) is option *i*'s cost line.
    - **Every other knob** (`checkpoints`, `telemetry_consent`,
      `blocking_preference`, `plan_review`) — show the **whole** `cost_note`
-     identically under every option of that question. None of these currently
-     have a cost differential between their options, so this is accurate,
-     never merely a fallback.
-   - If a future schema edit adds a cost-differentiated option to a knob not
-     on the four-item list above, that edit must also update this allowlist
-     — do not re-introduce an automatic clause-count heuristic to avoid the
-     edit; it is exactly what produced the `checkpoints` false-positive.
+     identically under every option of that question. None of these have a
+     cost differential between their options.
+   - A schema edit that adds a cost-differentiated option to a knob not on
+     the four-item list above must also update this list.
 
 The nested `budget` knob (`knobs.budget.properties.*`) is rendered nowhere: no
 panel asks for it. Its schema entries stay put as reserved defaults, and this
@@ -102,7 +90,7 @@ procedure never reaches them.
 
 ## Step 0 — re-run check (skip the interview entirely if it already ran)
 
-Read the settings currently on disk with `settings.js read <treeRoot>` — Maestro's own call, invocation form in `agents/maestro.md`'s Bash law point 8, which is where every runtime command this document names is written out (this file is plugin payload, so a command stored here would reach Bash with its plugin-root prefix unresolved).
+Read the settings currently on disk with `settings.js read <treeRoot>` — Maestro's own call, invocation form in `agents/maestro.md`'s Bash law point 8, which is where every runtime command this document names is written out.
 `machine/src/scaffold.js` writes this file as `{}` at tree genesis (see its
 "settings.json — onboarding genesis" comment, `machine/src/scaffold.js:130-137`)
 — so **file existence alone never means the interview ran**; an empty object
@@ -115,8 +103,8 @@ schema order).
 - Present → the interview already completed. Ask nothing. Regenerate
   `.kiln/views/settings-recap.md` from the settings currently on
   disk (Step 6) and stop. A re-run skips the interview entirely — zero
-  questions on a second pass, ruled in the dev record. Your answers were
-  already given; I do not ask twice.
+  questions on a second pass. Your answers were already given; I do not ask
+  twice.
 - Absent (including the empty `{}` genesis case) → proceed to Step 1.
 
 ## Step 1 — Panel 1: the preset question (always asked first)
@@ -128,20 +116,19 @@ The preset **mechanics** (which knob values each preset sets) come from
 `machine/settings-schema.json`'s `presets` object — `custom` is `{}` (pure
 schema defaults; the operator is walked through every knob instead of
 accepting the defaults silently), `balanced`, `budget_solo`, and `max_rigor`
-are named partial overrides (`machine/settings-schema.json:99-118`) —
-execution-proven against `applySchema` in the dev record. Those preset objects
-still carry `budget` values, and no step here asks about them: no panel offers
-a ceiling, no recap row shows one, and nothing downstream meters spend today.
-They are reserved schema defaults awaiting a metered rewire — never a cap I
+are named partial overrides (`machine/settings-schema.json:99-118`), each
+resolved through `applySchema`. Those preset objects also carry `budget`
+values, and no step here asks about them: no panel offers
+a ceiling, no recap row shows one, and nothing meters spend.
+They are reserved schema defaults — never a cap I
 claim to enforce. `telemetry_consent`, `blocking_preference`, and
 `plan_review` are asked identically regardless of preset, in Step 4.
 
 The **framing copy** below (what the operator reads to choose a preset) is
 not schema-owned — no preset-level `description`/`cost_note` exists in
 `machine/settings-schema.json` (only individual knobs carry one). It stays at
-the one-line, intent-shaped framing below and quotes no dollar figure: the
-ceiling numbers sitting in the preset objects are rough estimates awaiting
-dogfood measurement, and I do not hand you an unmeasured number dressed as a
+the one-line, intent-shaped framing below and quotes no dollar figure:
+nothing here meters spend, and I do not hand you a number dressed as a
 price. The recap (Step 6) shows what each knob was actually set to, read back
 from disk after clamping.
 
@@ -169,16 +156,9 @@ One `AskUserQuestion` call, four questions — the panel law's own shape,
 stops: `facilitator`, `research_width`, `planning`, `reviews`, rendered per
 the procedure above from `machine/settings-schema.json:4-27`.
 
-`planning`'s third enum value, `maximal_confrontation`, is settled doctrine in
-the dev record — it is present in the schema
-(`machine/settings-schema.json:18`), so this document renders it, never
-re-argues it.
-
 `reviews`'s `floor` value is the verification-never-scales-down minimum
 (schema description, `machine/settings-schema.json:25`) — `applySchema`
-has no branch that can resolve `reviews` below it: the clamp is
-unconditional in the function, and every input tried in the dev record
-landed at or above the floor.
+clamps to it unconditionally.
 
 ## Step 3 — Panel 3 (Custom only): Checkpoints
 
@@ -187,23 +167,19 @@ from `machine/settings-schema.json` by `machine/src/interview-panels.js`'s
 `buildPanel3(knobs, mode)` — call it (`mode` = `state.json.preflight.mode`)
 and render its `questions` array verbatim rather than hand-deriving option
 lists; the module throws if the 4x4 contract (1-4 questions, 2-4 options
-each, ≤12-char headers, exactly one default per question) is ever violated,
-so a future schema edit that breaks the contract fails loudly instead of
-shipping a bad panel — the shape both modes produce is execution-proven in
-the dev record. This section restates that output in prose for a reader not
-running the module:
+each, ≤12-char headers, exactly one default per question) is violated. What
+it returns:
 
 - **`Checkpoints`** — one option per `knobs.checkpoints.enum` entry
   (`machine/settings-schema.json:28-33`), labels from the Label lookup table
   above, default marked.
 
 That is the whole panel: one question, in both modes. The budget family — both
-ceilings and the cost report — is off the operator surface, because nothing
-downstream consumes it: no host primitive reports session spend, so asking you
-for a ceiling would promise a readout that never renders. The schema keys stay
-as reserved internal defaults until the metered rewire lands. `mode` is still
-passed for call parity, and `buildPanel3` still refuses any value that is not
-`"full-cross-family"` or `"degraded-claude-only"`.
+ceilings and the cost report — is off the operator surface: no host primitive
+reports session spend, so asking you for a ceiling would promise a readout
+that never renders. The schema keys stay as reserved defaults. `buildPanel3`
+refuses any `mode` value that is not `"full-cross-family"` or
+`"degraded-claude-only"`.
 
 ## Step 4 — always-asked panel: Telemetry, Blocking, Plan review, Floor lock
 
@@ -213,9 +189,8 @@ Custom — and always before the recap. These four never appear in any
 preset's override object (`machine/settings-schema.json:99-114`): plan review
 and blocking preference sit outside the tunable knob set and are asked of you
 whichever preset you took, and telemetry is always asked separately, never
-folded into a preset. Floor lock is the fourth, added by operator ruling
-2026-07-28 [seq 48] — the sovereignty escape hatch, asked here directly and
-never offered as its own menu-visible tier.
+folded into a preset. Floor lock is the fourth — the sovereignty escape hatch,
+asked here directly and never offered as its own menu-visible tier.
 
 | Header: `Telemetry` | |
 |---|---|
@@ -223,11 +198,10 @@ never offered as its own menu-visible tier.
 | ▶ **No** | Nothing is recorded. This is asked once; changing it later means hand-editing `telemetry_consent` in `.kiln/settings.json`, which `applySchema` clamps like any other read. |
 | **Yes** | Anonymous build stats, local only, saved as plain files under `.kiln/usage/` (`machine/src/telemetry.js`'s `recordEvent`/`status`/`purge`). Never your code, never your prompt text — and never off this machine. `.kiln/usage/` is plain files in your own project — read them, or delete the folder; nothing reconstructs it. |
 
-The ruled consent text lives at `machine/settings-schema.json`'s
+The consent text lives at `machine/settings-schema.json`'s
 `telemetry_consent.description` and is rendered from there like every other
-knob — this document quotes no consent copy, so the two can never drift.
-Consent copy is quoted from the schema, never improvised and never
-paraphrased. Sets `telemetry_consent` (schema default `false`,
+knob — never improvised and never paraphrased.
+Sets `telemetry_consent` (schema default `false`,
 `machine/settings-schema.json:62`).
 
 | Header: `Blocking` | |
@@ -248,7 +222,7 @@ Sets `plan_review` (schema default `auto_proceed`).
 
 | Header: `Floor lock` | |
 |---|---|
-| **Question** | (from schema) `knobs.floor_lock.description`, `machine/settings-schema.json:84` — operator-approved copy, rendered from the schema verbatim, never paraphrased and never copied here, so the ruled text and this document can never drift. |
+| **Question** | (from schema) `knobs.floor_lock.description`, `machine/settings-schema.json:84` — rendered from the schema verbatim, never paraphrased and never copied here. |
 | ▶ **No — floor stays absolute (recommended)** | The floor cannot be moved in this install, by anyone — the override key is never deployed, not merely set to false. |
 | **Yes — deploy the hand-editable override** | A documented config key exists and works, and every run that uses it prints a loud warning. For operators who tune my own machinery. |
 
@@ -292,8 +266,7 @@ runs):
 2. Read the current file with `readJson('.kiln/settings.json', {})`
    (`machine/src/atomic-json.js:40-56`) so a pre-existing bookkeeping key is
    not lost — `applySchema` writes no key outside `knobs` (the function has
-   no branch that does), and every input tried in the dev record left every
-   other key untouched.
+   no branch that does), so every other key survives untouched.
 3. Merge the picks over that object, and add one bookkeeping key outside the
    schema, `preset`, set to the raw Q0 answer (`'balanced' | 'budget_solo' |
    'max_rigor' | 'custom'`) — not a schema knob, preserved as an unknown
@@ -313,7 +286,7 @@ runs):
    call alone is entitled to pass, and it is the only thing in this whole
    product that lets a `floor_lock: false` pick actually land rather than
    being clamped back to `true` (`machine/src/settings.js`'s
-   `interview_only` handling, operator ruling 2026-07-28 [seq 48]) — every
+   `interview_only` handling) — every
    other caller, including a plain hand-edit of `settings.json` read back on
    a later run, gets the fail-closed `'hand-edit'` default instead. This is
    also where `budget`'s nested clamping happens automatically
@@ -325,10 +298,8 @@ runs):
    that printed document as the final word, since clamping can change
    values.
 
-`.kiln/settings.json` is the persistence target — **not**
-`.claude/<skill-name>.local.md`, which an earlier design proposed before the
-system-of-record decision superseded it. That swap is a named trap in the dev
-record: two homes for one truth, and neither one authoritative.
+`.kiln/settings.json` is the persistence target: one home for this truth, and
+the run travels with the project folder.
 
 ## Step 6 — the recap
 
@@ -337,9 +308,8 @@ interview answers — always re-read the clamped result, so the recap can
 never show a value `applySchema` actually rejected) and write it to
 `.kiln/views/settings-recap.md` via plain file write. Treat this as a
 disposable, regenerable projection of `settings.json` — never a second source
-of truth, the same doctrine the operator resume view lives under —
-**flagged in this document's self-check**: no tree diagram in the design
-record enumerates a `views/` directory anywhere.
+of truth, the same doctrine the operator resume view lives under. `views/` is
+not part of the tree any phase gate names; nothing downstream reads it.
 
 ```
 # Your build
@@ -364,20 +334,14 @@ the recommended default) or **Unlocked** (`false`) — never the raw
 `override_verification_floor` gets no row of its own here: this interview
 never asks for it directly, and at the moment this recap is first rendered
 it is either undeployed (still locked) or sitting at its own schema default
-(`false`, just unlocked) — nothing yet worth a dedicated line. A later
-re-render of this same recap (regenerated from whatever's on disk, per this
-step's own "disposable projection" doctrine above) would show it the same
-way any other on-disk value shows, if this document is ever extended to do
-so. The `budget` keys get no row either: nothing asked you for them and
-nothing meters spend, so a ceiling line here would report a limit I do not
-enforce. They earn a row when the metered rewire lands — never before.
+(`false`, just unlocked) — nothing yet worth a dedicated line. The `budget`
+keys get no row either: nothing asked you for them and nothing meters spend,
+so a ceiling line here would report a limit I do not enforce.
 
 Every "What it means" and "Cost" cell is read live from
 `machine/settings-schema.json` at recap-render time, per the rendering
 procedure above — never re-worded, so the recap and the question the
-operator answered always say the same thing, and a future dogfood edit to
-the schema updates old recaps' *wording* the next time they're regenerated
-without touching this document.
+operator answered always say the same thing.
 
 ## Step 7 — ledger event
 
@@ -406,10 +370,8 @@ ledger record `machine/src/check-honesty.js` and a future
 ## Settings key reference
 
 The canonical schema is `machine/settings-schema.json` — this table is a
-convenience index into it, not a second definition. Values, defaults, and
-enums below are read directly off that file (line references as of this
-writing; re-read the file if it has since changed rather than trusting this
-table blind).
+convenience index into it, not a second definition. Read that file itself for
+the authoritative values, defaults, and enums.
 
 | Key | Rule (schema line) | Notes |
 |---|---|---|
@@ -424,12 +386,11 @@ table blind).
 | `telemetry_consent` | enum `[true,false]`, default `false` (`machine/settings-schema.json:61-66`) | Opt-in — off unless you say yes, asked in Step 4 |
 | `blocking_preference` | enum `['auto_remedy','advise_me']`, default `'auto_remedy'` (`machine/settings-schema.json:67-72`) | Asked on every path, in Step 4; no preset overrides it |
 | `plan_review` | enum `['auto_proceed','review']`, default `'auto_proceed'` (`machine/settings-schema.json:73-78`) | Asked on every path, in Step 4; no preset overrides it |
-| `floor_lock` | enum `[true,false]`, default `true`, `interview_only: true` (`machine/settings-schema.json:79-86`) | Only this interview's write call (Step 5, `{ source: 'interview' }`) can set it `false`; every other caller is clamped back to `true` (operator ruling 2026-07-28 [seq 48]) |
+| `floor_lock` | enum `[true,false]`, default `true`, `interview_only: true` (`machine/settings-schema.json:79-86`) | Only this interview's write call (Step 5, `{ source: 'interview' }`) can set it `false`; every other caller is clamped back to `true` |
 | `override_verification_floor` | enum `[true,false]`, default `false`, `locked_by: 'floor_lock'` (`machine/settings-schema.json:87-96`) | Not deployed at all while `floor_lock` is `true` — absent from `settings.json`, not merely `false`; never asked by this interview directly, only enabled for hand-editing once `floor_lock` is `false` |
 | `preset` | not schema-owned; bookkeeping only | Set by this interview (Step 5.5), preserved by `applySchema` as an unknown key |
 
 All other keys already present in `settings.json` (internal seat overrides,
 routing tweaks written by something other than this interview) are
-preserved byte-for-byte — `applySchema` writes no key outside `knobs`, and
-every input tried in the dev record left every other key byte-identical. This
+preserved byte-for-byte — `applySchema` writes no key outside `knobs`. This
 interview never invents or deletes a key it doesn't own.

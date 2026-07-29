@@ -178,11 +178,11 @@ function validateBriefChecked(brief) {
   return { ok: errors.length === 0, errors };
 }
 
-// synthesis §6's uniform brownfield trust-flag taxonomy: existing
-// vision/README prose enters as brainstorm INPUTS (inherited-unverified);
-// existing tests enter as verification seeds that cannot vote on "done"
-// until re-reviewed (inherited-advisory). Every scout artifact that carries
-// inherited material is bound to one of exactly these two flags.
+// Uniform brownfield trust-flag taxonomy: existing vision/README prose
+// enters as brainstorm INPUTS (inherited-unverified); existing tests enter
+// as verification seeds that cannot vote on "done" until re-reviewed
+// (inherited-advisory). Every scout artifact that carries inherited
+// material is bound to one of exactly these two flags.
 const TRUST_FLAGS = new Set(['inherited-unverified', 'inherited-advisory']);
 
 const AFFECTED_MAP_STATUSES = new Set(['pending', 'green', 'quarantined']);
@@ -191,10 +191,10 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
 }
 
-// verification/affected-map.json — synthesis §2/§8.1: "test-impact
-// projection; derived/rebuildable from milestone+chunk+journey metadata,
-// first-class verification artifact per plan P8's failing-first dance."
-// Bounded minimal envelope: which journeys are impacted by which change, and
+// verification/affected-map.json: a test-impact projection,
+// derived/rebuildable from milestone+chunk+journey metadata — a first-class
+// verification artifact for the failing-first dance. Bounded minimal
+// envelope: which journeys are impacted by which change, and
 // their current failing-first status — everything else (WHY they're
 // affected) lives in the milestone/chunk/journey metadata this file is
 // rebuilt from, never hand-maintained here.
@@ -239,15 +239,12 @@ function validateAffectedMapChecked(affectedMap) {
   return { ok: errors.length === 0, errors };
 }
 
-// scout/constraints.json — synthesis §6 [S6, steal #17-part]: Sol's typed
-// constraint fields (preserve[], protected_paths[], compatibility[],
-// migrations[], known_failures[]) field-shape-borrowed from Sol's own
-// dev-record constraints.json sketch, filed under
-// Claude's trust-flag taxonomy rather than replacing it. Every entry carries
-// its own trust_flag — the "carries" branch of synthesis §6's "every entry
-// still carries — or is reachable through reuse-map.json for — one of
-// Claude's two trust flags" — so a constraints.json is self-certifying
-// without a second file read to cross-reference reuse-map.json.
+// scout/constraints.json: typed constraint fields (preserve[],
+// protected_paths[], compatibility[], migrations[], known_failures[])
+// under this module's own trust-flag taxonomy. Every entry carries its own
+// trust_flag — either directly, or reachable through reuse-map.json — so a
+// constraints.json is self-certifying without a second file read to
+// cross-reference reuse-map.json.
 const SCOUT_CONSTRAINT_FIELDS = ['preserve', 'protected_paths', 'compatibility', 'migrations', 'known_failures'];
 
 function validateScoutConstraints(constraints) {
@@ -287,12 +284,12 @@ function validateScoutConstraintsChecked(constraints) {
       // protected_paths[] specifically is machine-enforced path protection
       // (plan-gate.js's assertNoProtectedPathConflicts set-intersection),
       // not merely disclosed color like the other four fields — a
-      // structurally "valid" entry carrying no usable path protects nothing
-      // while still activating the surrounding protocol (P11 Sol review
-      // finding 7). agents/scout-agent.md:54 already documents this field's
-      // full required shape as {trust_flag, path, anchor, note}; enforced
-      // here, fail-closed, rather than left to plan-gate.js's own defensive
-      // skip of an unmatchable entry.
+      // structurally "valid" entry carrying no usable path must never
+      // protect nothing while still activating the surrounding protocol.
+      // agents/scout-agent.md:54 already documents this field's full
+      // required shape as {trust_flag, path, anchor, note}; enforced here,
+      // fail-closed, rather than left to plan-gate.js's own defensive skip
+      // of an unmatchable entry.
       if (field === 'protected_paths') {
         if (!isNonEmptyString(entry.path)) {
           errors.push(`constraints.${field}[${index}].path must be a non-empty string`);
@@ -310,9 +307,9 @@ function validateScoutConstraintsChecked(constraints) {
   return { ok: errors.length === 0, errors };
 }
 
-// architecture/criteria-register.json — ruled: "architecture emits
-// vision-criterion->ID JSON; every ID gets exactly one journey; phase 7
-// assembles, never writes." {schema_version, criteria:[{id, text, source_ref,
+// architecture/criteria-register.json: architecture emits
+// vision-criterion->ID JSON; every ID gets exactly one journey; the
+// verification phase assembles, never writes. {schema_version, criteria:[{id, text, source_ref,
 // journey_id}]}: id and journey_id are BOTH unique across the register — the
 // former because it is the criterion's own identity, the latter because
 // "exactly one journey per criterion" is enforced here as a strict 1:1
@@ -326,17 +323,17 @@ function validateCriteriaRegister(reg) {
   }
 }
 
-// Structural floor only (P6 Sol review BLOCKING #7): this proves the register
-// is well-formed and internally 1:1 (id<->journey_id) over whatever entries
-// it carries, and now also that it carries at least one entry with a
-// declared schema. It can never prove the register is COMPLETE against
-// vision.md's actual criteria — that every vision-stated criterion is
-// present, none was silently dropped, none was invented — because "what the
-// vision actually requires" is a semantic judgment, not a structural one.
-// That completeness check is `plan-coverage-checker`'s lost-nothing mission
-// against ground truth (`product/architecture/flow.md`'s "Deriving
-// the criteria register" section) — an honest division of labor, not a gap:
-// the machine checks shape, the Sol coverage seat checks truth.
+// Structural floor only: this proves the register is well-formed and
+// internally 1:1 (id<->journey_id) over whatever entries it carries, and
+// that it carries at least one entry with a declared schema. It can never
+// prove the register is COMPLETE against vision.md's actual criteria —
+// that every vision-stated criterion is present, none was silently
+// dropped, none was invented — because "what the vision actually requires"
+// is a semantic judgment, not a structural one. That completeness check is
+// `plan-coverage-checker`'s lost-nothing mission against ground truth
+// (`product/architecture/flow.md`'s "Deriving the criteria register"
+// section) — an honest division of labor, not a gap: the machine checks
+// shape, the cross-family coverage seat checks truth.
 function validateCriteriaRegisterChecked(reg) {
   if (!isPlainObject(reg)) {
     return { ok: false, errors: ['criteria register must be a plain object'] };
@@ -413,8 +410,8 @@ function validateMilestonesChecked(ms, criteriaRegister, opts) {
     return { ok: false, errors: ['milestones must be a plain object'] };
   }
   const errors = [];
-  // P6 Sol review MAJOR: "neither milestone nor register schema_version is
-  // checked." Checked here (non-fatal — collected alongside every other
+  // Both milestone and register schema_version must be checked, never
+  // skipped. Checked here (non-fatal — collected alongside every other
   // shape violation, not an early return) for the same reason
   // validateCriteriaRegister checks its own: schema_version is part of the
   // structural floor this validator proves, not merely a convention.
@@ -426,10 +423,9 @@ function validateMilestonesChecked(ms, criteriaRegister, opts) {
     return { ok: false, errors };
   }
 
-  // touched_paths — the agreement-pass block law [seq 50],
-  // ruled in the dev record: "a plan touching a path
+  // touched_paths — the agreement-pass block law: a plan touching a path
   // in scout's protected_paths[] IS a block, detected deterministically by
-  // set-intersection at the plan gate." That intersection needs the plan's
+  // set-intersection at the plan gate. That intersection needs the plan's
   // own declared footprint in machine-readable form, and milestones.json is
   // the artifact `plan-gate.js` already parses as structured JSON with a
   // natural "what does this plan do" scope. A single, top-level,
@@ -507,10 +503,9 @@ function validateMilestonesChecked(ms, criteriaRegister, opts) {
       errors.push(`${where}.chunk_count_estimate must be a non-negative integer`);
     }
 
-    // toolchain_profile (research/r3/toolchain-scaffolding.md §2: "one
-    // closed-enum field, not a new artifact file") is OPTIONAL — a milestone
-    // authored before R3 landed, or one that genuinely needs no toolchain
-    // action, carries no such key at all, and that is honest (null is the
+    // toolchain_profile is a single closed-enum field, not a new artifact
+    // file, and is OPTIONAL — a milestone that genuinely needs no toolchain
+    // action carries no such key at all, and that is honest (null is the
     // field's own "nothing needed" value, not merely its absence). Only a
     // PRESENT-but-invalid value fails closed, the same absence-vs-wrong-type
     // distinction check-honesty.js's state.gates/checklist fields already draw.
@@ -577,8 +572,8 @@ function validateMilestonesChecked(ms, criteriaRegister, opts) {
   return { ok: errors.length === 0, errors };
 }
 
-// deviation ledger records (P11 finding F12) — the shape check-honesty.js's
-// recordDeviation validates before writing kind:"deviation" to ledger.jsonl.
+// deviation ledger records: the shape check-honesty.js's recordDeviation
+// validates before writing kind:"deviation" to ledger.jsonl.
 // Four required non-empty-string fields, deliberately narrow: who is
 // reporting (an agent name, never "system" or "unknown"), what the brief or
 // protocol led them to expect, what actually happened, and a one-line
@@ -590,9 +585,9 @@ function validateMilestonesChecked(ms, criteriaRegister, opts) {
 const DEVIATION_FIELDS = ['reported_by', 'expected', 'actual', 'summary'];
 
 // The reporter-identity floor this file's own schema comment above already
-// documents (P11 Sol review finding 18): "reported_by" names a real agent,
-// never one of these two placeholders — an audit fact with no attributable
-// reporter behind it is not a deviation report.
+// documents: "reported_by" names a real agent, never one of these two
+// placeholders — an audit fact with no attributable reporter behind it is
+// not a deviation report.
 const FORBIDDEN_REPORTED_BY = new Set(['system', 'unknown']);
 
 function validateDeviation(deviation) {
@@ -623,9 +618,9 @@ function validateDeviationChecked(deviation) {
   return { ok: errors.length === 0, errors };
 }
 
-// last-mile.jsonl "park" records (P11 finding F4) — the shape
-// machine/src/delivery.js's recordPark validates before writing kind:"park"
-// to last-mile.jsonl. Sibling of validateDeviation: two required non-empty-
+// last-mile.jsonl "park" records: the shape machine/src/delivery.js's
+// recordPark validates before writing kind:"park" to last-mile.jsonl.
+// Sibling of validateDeviation: two required non-empty-
 // string fields (summary, severity) and one optional non-empty-string field
 // (owner_phase) — the exact fields assembleLastMile's own collectParks
 // reads, no more.
@@ -634,11 +629,11 @@ const PARK_OPTIONAL_FIELDS = ['owner_phase'];
 const PARK_ALL_FIELDS = [...PARK_REQUIRED_FIELDS, ...PARK_OPTIONAL_FIELDS];
 
 // The blocker ladder's own parkable set (agents/maestro.md's Blocker
-// ladder — seq: "S2 (localized) or S3 (polish) -> park it"): S1 is a
+// ladder: "S2 (localized) or S3 (polish) -> park it"): S1 is a
 // foundational/fence-breach severity that stops for the operator, never
-// parked. validatePark previously accepted any non-empty string here (P11
-// Sol review finding 13), letting a park record bypass the exact branch
-// vocabulary it exists to enforce.
+// parked. validatePark must never accept any non-empty string here,
+// letting a park record bypass the exact branch vocabulary it exists to
+// enforce.
 const PARK_SEVERITIES = new Set(['S2', 'S3']);
 
 function validatePark(park) {
@@ -674,10 +669,10 @@ function validateParkChecked(park) {
   return { ok: errors.length === 0, errors };
 }
 
-// ledger.jsonl "stop" records (P11 parked question (c), converged: the
-// handoff pair's `handoff.js write-stop` command) — the shape
-// machine/src/handoff.js's writeStop validates before writing kind:"stop".
-// The closed stop-state vocabulary is `agents/maestro.md`'s own Stop-states
+// ledger.jsonl "stop" records — the handoff pair's `handoff.js write-stop`
+// command — the shape machine/src/handoff.js's writeStop validates before
+// writing kind:"stop". The closed stop-state vocabulary is
+// `agents/maestro.md`'s own Stop-states
 // section, verbatim: "DONE, BLOCKED-OPERATOR (the question is in
 // handoff.md), QUOTA-WAIT (earliest-resume time recorded), BUDGET-CEILING,
 // or EXHAUSTED (only parked lanes remain)". Two fields are always required
@@ -687,8 +682,8 @@ function validateParkChecked(park) {
 // them, and refused outright for every other kind — a closed field set PER
 // kind, not merely a shared bag every kind may reach into.
 // A single-line-only floor for every stop field handoff.js's renderHandoffMd
-// interpolates onto its own dedicated Markdown line (P11 Sol review pass-2
-// finding 6): a forged value carrying an embedded "\n"/"\r" would inject
+// interpolates onto its own dedicated Markdown line: a forged value
+// carrying an embedded "\n"/"\r" would inject
 // additional, unattributed lines into handoff.md — including lines that
 // impersonate a DIFFERENT field's own prefix (a `reporter` value like
 // "x\nStop state: DONE" renders a second, forged "Stop state:" line below
@@ -772,15 +767,15 @@ function validateStopChecked(stop) {
 }
 
 // intake/report.json — the typed record of finding a legacy tree, written by
-// `intake.js harvest` and by nothing else (legacy-intake design §4.2). Two
-// things make this validator worth its lines rather than a shape rubber-stamp:
+// `intake.js harvest` and by nothing else. Two things make this validator
+// worth its lines rather than a shape rubber-stamp:
 //
-//   1. It is the harvest's COMMIT WITNESS. §9.1.3 pairs it with
+//   1. It is the harvest's COMMIT WITNESS, paired with
 //      `routing/active.json`: the last write of a fixed sequence is that
 //      sequence's witness, so "report.json exists and passes this validator"
 //      is what a re-entering transaction reads as "the harvest committed".
 //      A validator that accepted a torn report would make that proof a lie.
-//   2. It is where §3.1's anti-fabrication rule becomes MACHINE-CHECKABLE.
+//   2. It is where the anti-fabrication rule becomes MACHINE-CHECKABLE.
 //      Every carried entry must land under `intake/` — not `vision/`, not
 //      `state.json`, not `milestones/` — and must carry one of this module's
 //      two existing TRUST_FLAGS. A legacy VISION.md written to
@@ -788,8 +783,8 @@ function validateStopChecked(stop) {
 //      the operator confirmed through the Sketchbook, which is fabrication of
 //      earned state; this check refuses that plan before the first copy runs.
 //
-// It runs in the harvest's PLAN phase, before any mutation (§9.2.4), so a
-// report that cannot pass leaves the filesystem byte-identical.
+// It runs in the harvest's PLAN phase, before any mutation, so a report
+// that cannot pass leaves the filesystem byte-identical.
 const INTAKE_REPORT_KEYS = [
   'schema_version',
   'txn_id',
@@ -808,16 +803,16 @@ const INTAKE_REPORT_KEYS = [
   'harvested_utc',
 ];
 const INTAKE_NOTED_KEYS = ['law_sealed', 'seals', 'audits', 'reviews', 'evidence', 'verbatim', 'entries'];
-// `title` and `mtime` are tier 2's, and only tier 2's: §3.3 records
+// `title` and `mtime` are tier 2's, and only tier 2's: tier 2 records
 // {path, bytes, mtime, title} for every generic document, and the title is
 // the one handle a reader has on a document nothing has classified. Tier 1's
 // entries carry neither — their role IS the handle, and a title there would
 // have to be read for no reader, or invented.
 const INTAKE_CARRIED_KEYS = ['path', 'dest', 'role', 'trust_flag', 'bytes', 'title', 'mtime'];
-// The closed role set of §3.2/§4.2's populate map. `document` is tier 2's
+// The closed role set of the populate map. `document` is tier 2's
 // single generic role; the other five are tier 1's typed ones.
 const INTAKE_ROLES = new Set(['vision', 'law', 'design', 'research', 'codebase', 'document']);
-// §3.4's three-value vocabulary, and only ever a `noted` fact: seal state
+// A three-value vocabulary, and only ever a `noted` fact: seal state
 // never gates the harvest.
 const INTAKE_LAW_SEAL_STATES = new Set(['sealed', 'unsealed', 'torn']);
 const INTAKE_TXN_ID_RE = /^[0-9a-f]{32}$/;
@@ -874,9 +869,10 @@ function checkSingleLineList(list, at, errors) {
   list.forEach((value, index) => checkSingleLine(value, `${at}[${index}]`, errors));
 }
 
-// {path, reason} plus an optional `link_target` — the shape §9.2.3 gives a
-// source symlink: the raw readlink string is recorded as an uninterpreted
-// string, never resolved, because the target is never touched.
+// {path, reason} plus an optional `link_target` — the shape a source
+// symlink is given: the raw readlink string is recorded as an
+// uninterpreted string, never resolved, because the target is never
+// touched.
 function checkPathReasonEntries(list, label, errors, { allowLinkTarget = false } = {}) {
   if (!Array.isArray(list)) {
     errors.push(`intake-report.${label} must be an array`);
@@ -904,8 +900,8 @@ function checkPathReasonEntries(list, label, errors, { allowLinkTarget = false }
   });
 }
 
-// {count, source, sources[]} (+ `slices[]` for seals). §3.4 forbids
-// reconciling a `.log` that disagrees with a `.jsonl`: BOTH counts are
+// {count, source, sources[]} (+ `slices[]` for seals). A `.log` that
+// disagrees with a `.jsonl` is never reconciled: BOTH counts are
 // recorded in `sources[]` and neither file is repaired, so the disagreement
 // survives into the report as the fact about an interrupted run that it is.
 function checkCountedLedger(value, label, errors, { withSlices = false } = {}) {
@@ -943,12 +939,12 @@ function checkCountedLedger(value, label, errors, { withSlices = false } = {}) {
 const INTAKE_TXN_SCHEMA_VERSION = 1;
 const INTAKE_TXN_PHASES = ['claimed', 'archived', 'scaffolded', 'placed', 'harvested'];
 
-// What makes an intake transaction record AUTHENTIC (legacy-intake design
-// §9.1.2), stated once. Two modules read the marker — detect.js probes it to
-// classify (row 0), intake.js reads it to resume the ladder — and the rule
-// was written in both, where it drifted by a field: intake required
-// `aborted_scaffolds`, detect did not, so a record missing it made detect
-// report an in-flight transaction that intake then refused as corrupt.
+// What makes an intake transaction record AUTHENTIC, stated once. Two
+// modules read the marker — detect.js probes it to classify (row 0),
+// intake.js reads it to resume the ladder — and both must agree on the
+// exact same required-field set: a marker missing `aborted_scaffolds`
+// must never let detect report an in-flight transaction that intake then
+// refuses as corrupt.
 //
 // Each caller keeps its own filesystem read and its own refusal voice; what
 // they share is the contract. `{ok:false, field, saw}` names the first
@@ -1007,7 +1003,7 @@ function validateIntakeReportChecked(report) {
   if (typeof report.truncated !== 'boolean') errors.push('intake-report.truncated must be a boolean');
   checkSingleLineList(report.restore_commands, 'intake-report.restore_commands', errors);
 
-  // §9.1.4's retirement rule, as a shape law: an aborted scaffold is never
+  // The retirement rule, as a shape law: an aborted scaffold is never
   // deleted, so a report naming one MUST also name where it was kept, and a
   // report naming residue must say what is in it. Neither half stands alone.
   if (!Array.isArray(report.aborted_scaffolds)) {
@@ -1038,7 +1034,7 @@ function validateIntakeReportChecked(report) {
         if (!INTAKE_CARRIED_KEYS.includes(key)) errors.push(`${at} has unexpected key "${key}"`);
       }
       checkSingleLine(entry.path, `${at}.path`, errors);
-      // The anti-fabrication rule (§3.1, §4.1), enforced here and nowhere
+      // The anti-fabrication rule, enforced here and nowhere
       // else in this module: carried material lands under intake/ only.
       if (!isContainedRelativePath(entry.dest) || !entry.dest.startsWith(INTAKE_DEST_PREFIX)) {
         errors.push(`${at}.dest must be a relative path under "${INTAKE_DEST_PREFIX}" with no ".." segment`);
@@ -1155,22 +1151,23 @@ function validateIntakeReportChecked(report) {
   return { ok: errors.length === 0, errors };
 }
 
-// CLI entrypoint (P11 finding "library-only call" class: research-worker.md's
-// own validateBrief site, plan-author.md's own validateCriteriaRegister site,
-// plan-author-sol.md's own validateMilestones site). All three read their
-// document from stdin (the judge-verdict.js stdin pattern) and print the
-// validator's own `{ok, errors}` result, exiting 0 when ok and 1 otherwise —
-// this module's other validators stay library-only, called in-process by the
-// workers that already hold the parsed object they're validating.
+// CLI entrypoint: research-worker.md's own validateBrief site,
+// plan-author.md's own validateCriteriaRegister site, and
+// plan-author-sol.md's own validateMilestones site all need an executable
+// form. All three read their document from stdin (the judge-verdict.js
+// stdin pattern) and print the validator's own `{ok, errors}` result,
+// exiting 0 when ok and 1 otherwise — this module's other validators stay
+// library-only, called in-process by the workers that already hold the
+// parsed object they're validating.
 const VALIDATE_COMMANDS = ['validate-brief', 'validate-criteria-register', 'validate-milestones'];
 
 // Recognized argv flags for `validate-milestones` — currently one, taking
-// no value. parseArgv fails closed (P11 Sol review finding 6) on anything
-// this loop does not recognize by exact name, rather than silently ignoring
-// an unknown or misspelled flag and proceeding as if it had never been
-// given: a misspelled `--criteria-regster` previously reached `main` as a
-// bare positional with no effect at all, silently skipping a cross-check
-// the caller believed was running.
+// no value. parseArgv fails closed on anything this loop does not
+// recognize by exact name, rather than silently ignoring an unknown or
+// misspelled flag and proceeding as if it had never been given: a
+// misspelled `--criteria-regster` must never reach `main` as a bare
+// positional with no effect at all, silently skipping a cross-check the
+// caller believed was running.
 const KNOWN_FLAGS = new Set(['--require-touched-paths']);
 
 function parseArgv(argv) {
@@ -1206,13 +1203,13 @@ function main(argv) {
     } else if (command === 'validate-criteria-register') {
       result = validateCriteriaRegister(input);
     } else {
-      // The criteria-register cross-check input moved off the shell
-      // argument entirely (P11 Sol review finding 14): a single-quoted
-      // `--criteria-register '<json>'` argument could never safely carry a
-      // criterion string containing an apostrophe, and a large register is
-      // bounded by the process argument-size limit. Both full documents now
-      // arrive together over stdin as one envelope object — {milestones,
-      // criteria_register} — distinguished from a bare milestones document
+      // The criteria-register cross-check input arrives off the shell
+      // argument entirely: a single-quoted `--criteria-register '<json>'`
+      // argument could never safely carry a criterion string containing an
+      // apostrophe, and a large register is bounded by the process
+      // argument-size limit. Both full documents arrive together over
+      // stdin as one envelope object — {milestones, criteria_register} —
+      // distinguished from a bare milestones document
       // by "milestones" itself being a plain object (the full document)
       // rather than an array (a bare document's own "milestones" field).
       const isEnvelope = isPlainObject(input) && isPlainObject(input.milestones);

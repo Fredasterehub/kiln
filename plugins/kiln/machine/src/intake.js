@@ -1,7 +1,7 @@
 'use strict';
 
-// Legacy intake — the archive half of the intake transaction (legacy-intake
-// design §2, as amended by §9.1). INTAKE never transplants: it recognizes a
+// Legacy intake — the archive half of the intake transaction. INTAKE never
+// transplants: it recognizes a
 // prior Kiln-shaped tree, sets it aside WHOLE, scaffolds a fresh current tree
 // in its place, and files the set-aside tree at `<tree>/archive/legacy-N`.
 //
@@ -19,9 +19,9 @@
 //   3. No earned state is fabricated. The archive half writes exactly two
 //      things: the transaction's own `txn.json`, and a plain greenfield
 //      genesis tree via `scaffoldTree`. The single `intake` ledger record is
-//      the harvest half's to append (§9.1.5), once, keyed on the txn_id.
+//      the harvest half's to append, once, keyed on the txn_id.
 //
-// THE TRANSACTION (§9.1). One marker directory with a FIXED name,
+// THE TRANSACTION. One marker directory with a FIXED name,
 // `<projectRoot><TREE_NAME>-intake/`, so its cardinality is zero-or-one by
 // construction — "several sibling markers" is unreachable rather than
 // handled. It holds `txn.json` (the durable identity and phase record),
@@ -36,7 +36,7 @@
 // Every step advances `txn.json.phase` by one `writeAtomic` AFTER the step it
 // records has committed, so each crash window is either "the step did not
 // run" or "the step ran and the phase write was lost" — and the on-disk facts
-// tell those apart without ever consulting presence alone (§9.1.3: two
+// tell those apart without ever consulting presence alone (two
 // completion witnesses already in the code).
 
 const fs = require('node:fs');
@@ -81,9 +81,9 @@ function refuse(message) {
 // lstat one path and report what node it actually is — never what a symlink
 // at that path points at. `null` means "not there". Any other errno is a
 // REFUSAL naming the path and the code: an unreadable path is not evidence of
-// absence, and intake never guesses past an errno (design §6). Intake owns
+// absence, and intake never guesses past an errno. Intake owns
 // its own copy of this discipline and never relies on an earlier `detect()`
-// call having run (§9.2.1) — a direct `intake.js archive` invocation
+// call having run — a direct `intake.js archive` invocation
 // validates its own roots.
 function nodeTypeOf(target) {
   let lst;
@@ -103,7 +103,7 @@ function nodeTypeOf(target) {
 //
 // `null` means "no transaction here": either the marker directory is absent,
 // or it holds no `txn.json` at all — the crash window INSIDE lock acquisition
-// itself, where the transaction never began (§9.1.2 step 4). That is treated
+// itself, where the transaction never began. That is treated
 // as absent and a fresh identity is minted; it is never a refusal.
 //
 // Anything else at that path that does not authenticate against THIS project
@@ -141,7 +141,7 @@ function readTransaction(txnPath, projectRootReal) {
 }
 
 // Scaffold committed <=> `routing/active.json` is a REGULAR FILE parsing to an
-// object with non-empty string `active_config` and `digest` (§9.1.3).
+// object with non-empty string `active_config` and `digest`.
 // scaffold.js:176-182 writes it as the LAST statement of scaffoldTree, after
 // every directory, state.json, settings.json, handoff.md, all four genesis
 // streams, and the dated routing copy — so its validity proves the whole
@@ -197,7 +197,7 @@ function maxLegacyGeneration(archiveDir) {
 }
 
 // What is ACTUALLY inside the marker directory, partitioned into the three
-// things it can hold (§9.1.1). This is the one reading every retirement
+// things it can hold. This is the one reading every retirement
 // decision is made from: the transaction record is what intake INTENDED, and
 // intending is not knowing. The one ladder step whose durable record is
 // written after its move — the partial-scaffold rename, whose `persist` can
@@ -258,8 +258,8 @@ function treeWhereabouts(ctx) {
 }
 
 // The one lock both halves take, so the two ways it can fail are translated
-// once rather than in two copies that drift (§9.1.6: the two commands are one
-// transaction, re-entered).
+// once rather than in two copies that drift: the two commands are one
+// transaction, re-entered.
 //
 // A crash leaves the lockfile behind, and `withLock` reclaims it only after
 // LOCK_STALE_MS. Every re-entry inside that window would otherwise surface
@@ -293,7 +293,7 @@ function withIntakeLock(ctx, fn) {
 }
 
 // The marker's node type, proven again now that the lock is held. The
-// pre-lock check (§9.1.2) has to run before `withLock`'s own recursive
+// pre-lock check has to run before `withLock`'s own recursive
 // mkdirSync, which is where a pre-planted symlink is caught — but everything
 // past this line writes into the marker, and between that check and the lock
 // being acquired the path was unwatched. One lstat closes the part of that
@@ -318,7 +318,7 @@ function persist(ctx, fields) {
   writeAtomic(ctx.txnPath, ctx.txn);
 }
 
-// Mint a fresh transaction identity (§9.1.1), inside the lock.
+// Mint a fresh transaction identity, inside the lock.
 //
 // The precondition is `detect()`'s own verdict, not a second recognizer
 // written here: intake archives a tree only when the one classifier in the
@@ -370,7 +370,7 @@ function mintTransaction(ctx) {
   return txn;
 }
 
-// Retire the marker (§9.1.4) — the transaction's last act on the one refusal
+// Retire the marker — the transaction's last act on the one refusal
 // path the archive half can reach it by: `claimed` with nothing to claim.
 // Expected to hold nothing but this transaction's own `txn.json` and its own
 // lockfile, both authored moments earlier — and that expectation is CHECKED
@@ -385,7 +385,7 @@ function retireMarker(ctx) {
   fs.rmSync(ctx.markerPath, { recursive: true });
 }
 
-// One step of the phase ladder (§9.1.4's state table). Each `case` reads the
+// One step of the phase ladder (the state table). Each `case` reads the
 // on-disk facts fresh, under the lock, and either commits one move + one
 // phase write, or refuses. Every hazard row refuses BEFORE mutating anything.
 function ladderStep(ctx) {
@@ -471,8 +471,8 @@ function ladderStep(ctx) {
       try {
         scaffoldTree(ctx.projectRoot, { routingConfigPath: ctx.routingConfigPath });
       } catch (err) {
-        // The highest-anxiety failure in the design (§6): the operator's tree
-        // has just vanished from where they expect it. The message is the
+        // The highest-anxiety failure this module can produce: the operator's
+        // tree has just vanished from where they expect it. The message is the
         // whole mitigation — it names where the tree is, states that nothing
         // was deleted, and prints the commands that restore the prior state.
         throw refuse(
@@ -565,7 +565,7 @@ function runTransaction(ctx) {
   ctx.txn = existing === null ? mintTransaction(ctx) : existing;
 
   for (let step = 0; step < MAX_LADDER_STEPS; step++) {
-    // `placed` is where the archive half stops (§9.1.6): the marker persists
+    // `placed` is where the archive half stops: the marker persists
     // through `placed` and `harvested` — it is the durable pending marker
     // that keeps detect's row 0 firing until the harvest half commits — so
     // re-entry here is a no-op returning the recorded archive_path.
@@ -601,7 +601,7 @@ function archiveLegacyTree(projectRoot, opts = {}) {
     );
   }
 
-  // Roots first (§9.2.1): a symlinked project root is a refusal, and every
+  // Roots first: a symlinked project root is a refusal, and every
   // later comparison uses the resolved path.
   const rootType = nodeTypeOf(projectRoot);
   if (rootType === null) {
@@ -627,7 +627,7 @@ function archiveLegacyTree(projectRoot, opts = {}) {
     preLockTxn: null,
   };
 
-  // Pre-lock validation (§9.1.2), before the first mutation of any kind:
+  // Pre-lock validation, before the first mutation of any kind:
   // `withLock`'s recursive mkdirSync would FOLLOW a pre-planted symlink at
   // the marker path, so the node type is proven here, where a refusal leaves
   // the filesystem byte-identical. The same read authenticates an existing
@@ -646,7 +646,7 @@ function archiveLegacyTree(projectRoot, opts = {}) {
   } finally {
     // A refusal that happened after the lock created the marker directory but
     // before any transaction was minted leaves an empty directory behind.
-    // detect treats that state as absent (§9.1.2 step 4), so it is inert
+    // detect treats that state as absent, so it is inert
     // either way — but a refusal that leaves the project exactly as it found
     // it is the honest outcome, and this removes only an empty directory this
     // call itself created.
@@ -661,7 +661,7 @@ function archiveLegacyTree(projectRoot, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// THE HARVEST HALF (design §3, §4, §9.2)
+// THE HARVEST HALF
 //
 // The governing principle, stated once and enforced everywhere below: PROSE
 // THAT STATES HUMAN INTENT SURVIVES; MACHINE EVIDENCE DOES NOT. A seal in
@@ -680,13 +680,13 @@ function archiveLegacyTree(projectRoot, opts = {}) {
 // `verification/`, `architecture/`, or `ledger.jsonl` beyond the single
 // `intake` record of finding.
 //
-// The harvest is TWO PHASES inside the intake lock (§9.2.4). The plan phase
+// The harvest is TWO PHASES inside the intake lock. The plan phase
 // walks the archive, lstats every candidate, builds the complete plan and the
 // complete report, validates the report, and validates every planned
 // destination — with ZERO mutation, so any refusal leaves the filesystem
 // byte-identical. Only then does the commit phase create directories, copy
 // files, render `report.md`, and write `report.json` LAST, as the
-// harvest-committed witness (§9.1.3).
+// harvest-committed witness.
 // ---------------------------------------------------------------------------
 
 const INTAKE_DIR_NAME = 'intake';
@@ -708,7 +708,7 @@ const MAX_ARCHIVE_ENTRIES = 5000;
 const COUNT_READ_CEILING = 8 * 1024 * 1024;
 const VERBATIM_CEILING = 16 * 1024;
 
-// §4.1's namespace, grouped by CONSUMING PHASE. `law` and `design` share the
+// The namespace, grouped by CONSUMING PHASE. `law` and `design` share the
 // `design/` directory because both reach the same reader (plan-author /
 // milestone-designer) as flagged inputs; the roles stay distinct in the
 // report so the operator line can name them separately.
@@ -721,7 +721,7 @@ const ROLE_DEST_DIR = {
   document: 'documents',
 };
 
-// §3.2's typed table, depth-1 names. Every row is INDEPENDENTLY OPTIONAL —
+// The typed table, depth-1 names. Every row is INDEPENDENTLY OPTIONAL —
 // the harvest is presence-keyed, never completeness-keyed, which is what lets
 // one harvester cover the whole v3 family across its additive drift with no
 // version branch anywhere in its body.
@@ -731,7 +731,7 @@ const TIER1_ROOT_RULES = [
   { name: 'decisions.md', role: 'design', trust_flag: 'inherited-unverified' },
 ];
 
-// §3.2's `docs/` rows, first match wins. `codebase-map.md` is tested before
+// The `docs/` rows, first match wins. `codebase-map.md` is tested before
 // the research and vision patterns because it is the one row with a different
 // trust flag: a prior map of the code is ADVISORY — scout re-derives it and
 // never trusts it.
@@ -751,7 +751,7 @@ const TIER1_DOC_RULES = [
 
 const BRAINSTORM_LEDGER_NAME = 'brainstorm-ledger.jsonl';
 
-// §3.3's tier-2 document set, as a CLOSED list of extensions plus the
+// The tier-2 document set, as a CLOSED list of extensions plus the
 // extensionless-text case. With one v1.x sample and no v2 sample, a bespoke
 // parser would be guesswork wearing a schema — so tier 2 recognizes a text
 // document by extension and by its bytes, and nothing else about it.
@@ -759,9 +759,9 @@ const TIER2_DOCUMENT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.jsonl', '.y
 const DOCUMENT_CEILING = 1024 * 1024;
 const LOCKFILE_SUFFIX = '.lock';
 
-// The MACHINE_EVIDENCE denylist (§9.2.4). Deliberately NOT holding
+// The MACHINE_EVIDENCE denylist. Deliberately NOT holding
 // `brainstorm-ledger.jsonl`: that file keeps its own sealed/unsealed rule
-// (§3.4) and is the only JSONL that can ever be carried.
+// and is the only JSONL that can ever be carried.
 const MACHINE_EVIDENCE_BASENAMES = new Set([
   'STATE.md',
   'state.json',
@@ -774,7 +774,7 @@ const MACHINE_EVIDENCE_BASENAMES = new Set([
 ]);
 const MACHINE_EVIDENCE_DIRS = new Set(['law', 'evidence']);
 
-// §3.2's transient set — listed, never silently dropped, never carried.
+// The transient set — listed, never silently dropped, never carried.
 const TRANSIENT_BASENAMES = new Set(['degraded', 'degraded-ack', 'run.lock', '.turn.tmp']);
 const TRANSIENT_DIRS = new Set(['.wide']);
 
@@ -788,7 +788,7 @@ const RUN_CLAIM_BASENAMES = new Set([
   'build-notes.md',
 ]);
 
-// Recorded verbatim and namespaced (§3.2): where the old run stopped, and the
+// Recorded verbatim and namespaced: where the old run stopped, and the
 // posture it was run under. Settings come from the interview every time.
 const VERBATIM_BASENAMES = new Set(['STATE.md', 'state.json', 'posture.json']);
 
@@ -834,7 +834,7 @@ function validateContainedTarget(treeRootReal, targetPath) {
   }
 }
 
-// The whole source-containment mechanism, as ONE equality (§9.2.1):
+// The whole source-containment mechanism, as ONE equality:
 // archiveReal must be exactly `<treeRootReal>/archive/legacy-<N>`. That single
 // rule refuses an outside path, an ancestor, `intake/` itself, and any
 // descendant of `intake/` — source/destination overlap is structurally
@@ -944,11 +944,11 @@ function nonEmptyLines(text) {
   return text.split('\n').filter((line) => line.trim() !== '');
 }
 
-// §3.4's single seal test, and the whole of it: the ledger is sealed IFF its
-// last line is a `session_complete` event. `coverage-spot-checks.md` Q4
-// records the ethic — kiln renames an unsealed ledger and never resumes it —
-// and intake honours it directly: unsealed is `noted` only, preserved in the
-// archive with its path named so the operator can read it themselves.
+// The single seal test, and the whole of it: the ledger is sealed IFF its
+// last line is a `session_complete` event. Kiln renames an unsealed ledger
+// and never resumes it, and intake honours that directly: unsealed is
+// `noted` only, preserved in the archive with its path named so the
+// operator can read it themselves.
 function brainstormLedgerSealed(text) {
   const lines = nonEmptyLines(text);
   if (lines.length === 0) return false;
@@ -1009,7 +1009,7 @@ function classifyTier1(node) {
   return { bucket: 'noted', reason: 'untyped' };
 }
 
-// The tier-2 classification of ONE archive-relative path (§3.3, §9.2.4).
+// The tier-2 classification of ONE archive-relative path.
 // Where tier 1 reads a typed table, this reads nothing about meaning at all:
 // the only questions asked are "is it machine evidence", "is it transient",
 // and "is it a text document". Everything a name might otherwise suggest —
@@ -1021,7 +1021,8 @@ function classifyTier1(node) {
 // The MACHINE_EVIDENCE denylist is keyed on the BASENAME AT EVERY DEPTH here,
 // unlike tier 1's depth-1 table: a tier-2 tree has no known layout, so
 // `runs/old/state.json` is exactly as much machine evidence as a root one,
-// and §3.1's principle would be false for tier 2 if depth could evade it.
+// and the anti-fabrication principle would be false for tier 2 if depth
+// could evade it.
 function classifyTier2(node) {
   const { rel } = node;
   const segments = rel.split('/');
@@ -1049,18 +1050,19 @@ function classifyTier2(node) {
     return { bucket: 'noted', reason: 'machine-evidence' };
   }
   // What the old run CLAIMED it delivered, bound in this tier too. Tier 1
-  // notes these by name; tier 2 did not, so an old run's own `report.md`
-  // reached `intake/documents/` as a generic document indistinguishable from
-  // the operator's own writing — which made §3.1's "machine evidence does not
-  // survive as carried input" false for exactly the prose that asserts what
-  // the machine concluded. Keyed at every depth, like this tier's other
+  // notes these by name; tier 2 must bind it too, so an old run's own
+  // `report.md` must never reach `intake/documents/` as a generic document
+  // indistinguishable from the operator's own writing — that would make
+  // "machine evidence does not survive as carried input" false for exactly
+  // the prose that asserts what the machine concluded. Keyed at every
+  // depth, like this tier's other
   // denylists and for the same reason: a tier-2 tree has no layout the
   // machine knows.
   if (RUN_CLAIM_BASENAMES.has(base)) {
     return { bucket: 'noted', reason: 'run-claim' };
   }
   // The one JSONL that can still be carried, keeping its own sealed/unsealed
-  // rule (§3.4) in every tier: the operator's own words are not machine
+  // rule in every tier: the operator's own words are not machine
   // evidence, and the denylist is deliberately not given this name.
   if (base === BRAINSTORM_LEDGER_NAME) {
     return { bucket: 'brainstorm-ledger' };
@@ -1078,7 +1080,7 @@ function classifyTier2(node) {
 // The bytes decide, not the extension alone: a `.json` full of NUL bytes is
 // not a text document, and copying it into a directory the scout reads as
 // prose would be a silent lie about what was found. Oversized, binary, and
-// undecodable files are all LISTED — §3.3 step 4 — never dropped.
+// undecodable files are all LISTED, never dropped.
 function readDocumentText(node, bins) {
   if (node.bytes > DOCUMENT_CEILING) {
     bins.ignored.push({
@@ -1106,7 +1108,7 @@ function readDocumentText(node, bins) {
   }
 }
 
-// §3.3 step 2: the first markdown heading, or the filename — READ, never
+// The first markdown heading, or the filename — READ, never
 // inferred. A first line of prose is not a title, and treating it as one
 // would put a sentence the operator never wrote in a title position.
 function documentTitle(rel, text) {
@@ -1118,7 +1120,7 @@ function documentTitle(rel, text) {
 }
 
 // One counted ledger (`seals`, `audits`), read from whichever of its two
-// forms exist. §3.4 binds this hard: INTAKE NEVER RECONCILES. Where a `.log`
+// forms exist. INTAKE NEVER RECONCILES. Where a `.log`
 // disagrees with its `.jsonl`, BOTH counts are recorded and neither file is
 // repaired — a disagreement is not an error to fix, it is a fact about an
 // interrupted run. The `.jsonl` is preferred as the truth where present
@@ -1148,7 +1150,7 @@ function readCountedLedger(byRel, jsonlName, logName, unreadable, sliceOf) {
 // The one field both seal grammars share in the same position. No parser is
 // written against either shape: the `.log` yields its first whitespace field,
 // the `.jsonl` yields its own `slice` key, and a line that offers neither
-// contributes nothing rather than a guess (§9.4.3).
+// contributes nothing rather than a guess.
 function sealSliceOf(file, line) {
   if (file.endsWith('.jsonl')) {
     try {
@@ -1165,13 +1167,12 @@ function sealSliceOf(file, line) {
   return first === '' ? null : first;
 }
 
-// §3.4's three-value seal state, decided by PRESENCE alone — the harvester
+// A three-value seal state, decided by PRESENCE alone — the harvester
 // never verifies an old seal and never touches the old digest machinery.
 // v3.1.8's `seal-law` writes the trio in the fixed order trio.hash ->
-// lock.seal -> lock.hash (v318-artifact-formats.md §3), so `lock.hash` is
-// that sequence's last write and therefore its witness: the same mechanism
-// §9.1.3 uses for `routing/active.json`, named honestly rather than invented
-// twice.
+// lock.seal -> lock.hash, so `lock.hash` is that sequence's last write and
+// therefore its witness: the same mechanism used for `routing/active.json`,
+// named honestly rather than invented twice.
 function lawSealState(byRel) {
   const present = (name) => {
     const node = byRel.get(name);
@@ -1182,7 +1183,7 @@ function lawSealState(byRel) {
   return 'unsealed';
 }
 
-// §9.4.1: preservation bounds data loss; it does not bound operational
+// Preservation bounds data loss; it does not bound operational
 // disruption. These three commands are printed as a COURTESY, never as the
 // defence — and never a `rm`, because only the operator decides what to
 // discard.
@@ -1244,7 +1245,7 @@ function renderReport(report) {
       `- evidence generations: ${report.noted.evidence === null ? '(none)' : report.noted.evidence.generations.map(oneLine).join(' ')}`
     );
   } else {
-    // Tier 2 reads no version's grammar (§3.3), so it has no count to state —
+    // Tier 2 reads no version's grammar, so it has no count to state —
     // and rendering "seals: (none)" here would assert an ABSENCE the harvest
     // never established, in an archive that may hold seals it simply did not
     // read. What it can state is what it found, and where.
@@ -1287,7 +1288,7 @@ function renderReport(report) {
   return lines.join('\n');
 }
 
-// The plan phase, shared by both tiers. ZERO MUTATION (§9.2.4): every path
+// The plan phase, shared by both tiers. ZERO MUTATION: every path
 // below is lstat'd, every destination is containment-checked, and the whole
 // report is validated — a failure anywhere throws with nothing written.
 //
@@ -1338,7 +1339,7 @@ function claimCarried(ctx, bins, node, claim) {
   bins.destDirs.add(path.dirname(destAbs));
   const entry = { path: node.rel, dest, role: claim.role, trust_flag: claim.trust_flag, bytes: node.bytes };
   if (claim.title !== undefined) {
-    // §3.3's per-document record, and the only handle the scout has on a
+    // The per-document record, and the only handle the scout has on a
     // document it has not opened: the title as READ, and the file's own mtime.
     entry.title = claim.title;
     entry.mtime = node.mtimeMs === null ? null : new Date(node.mtimeMs).toISOString();
@@ -1420,7 +1421,7 @@ function planTier1(ctx, walk, byRel, bins) {
   };
 }
 
-// §3.3's generic harvest. The counted `noted` facts tier 1 reads are ALL NULL
+// The generic harvest. The counted `noted` facts tier 1 reads are ALL NULL
 // here, and deliberately: counting `seals.log`'s lines or naming an
 // `evidence/gen-N` generation means reading a v3 grammar into a tree whose
 // family the machine could not even recognize. Every machine-evidence file is
@@ -1433,7 +1434,7 @@ function planTier2(ctx, walk, byRel, bins) {
       case 'document': {
         const text = readDocumentText(node, bins);
         if (text === null) break;
-        // Structure-preserved (§3.3 step 3): the archive-relative path IS the
+        // Structure-preserved: the archive-relative path IS the
         // destination path. Flattening to basenames would collide two
         // `notes.md` from different directories and keep only one.
         claimCarried(ctx, bins, node, {
@@ -1513,11 +1514,10 @@ function planHarvest(ctx) {
     archive_path: txn.archive_path,
     // Worded everywhere it is rendered as a FILE fact, because that is what
     // it is: no seal or audit row at v3.1.8 carries a timestamp, so the
-    // archive's newest mtime is the only honest date the harvest has. An
-    // earlier draft specified a `noted.seals.last_ts`; it is struck for the
-    // same reason a `stopped_at` field is absent here — a legacy tree
-    // records no verified stop timestamp anywhere, and a field the harvester
-    // would have to invent or silently drop is worse than an absent clause.
+    // archive's newest mtime is the only honest date the harvest has. No
+    // `stopped_at` field is offered either — a legacy tree records no
+    // verified stop timestamp anywhere, and a field the harvester would
+    // have to invent or silently drop is worse than an absent clause.
     archive_mtime: walk.newestMtimeMs === null ? null : new Date(walk.newestMtimeMs).toISOString(),
     aborted_scaffolds: kept,
     residue_path: residuePath,
@@ -1557,7 +1557,7 @@ function planHarvest(ctx) {
   );
   const plannedDirs = [...new Set(plannedCopies.map((copy) => path.dirname(copy.dest)))];
 
-  // Every destination leaf, never once on `intake/` (§9.2.2). In tier 2 the
+  // Every destination leaf, never once on `intake/`. In tier 2 the
   // destination directories are nested to the archive's own depth, which is
   // exactly what the deepest-existing-prefix resolution is for: a planted
   // `intake/documents/a -> /outside` is resolved and refused at any level.
@@ -1645,7 +1645,7 @@ function copyNoFollow(src, dest) {
 }
 
 // The commit phase. Directories first, then every copy, then report.md, then
-// report.json LAST — it is the harvest-committed witness (§9.1.3), so a crash
+// report.json LAST — it is the harvest-committed witness, so a crash
 // anywhere before it leaves no report and the phase still at `placed`, and
 // the whole pass simply re-runs: the archive is frozen and nothing but intake
 // writes under `intake/`, so re-planning yields the identical plan and
@@ -1668,7 +1668,7 @@ function commitHarvest(ctx, plan) {
   writeAtomic(plan.reportJsonPath, plan.report);
 }
 
-// §9.1.5's exactly-once, keyed on the transaction identity itself rather than
+// Exactly-once, keyed on the transaction identity itself rather than
 // on an "already done?" flag: the identity IS the flag, and it lives in the
 // record. The window between the append and the retirement is closed by this
 // same read on re-entry — the record is found, the append is skipped, the
@@ -1706,7 +1706,7 @@ function appendIntakeRecordOnce(ctx, report) {
   });
 }
 
-// Marker retirement, the transaction's last act (§9.1.4), decided by reading
+// Marker retirement, the transaction's last act, decided by reading
 // the marker rather than the record. With the directory holding nothing but
 // this transaction's own txn.json and its own lockfile, both authored by this
 // transaction, it is removed. With anything kept inside it NOTHING IS
@@ -1786,7 +1786,7 @@ function runHarvest(ctx) {
     );
   }
 
-  // §9.1.4's two rows the harvest half owns, read from disk before the plan
+  // The two rows the harvest half owns, read from disk before the plan
   // phase so a refusal leaves the filesystem byte-identical. At `placed` and
   // at `harvested` the set-aside tree has already been filed under
   // `archive/legacy-N`: anything at `<marker>/tree` is a SECOND whole tree an
@@ -1855,7 +1855,7 @@ function runHarvest(ctx) {
 // treeRoot is the `<TREE_NAME>` directory itself; archivePath is the
 // `<tree>/archive/legacy-N` directory the archive half filed. Both are
 // validated here, by this module, and never trusted from an earlier detect()
-// call having run (§9.2.1).
+// call having run.
 function harvestLegacy(treeRoot, archivePath) {
   if (typeof treeRoot !== 'string' || treeRoot === '') {
     throw new TypeError('harvestLegacy: treeRoot must be a non-empty string');
@@ -1898,7 +1898,7 @@ function harvestLegacy(treeRoot, archivePath) {
     preLockTxn: null,
   };
 
-  // Pre-lock validation (§9.1.2), before the first mutation of any kind:
+  // Pre-lock validation, before the first mutation of any kind:
   // withLock's recursive mkdirSync would both FOLLOW a pre-planted symlink at
   // the marker path and CREATE a marker directory where no transaction ever
   // existed. Refusing here leaves the project byte-identical in both cases.

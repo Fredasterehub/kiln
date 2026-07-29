@@ -9,13 +9,12 @@ const { writeAtomic } = require('./atomic-json.js');
 const SCHEMA_VERSION = 1;
 const SHA256_DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 
-// Synthesis §3's binding schema: {schema_version, revision, artifacts:[{path,
-// digest:"sha256:..."}], created_at}. Fixes review [blocker] #1 — the prior
-// shape ({schema_version, built_ts, files:{...}}) was a different, unbound
-// protocol that check-honesty's gate cross-check never actually enforced.
+// The binding schema: {schema_version, revision, artifacts:[{path,
+// digest:"sha256:..."}], created_at}. check-honesty's gate cross-check
+// enforces this exact shape.
 
 // The five substantive architecture artifacts a manifest.json digests
-// (synthesis §3's seven-artifact table, minus manifest.json and gate.json
+// (the full canonical artifact set, minus manifest.json and gate.json
 // themselves). manifest.json and gate.json are the approval MACHINERY, not
 // the approved content: gate.json's own `manifest_digest` field is what
 // binds gate<->manifest, so manifest.json cannot also digest gate.json's
@@ -38,10 +37,11 @@ function sha256Of(filePath) {
 }
 
 // assertSafeRelPath(relPath) — rejects an absolute path or any ".."/""
-// segment before it is ever joined against baseDir (P11 Sol review finding
-// 10: a bare `../outside.txt` reached fs.statSync/fs.readFileSync
-// unchecked). Same posix-normalize-then-check discipline anonymize.js's own
-// assertSafeRelPath already applies to its own untrusted relPath entries.
+// segment before it is ever joined against baseDir: an unchecked relative
+// path (e.g. a bare `../outside.txt`) would otherwise reach
+// fs.statSync/fs.readFileSync directly. Same posix-normalize-then-check
+// discipline anonymize.js's own assertSafeRelPath already applies to its
+// own untrusted relPath entries.
 function assertSafeRelPath(relPath) {
   if (typeof relPath !== 'string' || relPath === '') {
     throw new TypeError('manifest: every relPath must be a non-empty string');
@@ -226,20 +226,20 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-// assertCanonicalRelPathSet(relPaths) — the Maximal-confrontation call edge
-// (P11 Sol review finding 10): `build-manifest` is only ever invoked, per
-// `agents/maestro.md`'s Bash law point 1 and `product/architecture/flow.md`
-// step 5, over a candidate's own draft directory with EXACTLY the five
-// canonical content artifacts declared — never a caller-chosen subset. A
-// shrunk `relPaths` set would let slot assignment (and the judge's own
-// review) proceed as a function of fewer than all five finished candidate
-// artifacts, silently. Enforced HERE, at the CLI edge, rather than inside
-// `buildManifest` itself — `buildManifest` stays a general-purpose digesting
-// primitive (plan-gate.js's own `writeManifest` calls it with the same
-// canonical set, and this codebase's test suite additionally calls it
-// directly with deliberately shrunk/expanded sets to prove `verifyManifest`'s
-// own drift detection) — this is the one call site with a closed, known-in-
-// advance candidate set to check the caller's claim against.
+// assertCanonicalRelPathSet(relPaths) — the Maximal-confrontation call edge:
+// `build-manifest` is only ever invoked, per `agents/maestro.md`'s Bash law
+// point 1 and `product/architecture/flow.md` step 5, over a candidate's own
+// draft directory with EXACTLY the five canonical content artifacts
+// declared — never a caller-chosen subset. A shrunk `relPaths` set would
+// let slot assignment (and the judge's own review) proceed as a function
+// of fewer than all five finished candidate artifacts, silently. Enforced
+// HERE, at the CLI edge, rather than inside `buildManifest` itself —
+// `buildManifest` stays a general-purpose digesting primitive
+// (plan-gate.js's own `writeManifest` calls it with the same canonical
+// set, and a caller may exercise it directly with deliberately
+// shrunk/expanded sets to prove `verifyManifest`'s own drift detection) —
+// this is the one call site with a closed, known-in-advance candidate set
+// to check the caller's claim against.
 function assertCanonicalRelPathSet(relPaths) {
   if (new Set(relPaths).size !== relPaths.length) {
     throw new Error('manifest: build-manifest relPaths must not contain a duplicate entry');
@@ -254,19 +254,19 @@ function assertCanonicalRelPathSet(relPaths) {
   }
 }
 
-// CLI entrypoint (P11 convergence finding 4 — Maximal confrontation's own
-// mechanical mid-protocol steps: product/architecture/flow.md step 5 calls
-// buildManifest against each candidate's own draft directory to derive the
-// digest slot-assignment.js's assignPlanSlot needs). `build-manifest
-// <baseDir>` reads `{relPaths, revision?}` via stdin and prints
+// CLI entrypoint: Maximal confrontation's own mechanical mid-protocol
+// steps — product/architecture/flow.md step 5 calls buildManifest against
+// each candidate's own draft directory to derive the digest
+// slot-assignment.js's assignPlanSlot needs. `build-manifest <baseDir>`
+// reads `{relPaths, revision?}` via stdin and prints
 // `{manifest, manifest_digest}` — `manifest_digest` is
 // manifestArtifactsDigest(manifest), the same content-only digest
 // assign-plan-slot expects, computed here so a caller never has to
 // re-derive it a second way.
 //
-// parseArgv fails closed on a surplus positional argument (P11 Sol review
-// finding 13) — the same "every token is accounted for" discipline
-// validators.js's own parseArgv already applies to an unrecognized flag.
+// parseArgv fails closed on a surplus positional argument — the same
+// "every token is accounted for" discipline validators.js's own parseArgv
+// already applies to an unrecognized flag.
 function parseArgv(argv) {
   const [command, baseDir, ...rest] = argv;
   const error = rest.length > 0 ? `unexpected extra argument(s): ${rest.join(' ')}` : null;

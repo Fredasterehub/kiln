@@ -14,12 +14,5 @@
     "./commands/kiln-fire.md",
     "./commands/kiln-doctor.md"
   ],
-  "keywords": [
-    "pipeline",
-    "software-creation",
-    "agents",
-    "workflows",
-    "multi-model",
-    "orchestration"
-  ]
+  "keywords": ["pipeline", "software-creation", "agents", "workflows", "multi-model", "orchestration"]
 }

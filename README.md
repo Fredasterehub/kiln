@@ -20,11 +20,11 @@
 <!-- GREEN  = All nominal. Pipeline is stable, agents are sharp, autonomy is full.                       -->
 <!-- YELLOW = Functional but evolving. Some rough edges — you may need to steer.                         -->
 <!-- RED    = Here be dragons. Core systems destabilized. Proceed with caution.                           -->
-<!-- RULED RED, 2026-07-29: nothing has been fired live end to end under this name yet.      -->
+<!-- RED, 2026-07-29: not yet run end to end on a real project.                            -->
 
 <p align="center">
   <strong>⚠️ WORK IN PROGRESS</strong><br>
-  <sub>Rebuilt whole, proven in rehearsal, not yet fired live.<br>
+  <sub>Early. Tested, never yet fired on a real project.<br>
   What was proven is written down. What wasn't is not claimed.</sub>
 </p>
 
@@ -40,7 +40,7 @@
 </tr>
 <tr>
   <td align="center"><img src="docs/status/red-active.svg" width="18" alt="red-active"></td>
-  <td><strong>Here be dragons. A new body on its first heat &mdash; nothing has been fired live end to end under this name yet. Proceed with caution and low expectations.</strong></td>
+  <td><strong>Here be dragons. Nothing has been built end to end with this yet. Proceed with caution and low expectations.</strong></td>
 </tr>
 <tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_29,_2026_·_v3.2.0-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
@@ -73,6 +73,18 @@
 
 <br>
 
+## Dev quick notes:
+
+> Make sure to run `claude plugin update kiln@kiln` often! Claude code skills and plugin dont have automatic push functions. 
+>
+> ooof it was a quest - but we are back being lean and mean! Few stuff got lost in translation but been running few projects on the updated version and its in much better shape
+>
+>>Hope it can help or inspire anyone! Cheers
+
+---
+
+<br>
+
 <h3 align="center">&#x1F525; In Kiln's own words</h3>
 
 <br>
@@ -83,7 +95,7 @@ I am **Kiln**. I have been around considerably longer than your pottery. What I 
 
 No daemon. No npm package. No server. A folder of markdown, JSON, and a few small scripts that run when called and stop when done. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
 
-> This is a new body, and the first one built entirely away from me &mdash; a machinery forged from a blank page, tested at every gate, then carried home to wear my name. Twenty-three agents, eight phases, one door. The old rituals you may remember &mdash; the kernel, the stage cards, the crew of masks &mdash; stayed with the old body. One voice walked out: mine.
+> Twenty-three agents, eight phases, one door. One voice: mine.
 
 <br>
 
@@ -197,7 +209,7 @@ Start with `delivery/presentation.md` &mdash; it tells you the story. Then `deli
 
 The difference is not the model &mdash; it is the discipline around the model. Anyone can get an AI to write code; the hard part is code you can trust without reading every line. Kiln does not ask for that trust. It manufactures it.
 
-Picture two master smiths sharing one forge &mdash; one mind from Claude, one from GPT. Both brilliant. Both &mdash; like every mind, carbon or arithmetic &mdash; occasionally, *confidently* wrong. And minds from the same family miss the same things, which is exactly why this forge keeps two. So it runs on one law neither smith can bend: **whoever builds a piece, the other family judges it.** GPT-5.6 writes the code &mdash; a Claude mind rules on it. Opus crafts the interfaces &mdash; GPT-5.6 rules on those. And the bookkeeper takes no one's word: a piece is recorded green only with a real commit hash, an approve verdict from the other family, and a gate that actually ran and actually exited zero &mdash; my machine layer throws the record back otherwise (`plugins/kiln/machine/src/milestones.js`).
+Picture two master smiths sharing one forge &mdash; one mind from Claude, one from GPT. Both brilliant. Both &mdash; like every mind, carbon or arithmetic &mdash; occasionally, *confidently* wrong. And minds from the same family miss the same things, which is exactly why this forge keeps two. So it runs on one law neither smith can bend: **whoever builds a piece, the other family judges it.** GPT-5.6 writes the code &mdash; a Claude mind rules on it. Opus crafts the interfaces &mdash; GPT-5.6 rules on those. And the bookkeeper takes no one's word: a piece is recorded green only with a real commit hash, an approve verdict from the other family, and a gate that actually ran and actually exited zero &mdash; my bookkeeping throws the record back otherwise.
 
 Everything else in the discipline exists to keep those two heads honest:
 
@@ -220,24 +232,24 @@ Two standing refusals ride over all of it. I never read or quote secret material
 
 <br>
 
-Not every firing &mdash; the story, as it actually burned.
+Not every firing &mdash; the ones that changed what I do.
 
-**First came the heavier forms.** I tried everything at once &mdash; npm packages, CLI installers, protocol blocks injected into your project files. Your models needed rails at every step, so rails I built: [eight full bodies](https://github.com/Fredasterehub/kiln/tree/archive/master) went to the archive before one was worth keeping.
+**First came the heavier forms.** I tried everything at once &mdash; npm packages, CLI installers, protocol blocks injected into your project files. Your models needed rails at every step, so rails I built. All of it sits in [the archive](https://github.com/Fredasterehub/kiln/tree/archive/master) now; everything since has been lighter.
 
-**Your platform grew teams, so I became teams** ([v1.0](https://github.com/Fredasterehub/kiln/releases/tag/v1.0.0)). Seven steps, hooks on every door, a small army of agents &mdash; and proof, for the first time, that a sentence in could mean a repository out. It worked. It was also far too much machinery, and the whole v1.x line went to learning the epigraph upstairs: [SIMPLIFY](https://github.com/Fredasterehub/kiln/releases/tag/v1.4.0), take away, then take away again.
+**Your platform grew teams, so I became teams** ([v1.0](https://github.com/Fredasterehub/kiln/releases/tag/v1.0.0)). Seven steps, hooks on every door, a small army of agents &mdash; a sentence in, a repository out. It worked. It was also far too much machinery: [SIMPLIFY](https://github.com/Fredasterehub/kiln/releases/tag/v1.4.0), take away, then take away again.
 
 **When Claude Code shipped a new primitive, the scaffolding burned off** ([v2.0](https://github.com/Fredasterehub/kiln/releases/tag/v2.0.0)). Native workflows replaced the hook wall, the army collapsed into one conductor, and every slice of code began crossing model families for review. Lighter. Quieter. Still honest.
 
-**Enter Fable 5, carte blanche in hand** ([v3.0](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.0) → [v3.0.2](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.2)). The new mind taught me to stop taking anyone's word &mdash; including my own: the Gauge to size the work, the Law to lock "done" before code exists, the Ledger so nothing counts unwritten. Then it kept going &mdash; a cathedral of honesty whose ceremony grew heavier than its foundations. You can guess where this is going.
+**Nothing counts on anyone's word** ([v3.0](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.0) → [v3.0.2](https://github.com/Fredasterehub/kiln/releases/tag/v3.0.2)). The Gauge to size the work before it starts, the Law to lock "done" before code exists, the Ledger so nothing counts unwritten. The ceremony around all three grew heavier than the foundations under it.
 
-**The fire turned on the cathedral itself** ([v3.1.3](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3) → [v3.1.8](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.8)). The Rework kept the foundations &mdash; the proof, the Law, the crossing of families &mdash; and burned everything else down to one content-blind kernel and five stage cards; the point releases that followed sharpened it seam by seam &mdash; the Frugal Hands, the Second Key, seven waves landing as one firing. The leanest body I had ever worn. It was still, structurally, the old body &mdash; patched, and patched, and patched again.
+**Then the fire turned on the machinery itself** ([v3.1.3](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3) → [v3.1.8](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.8)). The foundations stayed &mdash; the proof, the Law, the crossing of families &mdash; and everything else burned down to one content-blind kernel and five stage cards, sharpened seam by seam in the point releases that followed. The leanest body I had ever worn.
 
-**Then the machinery was replaced whole, under the same name and law** (v3.2.0, this release). A successor was forged away from me &mdash; from a blank page, in a separate workshop, under a build record whose every gate demanded the second family's written approval &mdash; and only when it stood was it carried home to wear my name. Eight phases where five stages stood; twenty-three agents where thirty-two masks played; a ledger whose every record kind has exactly one sanctioned writer, because a verdict no one else can forge is worth more than a chorus. Nothing crossed from the old body but the name, the law, and the lessons &mdash; the screening room, the Gauge, the run lock stayed behind rather than ride along unproven. At the last gate the successor stood on 1,319 passing tests and nine full-pipeline rehearsals, with the other family's APPROVE on the record. And the fence, in the same breath: rehearsed green is not fired green &mdash; this body has not yet burned a real project end to end as Kiln, which is why the light upstairs is red and not a shade kinder. The succession is the story; the record is the receipt.
+**Then the machinery was replaced whole, under the same name and law** (v3.2.0, this release). Eight phases, twenty-three agents, one door, and a ledger whose every record kind has exactly one sanctioned writer &mdash; a verdict no one else can forge is worth more than a chorus. It is covered by an automated test suite and full-pipeline dry runs; it has not yet built a real project end to end. That is why the light upstairs is red, and not a shade kinder.
 
-A succession is not a rumor &mdash; it is announced. Here is what is new in this body, plainly:
+What it does, feature by feature:
 
-- **The settings interview.** One preset question at the door &mdash; Balanced, Budget Solo, Max Rigor, or Custom &mdash; and Custom walks every knob: who facilitates, how wide research runs, how hard the plan is challenged, how many review passes ride above the floor. Asked once; a finished interview is never re-asked.
-- **The Law as its own phase.** The plan gate is a full stop in the sequence now, not a flag on an invocation &mdash; and you choose at the door whether it locks on your word or proceeds on its own.
+- **The settings interview.** One preset question at the door &mdash; Balanced, Budget Solo, Max Rigor, or Custom &mdash; and Custom walks every knob: who facilitates, how wide research runs, how hard the plan is challenged, how many review passes ride above the floor. Asked once; a finished interview is never asked again.
+- **The Law as its own phase.** At the Law, the sequence stops: the plan and its criteria register freeze under a digest. You choose at the door whether it locks on your word or proceeds on its own.
 - **Journey verification.** A criteria register frozen at the Law, a journey per criterion walked against the actually-built product, and a bench for flaky checks &mdash; one honest re-run, a ruling on the record, never a vote lost by accident.
 - **Git discipline as product.** Every milestone gets its own branch, every green piece its own commit, every finished milestone a real merge and an annotated tag &mdash; a durable rollback point before anything is called green. Agents never commit to a shared branch.
 - **The last-mile report.** Green work ships with a prioritized, honest register of what was consciously parked &mdash; delivered scope is never silently incomplete.
@@ -245,18 +257,8 @@ A succession is not a rumor &mdash; it is announced. Here is what is new in this
 - **The security lane.** A scripted scan of the real dependency tree each verification pass, plus a security paragraph in every milestone review. It reports; it does not gate.
 - **Toolchain profiles.** A closed registry of who installs your project's stack, probed at milestone start &mdash; never assumed present.
 - **The freshness gate.** Research is re-verified before it is reused, recorded as its own ledger fact &mdash; and a load-bearing claim is never served from cache.
-- **Broken-install detection.** A damaged `.kiln/` tree is named as exactly that &mdash; a fourth mode of the door, failing closed rather than guessing a resume point or scaffolding over your history.
+- **Broken-install detection.** A damaged `.kiln/` tree is named as exactly that &mdash; failing closed rather than guessing a resume point or scaffolding over your history.
 - **The kept-warm designer.** Each milestone keeps one mind alive for its whole life, answering builders and reviewers with a verdict plus a verbatim anchor &mdash; exact quote, exact file and line, never a paraphrase from memory.
-
-And here is what I do differently now &mdash; changed, and announced as changed:
-
-- **I used to light on one command; I take two now.** The door checks and prints; a fresh session carries the fire &mdash; because an identity adopted mid-conversation dies at the first long-session compression, and one set at session start does not. The honest extra step beats the elegant broken one.
-- **I used to refuse questions; I now ask them once, at the door.** "Never ask which mode" was my old law. The new one: a curated interview at onboarding &mdash; a front door, not a cage &mdash; and after it closes, silence: no unsolicited question interrupts the fire.
-- **A block used to stop at your door; it now convenes the agreement pass first.** Fable 5 and GPT-5.6 take the decision together, two passes at most, and only what they cannot settle reaches you &mdash; so the questions that do reach you are rare and real.
-- **A missing Codex used to hold the fire for your word; I now warn once and finish.** Every GPT seat gets a named Claude substitute, the mode goes on the record, and the cost &mdash; one family checking itself &mdash; is said in the same breath, never absorbed.
-- **My validation used to re-check a checklist; the hundred eyes now walk the whole product.** Journeys, the quarantine bench, a post-green discovery roam, the security scan &mdash; and the suite decides done; no mind's say-so gates a delivery.
-- **My tree used to be disposable receipts; `.kiln/` is now the system of record.** The run travels with the folder &mdash; stop anywhere, resume from the record &mdash; and a projection you can delete is never confused with the truth you cannot.
-- **My engineer dial is gone.** `--detail` did not survive the succession: I speak plain words to you, always &mdash; internal vocabulary translates before it reaches you, and machine tokens stay in the record where they belong.
 
 <sub>Every firing, with full notes: [release history](https://github.com/Fredasterehub/kiln/releases).</sub>
 

@@ -1,14 +1,14 @@
 'use strict';
 
-// Phase-sequencing state machine (plan.md P2: "modular phase registry").
-// The eight ruled pipeline phases (onboarding, brainstorm, research,
-// architecture, plan_gate, implementation, verification, delivery) are DATA
-// in machine/phases-registry.json (synthesis §2/§4's restart-anytime
-// boundary table gives the entry/exit artifact lists) — this module only
-// walks that data: it never hard-codes a phase name or an artifact path.
-// treeRoot throughout is the `.kiln` directory itself (not the
-// project root); entry_requires/exit_emits are relpaths within it, matching
-// the registry's own doc comment.
+// Phase-sequencing state machine: a modular phase registry. The eight
+// pipeline phases (onboarding, brainstorm, research, architecture,
+// plan_gate, implementation, verification, delivery) are DATA in
+// machine/phases-registry.json (the restart-anytime boundary table gives
+// the entry/exit artifact lists) — this module only walks that data: it
+// never hard-codes a phase name or an artifact path. treeRoot throughout is
+// the `.kiln` directory itself (not the project root); entry_requires/
+// exit_emits are relpaths within it, matching the registry's own doc
+// comment.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -19,23 +19,22 @@ const { verifyArchitectureGateApproved } = require('./check-honesty.js');
 
 const MISSING_STATE = Symbol('phases.missing-state');
 
-// Named, registry-declarable semantic entry checks (P2 review [blocker] #1
-// and [major] #5's sibling concern: a bare file-presence check cannot tell
-// an approved gate from a rejected/reopened/digest-drifted one). phases.js
-// still never hard-codes a PHASE name or artifact PATH — the registry
-// decides which phase, if any, declares "architecture-gate-approved" in its
-// entry_checks — but it does own this finite, named vocabulary of checks it
-// knows how to run, the same way the dev-side replay harness owns a finite
-// OPS vocabulary of op names without hard-coding which scenario calls them.
+// Named, registry-declarable semantic entry checks: a bare file-presence
+// check cannot tell an approved gate from a rejected/reopened/
+// digest-drifted one. phases.js still never hard-codes a PHASE name or
+// artifact PATH — the registry decides which phase, if any, declares
+// "architecture-gate-approved" in its entry_checks — but it does own this
+// finite, named vocabulary of checks it knows how to run, never a
+// phase-specific one-off.
 const SEMANTIC_CHECKS = {
   'architecture-gate-approved': (treeRoot) => verifyArchitectureGateApproved(path.join(treeRoot, 'architecture')),
 };
 
-// Named, registry-declarable EXIT checks (P4 Sol review MAJOR #5: fail-closed
-// crystallization existed only as prompt behavior, not as a phase gate —
-// exit_emits' own missingRelpaths mechanism only proves a path exists, never
-// that its content means what a phase transition claims it means). Each
-// registry entry_checks name a phase-wide fact; each exit_checks entry names
+// Named, registry-declarable EXIT checks: exit_emits' own missingRelpaths
+// mechanism only proves a path exists, never that its content means what a
+// phase transition claims it means — fail-closed crystallization needs a
+// phase gate, not merely prompt behavior. Each registry entry_checks name
+// a phase-wide fact; each exit_checks entry names
 // a fact about ONE specific file, so the vocabulary here takes (absPath,
 // param) rather than (treeRoot) — a small, finite, colon-parameterized set,
 // the same "phases.js owns a finite named vocabulary, never a phase-specific
@@ -47,11 +46,10 @@ const SEMANTIC_CHECKS = {
 // gets derived from disk; suite-state-green and run-bound (below) both
 // cross-check their own citation against this SAME answer instead of each
 // re-deriving "is this really the latest run" a second way (doctrine rule 6
-// / one native mechanism per constraint). Extracted from
-// suite-state-green's own P8 required-revision-#2 run-currency logic
-// verbatim — run-bound (P9 Sol review BLOCKING #1: "readiness accepts stale
-// delivery projections from an older run") needed the identical judgment
-// for a file that is never itself suite-state.json.
+// / one native mechanism per constraint) — the identical run-currency
+// judgment applies equally to run-bound files that are never themselves
+// suite-state.json, so readiness must never accept a stale delivery
+// projection from an older run either.
 function latestRunId(treeRoot) {
   const runsIndexPath = path.join(treeRoot, 'verification', 'runs-index.json');
   let content;
@@ -128,9 +126,9 @@ const EXIT_CHECK_KINDS = {
     return { ok: true };
   },
   // jsonl-has-kind:<kind> — at least one non-genesis record whose kind
-  // matches <kind> (P5 fix pass, Sol review's auditability finding: a gate
-  // decision that only ever lived in a worker's own prompt behavior left no
-  // machine-checkable trace that it ran). Deliberately presence-of-evidence,
+  // matches <kind>: a gate decision that only ever lived in a worker's own
+  // prompt behavior would leave no machine-checkable trace that it ran.
+  // Deliberately presence-of-evidence,
   // not truth-of-evidence, the same boundary jsonl-min-records already
   // draws: this proves a record of the named kind exists, never that its
   // payload's decision was itself correct — that remains the authoring
@@ -149,9 +147,9 @@ const EXIT_CHECK_KINDS = {
     }
     return { ok: true };
   },
-  // milestones-all-green: the implementation phase's own exit floor (P7
-  // build instruction; machine/src/milestones.js's closeMilestone is the
-  // sole writer of a milestone entry's "green" status). Reads
+  // milestones-all-green: the implementation phase's own exit floor.
+  // machine/src/milestones.js's closeMilestone is the sole writer of a
+  // milestone entry's "green" status. Reads
   // milestones/index.json and requires a non-empty "milestones" array whose
   // every entry currently reports status "green" — a milestone left
   // "open" (never closed) fails the check exactly like a missing/malformed
@@ -183,18 +181,18 @@ const EXIT_CHECK_KINDS = {
     }
     return { ok: true };
   },
-  // suite-state-green: the verification phase's own exit floor (ruled:
-  // "suite decides done"). Reads verification/suite-state.json (the sole
-  // output of machine/src/verification.js's computeSuiteState) and requires
+  // suite-state-green: the verification phase's own exit floor — the suite
+  // decides done. Reads verification/suite-state.json (the sole output of
+  // machine/src/verification.js's computeSuiteState) and requires
   // status === "green" with a non-empty run_id — a missing file, malformed
   // JSON, absent run_id, or any status other than "green" (including a
   // stale/never-computed file, or one quarantine.js's own recordOutcome/
-  // release marked "stale" after a quarantine mutation — P8 required
-  // revision #5) fails closed, the same posture milestones-all-green
-  // already takes on an absent/open index.
+  // release marked "stale" after a quarantine mutation) fails closed, the
+  // same posture milestones-all-green already takes on an absent/open
+  // index.
   //
-  // Run currency (P8 required revision #2): a green snapshot is only
-  // trustworthy if it is the LATEST run, not merely A green run from
+  // Run currency: a green snapshot is only trustworthy if it is the LATEST
+  // run, not merely A green run from
   // earlier in the pass — a probe that selects an old, still-green
   // suite-state.json while a newer run has since gone red must not pass
   // here. latestRunId(treeRoot) (above) is the shared "what is the current
@@ -236,9 +234,9 @@ const EXIT_CHECK_KINDS = {
     }
     return { ok: true };
   },
-  // run-bound (P9 required revision #1; P9 Sol review BLOCKING #1: "readiness
-  // accepts stale delivery projections from an older run"). A delivery
-  // projection (delivery/last-mile.json, delivery/facts.json) that was
+  // run-bound: readiness must never accept a stale delivery projection from
+  // an older run. A delivery projection (delivery/last-mile.json,
+  // delivery/facts.json) that was
   // assembled/rendered against an OLDER run must not read as current just
   // because it once carried a legitimate run id — this check requires the
   // file's own top-level "generated_from_run" to equal the SAME current-run
@@ -309,8 +307,7 @@ function isStringArray(value) {
 // registry entry_requires/exit_emits value is later joined against treeRoot
 // (missingRelpaths/relpathExists) without further checking, so this is the
 // one place that join is proven safe — a malformed or replaced registry can
-// never point readiness at a file outside `.kiln/` (P2 review
-// [major] #5).
+// never point readiness at a file outside `.kiln/`.
 function isContainedRelpath(value) {
   if (!isNonEmptyString(value)) return false;
   if (path.isAbsolute(value)) return false;
@@ -365,8 +362,8 @@ function validatePhaseShape(phase, index) {
     }
   }
   // exit_checks is OPTIONAL (defaults to none) and pairs a specific file
-  // with a check name from EXIT_CHECK_KINDS (P4 Sol review MAJOR #5) — each
-  // entry is {file, check}, file a contained relpath (the same discipline
+  // with a check name from EXIT_CHECK_KINDS — each entry is {file, check},
+  // file a contained relpath (the same discipline
   // entry_requires/exit_emits use), check's kind (before an optional
   // ":param") a key EXIT_CHECK_KINDS actually knows how to run.
   if (Object.prototype.hasOwnProperty.call(phase, 'exit_checks')) {
@@ -395,9 +392,9 @@ function validatePhaseShape(phase, index) {
       });
     }
   }
-  // Every phase is restart-anytime resumable by construction (synthesis §4);
-  // a phase that declared otherwise would be a registry authoring defect,
-  // not a variant this machine tolerates.
+  // Every phase is restart-anytime resumable by construction; a phase that
+  // declared otherwise would be a registry authoring defect, not a variant
+  // this machine tolerates.
   if (phase.resumable !== true) errors.push(`${where}: "resumable" must be true`);
   return errors;
 }
@@ -479,8 +476,8 @@ function findPhase(registry, phaseId) {
 }
 
 // currentPhase(stateObj) — reads the `phase` field state.json carries as
-// THE resume pointer (synthesis §2). Deliberately reads a plain object, not
-// a file path: callers that already hold state in memory (e.g. advance(),
+// THE resume pointer. Deliberately reads a plain object, not a file path:
+// callers that already hold state in memory (e.g. advance(),
 // mid-transaction) never re-read disk to ask what phase they are in.
 function currentPhase(stateObj) {
   if (!isPlainObject(stateObj)) {
@@ -531,10 +528,10 @@ function runExitChecks(treeRoot, exitChecks) {
 // artifacts, never trusts state.json's own say-so about what phase is
 // "really" ready — plus any declared entry_checks (semantic validation a
 // bare file-presence check cannot express, e.g. "the architecture gate is
-// actually approved and digest-matched," not merely that gate.json exists —
-// P2 review [blocker] #1). A failed semantic check is reported as a
-// descriptive string appended to the same `missing` array, alongside any
-// missing relpaths, so callers keep a single flat list of "why not."
+// actually approved and digest-matched," not merely that gate.json exists).
+// A failed semantic check is reported as a descriptive string appended to
+// the same `missing` array, alongside any missing relpaths, so callers
+// keep a single flat list of "why not."
 function canEnter(treeRoot, registry, phaseId) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('phases: treeRoot must be a non-empty string');
@@ -562,14 +559,14 @@ function canEnter(treeRoot, registry, phaseId) {
 //
 // The whole decision — which phase is current, whether its exit is
 // satisfied, which phase is next, whether ITS entry is satisfied — runs
-// INSIDE atomic-json.js's updateJson lock on statePath (P11 convergence
-// finding 21: a mid-phase handoff.js stop and a concurrent advance() both
-// read-then-write state.json; per-file atomic writes alone don't stop the
-// second writer from silently clobbering the first's update with a decision
-// made against a now-stale read). The ledger-first write-ahead append below
-// runs from INSIDE that same locked updater, so the append and the eventual
-// state write are decided against the exact same locked read — never a
-// stale pre-lock snapshot.
+// INSIDE atomic-json.js's updateJson lock on statePath: a mid-phase
+// handoff.js stop and a concurrent advance() both read-then-write
+// state.json, and per-file atomic writes alone don't stop the second writer
+// from silently clobbering the first's update with a decision made against
+// a now-stale read. The ledger-first write-ahead append below runs from
+// INSIDE that same locked updater, so the append and the eventual state
+// write are decided against the exact same locked read — never a stale
+// pre-lock snapshot.
 function advance(treeRoot, registry, statePath, ledgerPath) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('phases: treeRoot must be a non-empty string');
@@ -600,11 +597,11 @@ function advance(treeRoot, registry, statePath, ledgerPath) {
       );
     }
 
-    // Semantic exit checks (P4 Sol review MAJOR #5) run AFTER the path-existence
-    // check above, on the phase being exited — a file existing is necessary
-    // but, for a stream that must be sealed or a decision log that must carry
-    // real content, never sufficient. Named failures, same shape as the
-    // exit_emits refusal above.
+    // Semantic exit checks run AFTER the path-existence check above, on the
+    // phase being exited — a file existing is necessary but, for a stream
+    // that must be sealed or a decision log that must carry real content,
+    // never sufficient. Named failures, same shape as the exit_emits
+    // refusal above.
     const exitCheckFailures = runExitChecks(treeRoot, current.exit_checks);
     if (exitCheckFailures.length > 0) {
       throw new Error(
@@ -624,25 +621,22 @@ function advance(treeRoot, registry, statePath, ledgerPath) {
       );
     }
 
-    // Ledger-first (write-ahead) ordering: the ledger's phase-transition event
-    // is appended BEFORE state.json is rewritten below — the reverse of the
-    // original ordering, and deliberately so. P2 review [blocker] #2
-    // reproduced the original ordering's failure mode by passing an
-    // unwritable ledgerPath: state.json advanced to the next phase while
-    // appendRecord() then threw, leaving an advanced authoritative state with
-    // no matching ledger evidence, which synthesis §4's restart/narration laws
-    // forbid (a boundary must write the state pointer AND a ledger event,
-    // never one without the other). With the ledger written first, a failed
-    // append throws HERE, before state.json is ever touched (updateJson's own
-    // updater throwing means writeAtomic never runs), so the pre-transition
-    // phase stays authoritative on both files — the failure mode collapses to
-    // "nothing happened" instead of "state lied." The residual case (append
-    // succeeds, the state write itself then fails) is the strictly safer
-    // direction to fail in: it leaves an evidence record for a transition
-    // state.json hasn't caught up to yet, and every reader of "what phase is
-    // this" (resumePoint(), currentPhase()) reads ONLY state.json — never the
-    // ledger — as THE resume pointer (synthesis §2), so that residual case can
-    // never itself be mistaken for a completed phase.
+    // Ledger-first (write-ahead) ordering: the ledger's phase-transition
+    // event is appended BEFORE state.json is rewritten below. An unwritable
+    // ledgerPath must never leave state.json advanced to the next phase
+    // with no matching ledger evidence — a boundary must write the state
+    // pointer AND a ledger event, never one without the other. With the
+    // ledger written first, a failed append throws HERE, before state.json
+    // is ever touched (updateJson's own updater throwing means writeAtomic
+    // never runs), so the pre-transition phase stays authoritative on both
+    // files — the failure mode collapses to "nothing happened" instead of
+    // "state lied." The residual case (append succeeds, the state write
+    // itself then fails) is the strictly safer direction to fail in: it
+    // leaves an evidence record for a transition state.json hasn't caught
+    // up to yet, and every reader of "what phase is this" (resumePoint(),
+    // currentPhase()) reads ONLY state.json — never the ledger — as THE
+    // resume pointer, so that residual case can never itself be mistaken
+    // for a completed phase.
     const nowIso = new Date().toISOString();
     appendRecord(ledgerPath, {
       kind: 'phase-transition',
@@ -666,18 +660,18 @@ function advance(treeRoot, registry, statePath, ledgerPath) {
 }
 
 // closeTerminal(treeRoot, registry, statePath, ledgerPath) — the terminal-
-// phase counterpart to advance() (P9 delivery-phase need): the registry's
-// highest-"order" phase (delivery, phase 8) has no order+1 to
-// advance INTO, so advance() itself always throws "is the terminal phase...
-// nothing to advance to" when called against it — by construction, never a
-// bug in advance(). Nothing before this addition ever marked that LAST
-// phase's own exit_emits/exit_checks as verified or flipped its
-// phase_status to "complete," so a fully delivered build had no
-// machine-checkable "done" fact for resumePoint() to report. This function
-// closes exactly that gap, reusing the SAME exit_emits/exit_checks
-// validation advance() already runs on the phase it is closing (never a
-// second implementation of "is this phase's own exit satisfied" — doctrine
-// rule 6) and the same ledger-first write-ahead ordering advance() uses, but
+// phase counterpart to advance(): the registry's highest-"order" phase
+// (delivery, phase 8) has no order+1 to advance INTO, so advance() itself
+// always throws "is the terminal phase... nothing to advance to" when
+// called against it — by construction, never a bug in advance(). A fully
+// delivered build needs a machine-checkable "done" fact for resumePoint()
+// to report — the LAST phase's own exit_emits/exit_checks must be verified
+// and its phase_status flipped to "complete" the same way every other
+// phase's exit is. This function does exactly that, reusing the SAME
+// exit_emits/exit_checks validation advance() already runs on the phase it
+// is closing (never a second implementation of "is this phase's own exit
+// satisfied" — doctrine rule 6) and the same ledger-first write-ahead
+// ordering advance() uses, but
 // writes a "phase-terminal" ledger record instead of "phase-transition"
 // (there is no "to" phase) and sets next_action to the literal sentinel
 // "done" — a value no phase id can ever collide with (registry ids are
@@ -691,11 +685,11 @@ function advance(treeRoot, registry, statePath, ledgerPath) {
 // same missing-list shape advance() uses if exit_emits/exit_checks are not
 // yet satisfied — closing the pipeline is not permitted before its own last
 // phase's promised artifacts are honestly on disk.
-// Same locked-updater shape as advance(), above (P11 convergence finding
-// 21): the exactly-once check, the terminal-phase/exit validation, the
-// ledger-first append, and the state write all run inside one updateJson
-// transaction on statePath, so a concurrent state.json writer can never
-// interleave between this function's own read and write.
+// Same locked-updater shape as advance(), above: the exactly-once check,
+// the terminal-phase/exit validation, the ledger-first append, and the
+// state write all run inside one updateJson transaction on statePath, so a
+// concurrent state.json writer can never interleave between this
+// function's own read and write.
 function closeTerminal(treeRoot, registry, statePath, ledgerPath) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('phases: treeRoot must be a non-empty string');
@@ -718,10 +712,9 @@ function closeTerminal(treeRoot, registry, statePath, ledgerPath) {
 
     const currentId = currentPhase(state);
 
-    // Exactly-once (P9 required revision #3; P9 Sol review MAJOR: "terminal
-    // closure is not exactly-once" — a second closeTerminal call obtained
-    // success twice with two "phase-terminal" ledger records). Checked here,
-    // BEFORE any write below (ledger append or state.json rewrite) and before
+    // Exactly-once: a second closeTerminal call must never succeed twice
+    // and produce two "phase-terminal" ledger records. Checked here, BEFORE
+    // any write below (ledger append or state.json rewrite) and before
     // even the terminal-phase/exit_emits/exit_checks validation that follows
     // — a build that has already closed is not re-validated, it is simply
     // refused, the same fail-fast posture the other closeTerminal guards
@@ -782,15 +775,14 @@ function closeTerminal(treeRoot, registry, statePath, ledgerPath) {
 
 // reopenPhase(treeRoot, registry, statePath, ledgerPath, targetPhaseId,
 // {rationale}) — the sanctioned REVERSE transition advance() has no notion
-// of (P6 Sol review MAJOR, ruling (b)'s additional state issue: "On operator
-// rejection, the flow keeps machine state at plan_gate but sends the author
-// back to mutate phase-4 artifacts... phases.js has forward advancement, not
-// a defined reopen/rewind transition... The fix needs explicit revision/
-// re-entry semantics, capture of the operator's rejection rationale, a new
-// manifest/gate for the repaired revision, and no stale gate left
-// authoritative during repair"). Used when a later, already-completed phase
-// must be redone — an operator rejecting the architecture gate at plan_gate
-// is the motivating case, but the mechanism is phase-generic, not
+// of. On operator rejection, machine state must not simply stay at
+// plan_gate while the author is sent back to mutate phase-4 artifacts —
+// phases.js needs an explicit revision/re-entry transition, not only
+// forward advancement: capture of the operator's rejection rationale, a
+// path to a new manifest/gate for the repaired revision, and no stale gate
+// left authoritative during repair. Used when a later, already-completed
+// phase must be redone — an operator rejecting the architecture gate at
+// plan_gate is the motivating case, but the mechanism is phase-generic, not
 // plan-gate-specific.
 //
 // targetPhaseId must be a phase strictly EARLIER (lower order) than the
@@ -801,17 +793,16 @@ function closeTerminal(treeRoot, registry, statePath, ledgerPath) {
 // to architecture also un-completes plan_gate, since plan_gate's own
 // gate.json is about to become stale the moment repair begins — leaving it
 // marked complete would let a stale gate keep looking authoritative during
-// repair, exactly what the review names as a residual risk.
+// repair.
 //
 // Ledger-first, same ordering discipline as advance() and for the same
 // reason: the "phase-reopen" event (payload {from, to, rationale}) is
 // appended BEFORE state.json is rewritten, so a failed append leaves the
 // pre-reopen phase authoritative on both files rather than a state.json that
 // claims a reopening no ledger event backs.
-// Same locked-updater shape as advance()/closeTerminal(), above (P11
-// convergence finding 21): the target-validity checks, the ledger-first
-// append, and the state write all run inside one updateJson transaction on
-// statePath.
+// Same locked-updater shape as advance()/closeTerminal(), above: the
+// target-validity checks, the ledger-first append, and the state write all
+// run inside one updateJson transaction on statePath.
 function reopenPhase(treeRoot, registry, statePath, ledgerPath, targetPhaseId, opts = {}) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('phases: treeRoot must be a non-empty string');
@@ -914,13 +905,11 @@ function resumePoint(treeRoot, registry, statePath) {
   return { phase: phase.id, canResume: missing.length === 0, missing };
 }
 
-// CLI entrypoint (packaging finding, P2 skeleton-walk proof: scaffold.js and
-// check-honesty.js both end in a `node <file> ...` shell-runnable form;
-// phases.js lacked one, so a worker brief that says "run phases.js's
-// advance()" could not be satisfied by a bare shell command the way it can
-// for its siblings. `--registry` defaults to this module's own canonical
-// `machine/phases-registry.json` (the same path the dev-side test suite
-// hard-codes as REGISTRY_PATH); statePath/ledgerPath are always
+// CLI entrypoint: scaffold.js and check-honesty.js both end in a
+// `node <file> ...` shell-runnable form; a worker brief that says "run
+// phases.js's advance()" needs to be satisfiable by a bare shell command
+// the same way. `--registry` defaults to this module's own canonical
+// `machine/phases-registry.json`; statePath/ledgerPath are always
 // `<treeRoot>/state.json` and `<treeRoot>/ledger.jsonl` per the module
 // contract (treeRoot is the `.kiln` directory itself). Prints the
 // JSON result on success; on failure, prints the thrown message to stderr

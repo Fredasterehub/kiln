@@ -65,7 +65,7 @@
     }
   },
   "degraded_seats": {
-    "note": "Applied only when state.json.preflight.mode is 'degraded-claude-only' (product/onboarding/preflight.md check 2 fails). Every seat below is a same-family Claude substitute for a seat this config's own \"seats\" section names as GPT-5.6-Sol-only, so no seat parks in degraded mode and the build completes end to end (P3 Sol review BLOCKER-2 remedy). The honest trade-off is losing cross-family error decorrelation — two different model families being wrong in different, uncorrelated ways — never a loss of throughput or a skipped seat.",
+    "note": "Applied only when state.json.preflight.mode is 'degraded-claude-only' (product/onboarding/preflight.md check 2 fails). Every seat below is a same-family Claude substitute for a seat this config's own \"seats\" section names as GPT-5.6-Sol-only, so no seat parks in degraded mode and the build completes end to end. The honest trade-off is losing cross-family error decorrelation — two different model families being wrong in different, uncorrelated ways — never a loss of throughput or a skipped seat.",
     "implementer": {
       "model": "opus-5",
       "note": "Fable-never-implements ban still holds; Opus already owns UI/creative implementation in full-cross-family mode and becomes the sole degraded-mode implementer for every chunk, not just UI/creative ones."
@@ -97,5 +97,5 @@
     "fable_as_implementer": "never",
     "verification_scale_down": "never"
   },
-  "note": "a declared dated bet — not a measurement; refreshed event-driven. Revision 2 adds degraded_seats (P3 review fix: degraded Claude-only mode must complete builds, never park a seat). Revision 3 adds scout_agent and delivery_presenter seats, mirroring each agent's own frontmatter model/effort (agents/scout-agent.md, agents/delivery-presenter.md) — both were already spawnable via Maestro's allowlist and their own frontmatter alone, but carried no dated routing seat of their own (P9 Sol review disclosed-gap judgment 1). Revision 4 adds onboarding_runner, mirroring agents/onboarding-runner.md's own frontmatter model/effort (sonnet-5, medium) — the P10 live dogfood run found onboarding's preflight had no machine module, no roster seat, and no sequencing document owning it (dev-record finding F2); this seat and product/onboarding/flow.md close that gap."
+  "note": "A declared dated bet on which model sits in which seat — not a measurement; refreshed event-driven. A dated config is immutable once written: routing changes by adding a new dated file and repointing routing/active.json, never by editing these bytes, so a rollback is a repoint and the exact table any past run used stays readable. Every seat mirrors its agent's own frontmatter model and effort (agents/*.md), so an agent spawned directly and the same agent dispatched through this table run identically — a seat here is the dated record of that pairing, not a second, competing source of truth. degraded_seats governs Claude-only operation; bans hold in every mode."
 }

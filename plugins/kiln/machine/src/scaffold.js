@@ -1,14 +1,13 @@
 'use strict';
 
 // The one sanctioned home for `.kiln/` tree-shape knowledge — the final
-// `.kiln/` tree specification, as ruled in the dev record. Every other
-// module treats paths as parameters; the SHAPE of the greenfield skeleton
-// lives here and nowhere else.
+// `.kiln/` tree specification. Every other module treats paths as
+// parameters; the SHAPE of the greenfield skeleton lives here and nowhere
+// else.
 //
-// Note (per P1b build instruction): Builder A's `stream.js` landed on disk
-// before this module needed it, so genesis records for every JSONL stream
-// below are written through its `appendRecord` (common header stamping +
-// jsonl.js's single-writer seq allocation) rather than hand-rolled here.
+// Genesis records for every JSONL stream below are written through
+// stream.js's own `appendRecord` (common header stamping + jsonl.js's
+// single-writer seq allocation) rather than hand-rolled here.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -22,8 +21,8 @@ const { approveGate } = require('./plan-gate.js');
 const TREE_NAME = '.kiln';
 
 // Directories that exist empty at greenfield genesis, later phases populate
-// them (synthesis §2). `scout/` is deliberately excluded here — it is
-// brownfield-only (§2, §6) and this module scaffolds the greenfield tree.
+// them. `scout/` is deliberately excluded here — it is brownfield-only and
+// this module scaffolds the greenfield tree.
 const GREENFIELD_DIRS = [
   '.',
   'vision',
@@ -50,12 +49,12 @@ function sha256Of(buf) {
 }
 
 // scaffoldTree(targetRoot, opts) — materializes the greenfield `.kiln/`
-// skeleton under targetRoot per synthesis §2. Refuses (throws) if
+// skeleton under targetRoot. Refuses (throws) if
 // targetRoot/.kiln already exists unless opts.force is true, in
 // which case the existing tree is removed and rebuilt fresh.
 //
 // opts.routingConfigPath (required): source path to the current dated
-// routing config (e.g. machine/routing/routing-2026-07-27-1.json) to copy
+// routing config (e.g. machine/routing/routing-2026-07-27-4.json) to copy
 // into the new tree's routing/ directory as its genesis dated config.
 //
 // Returns { created: [absolute paths, in creation order] }.
@@ -105,7 +104,7 @@ function scaffoldTree(targetRoot, opts = {}) {
     created.push(abs);
   }
 
-  // state.json — THE resume pointer (synthesis §2). Deliberately carries no
+  // state.json — THE resume pointer. Deliberately carries no
   // "gates"/"checklist" fields: those are not part of the binding schema
   // (check-honesty.js treats their absence as zero declared obligations,
   // not a violation — see check-honesty.js's state-contract comment).
@@ -123,7 +122,7 @@ function scaffoldTree(targetRoot, opts = {}) {
   created.push(statePath);
 
   // settings.json — onboarding genesis; ALL knobs incl. internal seats live
-  // here (synthesis §2/§9). Empty at genesis: unknown keys are preserved,
+  // here. Empty at genesis: unknown keys are preserved,
   // and the onboarding interview (or a re-run's "settings.json already
   // exists" check) populates it — the scaffold itself makes no model
   // judgment about what belongs inside.
@@ -133,8 +132,8 @@ function scaffoldTree(targetRoot, opts = {}) {
 
   // handoff.md — a purely mechanical view of state.json/ledger.jsonl facts,
   // rewritten by machine/src/handoff.js's writeStop() at every Stop-states
-  // event (P11 parked question (c)) — never hand-authored prose. Genesis is
-  // a stub; the first real write happens at this project's first stop.
+  // event — never hand-authored prose. Genesis is a stub; the first real
+  // write happens at this project's first stop.
   const handoffPath = path.join(root, 'handoff.md');
   fs.writeFileSync(handoffPath, '# Handoff\n\nOnboarding in progress. No phase has completed yet.\n');
   created.push(handoffPath);
@@ -185,21 +184,20 @@ function scaffoldTree(targetRoot, opts = {}) {
 }
 
 // scaffoldArchitecture(architectureDir, opts) — the phase-4 sealing
-// operation (synthesis §8.2/§3): given the five substantive architecture
-// artifacts already authored on disk by the architecture agents (plan.md,
+// operation: given the five substantive architecture artifacts already
+// authored on disk by the architecture agents (plan.md,
 // criteria-register.json, milestones.json, artifact-map.json,
 // protocol-record.md — authorship needs model judgment, so this module does
 // not write their content, only requires their presence), closes the
-// seven-artifact §3 shape. Refuses (throws) if any of the five required
+// canonical artifact shape. Refuses (throws) if any of the five required
 // artifacts is missing — sealing before authoring is not permitted.
 //
 // This is a thin caller of plan-gate.js's approveGate() — the sole
-// sanctioned producer of the manifest.json + gate.json pair (ruled: one
-// native mechanism per constraint). scaffoldArchitecture used to rebuild
-// that same manifest+gate logic independently; two implementations of one
+// sanctioned producer of the manifest.json + gate.json pair (one native
+// mechanism per constraint): two independent implementations of one
 // sealing operation is exactly the redundant-enforcement failure mode the
-// rule forbids, so this module owns only the phase-4 naming/opts surface and
-// delegates the actual sealing to plan-gate.js.
+// rule forbids, so this module owns only the phase-4 naming/opts surface
+// and delegates the actual sealing to plan-gate.js.
 function scaffoldArchitecture(architectureDir, opts = {}) {
   if (typeof architectureDir !== 'string' || architectureDir === '') {
     throw new TypeError('scaffoldArchitecture: architectureDir must be a non-empty string');

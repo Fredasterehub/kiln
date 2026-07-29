@@ -1,8 +1,8 @@
 'use strict';
 
-// The plan-gate boundary (the ruled "Plan gate: last interactivity if
-// opted; else auto-proceed"; synthesis §3/§4 steal #13). approveGate() is
-// the ONE sanctioned producer of the manifest.json + gate.json pair — it
+// The plan-gate boundary: last interactivity if opted, else auto-proceed.
+// approveGate() is the ONE sanctioned producer of the manifest.json +
+// gate.json pair — it
 // builds the digest-bound manifest over the five content artifacts
 // (manifest.js) and writes the binding gate.json atomically (atomic-json.js).
 // verifyGate() deliberately does NOT reimplement the digest-chain check:
@@ -28,8 +28,8 @@ const { appendRecord } = require('./stream.js');
 const { validateCriteriaRegister, validateMilestones, validateScoutConstraints } = require('./validators.js');
 
 // gate.json's schema_version and decision_source vocabulary are owned by
-// check-honesty.js (the module that VERIFIES a gate is honest, per P6 Sol
-// review BLOCKING #1) and imported here rather than redeclared — one native
+// check-honesty.js (the module that VERIFIES a gate is honest) and
+// imported here rather than redeclared — one native
 // mechanism per constraint: a producer disagreeing with its own
 // verifier about what "valid" means is exactly the redundancy that rule
 // forbids.
@@ -91,8 +91,7 @@ function readScoutConstraints(treeRoot) {
   return parsed;
 }
 
-// Path-matching law for the protected-path block ([seq 50],
-// ruled in the dev record): posix-normalized, and a
+// Path-matching law for the protected-path block: posix-normalized, and a
 // protected path guards both an EXACT match and everything nested under it
 // as a directory prefix — scout-agent.md:56 defines a protected_paths[]
 // entry as "{trust_flag, path, anchor, note}: a path that must not be
@@ -112,17 +111,17 @@ function pathIsProtectedBy(touchedPath, protectedPath) {
 }
 
 // assertNoProtectedPathConflicts(touchedPaths, protectedPaths) — the
-// deterministic set-intersection itself ([seq 50]): a plan
-// touching ANY path a scout protected_paths[] entry guards is a block, by
-// rule, never by model judgment. Refuses (throws) naming every conflicting
-// pair — the touched path plus the specific protected_paths entry's own
-// `anchor`/`note` — so the seal refusal is actionable without a second
-// lookup into scout/constraints.json. A protected_paths entry with no
-// usable `path` is no longer structurally possible on anything read through
-// readScoutConstraints above — validateScoutConstraints now requires
-// `path`/`anchor`/`note` on every protected_paths entry, fail-closed (P11
-// Sol review finding 7, closing the gap where a non-empty protected list
-// could activate this whole protocol while protecting nothing). The
+// deterministic set-intersection itself: a plan touching ANY path a scout
+// protected_paths[] entry guards is a block, by rule, never by model
+// judgment. Refuses (throws) naming every conflicting pair — the touched
+// path plus the specific protected_paths entry's own `anchor`/`note` — so
+// the seal refusal is actionable without a second lookup into
+// scout/constraints.json. A protected_paths entry with no usable `path` is
+// no longer structurally possible on anything read through
+// readScoutConstraints above — validateScoutConstraints requires
+// `path`/`anchor`/`note` on every protected_paths entry, fail-closed: a
+// non-empty protected list must never be able to activate this whole
+// protocol while protecting nothing. The
 // `typeof entry.path === 'string' && entry.path !== ''` guard below stays as
 // defense in depth, never the only enforcement, for a caller that hands this
 // function a protectedPaths array built some other way than through the
@@ -151,11 +150,10 @@ function assertNoProtectedPathConflicts(touchedPaths, protectedPaths) {
   );
 }
 
-// Semantic sealing (P6 Sol review BLOCKING #1/#3, part of the "gate accepts
-// malformed architecture artifacts" finding): approval used to prove only
-// byte stability (the five canonical paths exist) — the plan-gate tests
-// deliberately filled every artifact with arbitrary text and successfully
-// approved them. This is the machine's SINGLE semantic enforcement point
+// Semantic sealing: approval must prove more than byte stability (the five
+// canonical paths exist) — a gate that filled every artifact with
+// arbitrary text and still approved it would be worthless. This is the
+// machine's SINGLE semantic enforcement point
 // (product/architecture/flow.md's "Sealing the gate"): re-parses and
 // re-validates the three JSON artifacts and minimally shape-checks the other
 // two, BEFORE any manifest/gate bytes are written. Any failure throws and
@@ -165,23 +163,21 @@ function assertNoProtectedPathConflicts(touchedPaths, protectedPaths) {
 // anti-merge law) — only that its content is the shape the rest of the
 // pipeline can honestly build on.
 //
-// Protected-path law, added in this same enforcement point (ruled in the
-// dev record [seq 50], closing the ruled "agreement-pass additional
-// trigger moments"): "a plan touching a
-// path in scout's protected_paths[] IS a block, detected deterministically
-// by set-intersection at the plan gate (fail-closed seal refusal), never by
-// model judgment." No new trigger, no new gate, no new module — the research
-// pass's own recommendation was that a protected-path conflict is "a
-// detection problem, not an adjudication problem" (§4), so the fix reuses
-// this function's own existing re-parse-and-re-validate sealing step. When
+// Protected-path law, enforced at this same point: a plan touching a path
+// in scout's protected_paths[] IS a block, detected deterministically by
+// set-intersection at the plan gate (fail-closed seal refusal), never by
+// model judgment. A protected-path conflict is a detection problem, not an
+// adjudication problem, so this reuses this function's own existing
+// re-parse-and-re-validate sealing step rather than a new trigger, a new
+// gate, or a new module. When
 // <treeRoot>/scout/constraints.json exists and its own protected_paths[] is
 // non-empty, milestones.json must declare a touched_paths[] footprint
 // (validateMilestones's own extended check, below) and sealing refuses
 // outright — naming every conflicting path plus its protected_paths entry's
 // own `anchor`/`note` — while that footprint intersects the guarded set. No
-// scout constraints, or an empty protected_paths[], is the vacuous-pass case
-// the same ruling states explicitly: greenfield and "scout found nothing to
-// protect" both proceed exactly as they did before this change.
+// scout constraints, or an empty protected_paths[], is the vacuous-pass
+// case: greenfield and "scout found nothing to protect" both proceed
+// unaffected.
 function assertSemanticallyValid(archDir) {
   const criteriaRegister = readJsonArtifact(archDir, 'criteria-register.json');
   const criteriaResult = validateCriteriaRegister(criteriaRegister);
@@ -288,9 +284,9 @@ function approveGate(archDir, opts = {}) {
     }
   }
 
-  // Semantic sealing (P6 Sol review BLOCKING #1/#3) — before any manifest or
-  // gate byte is written, not after. A throw here leaves archDir exactly as
-  // it was: no manifest.json, no gate.json, no ledger record.
+  // Semantic sealing — before any manifest or gate byte is written, not
+  // after. A throw here leaves archDir exactly as it was: no manifest.json,
+  // no gate.json, no ledger record.
   assertSemanticallyValid(archDir);
 
   const manifestPath = path.join(archDir, 'manifest.json');
@@ -308,9 +304,9 @@ function approveGate(archDir, opts = {}) {
   };
   writeAtomic(gatePath, gate);
 
-  // Gate-forgery close (P6 Sol review BLOCKING #1): the tamper-evident
-  // evidence trail check-honesty.js's verifyArchitectureGateApproved
-  // cross-checks gate.json against. archDir is always the tree-relative
+  // Gate-forgery close: the tamper-evident evidence trail
+  // check-honesty.js's verifyArchitectureGateApproved cross-checks
+  // gate.json against. archDir is always the tree-relative
   // canonical `<treeRoot>/architecture` (this module's own header comment;
   // check-honesty.js's checkArchitectureManifest derives the same ledger
   // path the same way), so ledger.jsonl is archDir's own parent sibling —

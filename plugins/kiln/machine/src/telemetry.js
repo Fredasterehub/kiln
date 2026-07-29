@@ -1,23 +1,21 @@
 'use strict';
 
-// Content-free usage stream (the ruled "Usage stream (adaptive
-// calibration)"; research/usage-data-research.md §2-3). Local-only,
+// Content-free usage stream: adaptive calibration. Local-only,
 // opt-in, refuses to run under any condition that could leak the stream off
 // the machine or into git history. Every write goes through
 // ./stream.js#appendRecord so the common JSONL header (schema_version, seq,
 // kind, ts, correlation_id) is identical to every other stream in the tree.
 //
-// EVENT_KINDS below is a module-owned, CLOSED registry (P3 Sol review
-// finding 1 — a caller-supplied allowlist let any caller invent any kind and
-// write arbitrary values, up to and including code/prompt/argv/env content).
-// A caller may only write one of the kinds named here; every field of every
-// kind carries a fixed, narrow value domain (short identifiers drawn from
-// closed enums, bounded numbers, booleans — never free text, never a nested
-// object/array); every kind names the consumer that reads it
-// (usage-data-research.md §5: "no consumer, no event"). Error paths never
-// interpolate caller-supplied content into a thrown message or log line —
-// only registry-owned strings (a validated kind, a schema-owned field name)
-// are ever echoed back.
+// EVENT_KINDS below is a module-owned, CLOSED registry: a caller-supplied
+// allowlist would let any caller invent any kind and write arbitrary
+// values, up to and including code/prompt/argv/env content. A caller may
+// only write one of the kinds named here; every field of every kind
+// carries a fixed, narrow value domain (short identifiers drawn from
+// closed enums, bounded numbers, booleans — never free text, never a
+// nested object/array); every kind names the consumer that reads it — no
+// consumer, no event. Error paths never interpolate caller-supplied
+// content into a thrown message or log line — only registry-owned strings
+// (a validated kind, a schema-owned field name) are ever echoed back.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -68,10 +66,10 @@ const PLAN_WINNERS = new Set(['claude', 'sol']);
 const REVIEW_SCOPES = new Set(['chunk', 'milestone']);
 const JOURNEY_OUTCOMES = new Set(['pass', 'fail', 'quarantined']);
 
-// The closed registry. Every kind: a fixed field set (name -> validator) and
-// the consumer that reads it (usage-data-research.md §1's recommended event
-// set: run/phase transitions, per-seat usage, planning-selection winners,
-// review pass counts, journey results, delivery summaries).
+// The closed registry. Every kind: a fixed field set (name -> validator)
+// and the consumer that reads it — run/phase transitions, per-seat usage,
+// planning-selection winners, review pass counts, journey results,
+// delivery summaries.
 const EVENT_KINDS = Object.freeze({
   phase_transition: Object.freeze({
     consumer: 'maintenance workflow: phase-duration / routing-config aggregation',
@@ -162,9 +160,9 @@ function isGitUnsafe(usageDir) {
 // Recognized as evidence the process runs inside SOME CI/build/agent-runner
 // environment. Presence of the key (any value) counts, matching the "CI"
 // convention's own any-value semantics. CODEX_CI is this runtime's own
-// marker (P3 Sol review finding 4 identified a live review session by
-// CODEX_CI=1 with CI unset, and telemetry still recorded under the old,
-// CI-only check) — named explicitly rather than left to a generic list.
+// marker — a session can run with CODEX_CI=1 and CI unset, and telemetry
+// must never record under that condition — named explicitly rather than
+// left to a generic list.
 const CI_ENV_MARKERS = Object.freeze([
   'CI',
   'CONTINUOUS_INTEGRATION',
@@ -223,9 +221,9 @@ function enabled(usageDir, settings) {
 // Creates the month file at FILE_MODE (0600) if it does not exist yet — the
 // mode argument to the creating open() call is applied atomically at
 // creation, so there is no window where the file exists at a permissive,
-// umask-derived mode before this call returns (P3 Sol review finding 3: the
-// old code appended content first and chmod'd afterward, leaving exactly
-// that window). Since 0600 has no group/other bits, umask can only ever
+// umask-derived mode before this call returns: appending content first and
+// chmod'ing afterward would leave exactly that window open. Since 0600 has
+// no group/other bits, umask can only ever
 // narrow it further, never widen it, so the mode is always exactly 0600
 // regardless of the process umask. If the file already exists, repairs its
 // mode and refuses a non-regular or symlink target rather than writing
@@ -250,16 +248,16 @@ function ensureSecureFile(file) {
 }
 
 // Rejects a symlinked usageDir the same fail-closed way ensureSecureFile
-// (above) already rejects a symlinked month file (P11 Sol review finding 1:
-// a pre-planted `.kiln/usage -> /tmp/outside` symlink let recordEvent
-// mkdirSync/chmodSync/append straight through it, since mkdirSync's own
-// recursive:true is a no-op on an already-existing path and never checks
-// whether that path is a symlink — the month file it then wrote sat inside
-// the symlink's REAL target directory as a plain, non-symlinked file, so
-// ensureSecureFile's own per-file check never saw anything to refuse).
-// Checked BEFORE usageDir is ever created, chmod'd, or joined against, the
-// same "secure before any content lands" ordering ensureSecureFile holds for
-// the file one level down.
+// (above) already rejects a symlinked month file: a pre-planted
+// `.kiln/usage -> /tmp/outside` symlink would otherwise let recordEvent's
+// mkdirSync/chmodSync/append pass straight through it, since mkdirSync's
+// own recursive:true is a no-op on an already-existing path and never
+// checks whether that path is a symlink — the month file it then wrote
+// would sit inside the symlink's REAL target directory as a plain,
+// non-symlinked file, so ensureSecureFile's own per-file check would never
+// see anything to refuse. Checked BEFORE usageDir is ever created,
+// chmod'd, or joined against, the same "secure before any content lands"
+// ordering ensureSecureFile holds for the file one level down.
 function ensureSecureUsageDir(usageDir) {
   let lst;
   try {
@@ -340,10 +338,9 @@ function recordEvent(usageDir, settings, evt) {
 // stream files (events-YYYY-MM.jsonl) directly inside usageDir. Never
 // recursive, never touches the directory itself or any other entry inside
 // it (a lockfile, an unrelated file, a subdirectory), and refuses outright
-// unless usageDir's own basename is "usage" (P3 Sol review finding 5: the
-// old purge recursively removed whatever directory string it was handed,
-// with no check that it was the intended target). A no-op (not an error)
-// when nothing was there.
+// unless usageDir's own basename is "usage": purge must never recursively
+// remove whatever directory string it is handed with no check that it is
+// the intended target. A no-op (not an error) when nothing was there.
 function purge(usageDir) {
   if (typeof usageDir !== 'string' || usageDir === '') {
     throw new TypeError('telemetry: usageDir must be a non-empty string');
@@ -388,9 +385,9 @@ function status(usageDir, settings) {
   return { enabled: gate.enabled, reason: gate.reason, files, totalBytes };
 }
 
-// CLI entrypoint (P11 finding F3: six documented call sites named function-
-// level calls against a module with no require.main guard at all — no CLI
-// to switch to). Two commands, both taking `usageDir` and the project's own
+// CLI entrypoint: six documented call sites name function-level calls
+// against this module, so it needs a require.main guard and an executable
+// form to switch to. Two commands, both taking `usageDir` and the project's own
 // `settings.json` content as a literal JSON-string argument, matching every
 // other machine-layer CLI's convention: `enabled` prints `enabled()`'s own
 // result; `record` reads the event JSON from stdin (the judge-verdict.js

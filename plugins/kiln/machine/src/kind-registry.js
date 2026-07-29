@@ -1,12 +1,10 @@
 'use strict';
 
-// The closed kind-ownership table for the product-payload streams that had
-// no owning module at all (P11 Sol review finding 3: "transcript
-// readRecords/appendRecord... research-cache and stream writers... onboarding
-// readJson/appendRecord" — commanded runtime calls with no executable,
-// plugin-install-safe form; P11 convergence finding 8: "each sanctioned
-// command must reject kinds or targets outside its closed contract... a
-// generic stream CLI must not accept an arbitrary ledger path and kind").
+// The closed kind-ownership table for the product-payload streams: every
+// sanctioned command needs an executable, plugin-install-safe form — a
+// generic stream CLI must never accept an arbitrary ledger path and kind.
+// Each sanctioned command rejects kinds or targets outside its own closed
+// contract.
 //
 // STREAM_REGISTRY below is the ENTIRE closed set this module will ever
 // append to or read from — a caller names a symbolic streamId, never a
@@ -44,9 +42,9 @@ function isNonNegativeInteger(value) {
 // requireExactKeys(payload, keys, kindLabel) — a payload's own key set must
 // match `keys` EXACTLY (no more, no fewer), the same "no silent extra field"
 // discipline telemetry.js's own EVENT_KINDS dispatch already applies to its
-// payload shapes (P11 Sol review finding 7: an `onboarding-decision` payload
-// carrying an `unexpected` key alongside a forged `event` value was accepted
-// whole, since only `kind` was ever checked).
+// payload shapes: an `onboarding-decision` payload carrying an `unexpected`
+// key alongside a forged `event` value must never be accepted whole on the
+// strength of `kind` alone.
 function requireExactKeys(payload, keys, kindLabel) {
   const supplied = Object.keys(payload).sort();
   const expected = [...keys].sort();
@@ -59,8 +57,8 @@ function requireExactKeys(payload, keys, kindLabel) {
 }
 
 // PAYLOAD_VALIDATORS — per-(streamId, kind) payload contracts, closing each
-// closed stream's contract at the boundary that actually writes it (P11 Sol
-// review finding 7). Every shape below is transcribed from the charter that
+// closed stream's contract at the boundary that actually writes it. Every
+// shape below is transcribed from the charter that
 // documents it, cited in each validator's own comment — never invented.
 // A (streamId, kind) pair absent from this table (vision-transcript's own
 // "decision"/"finding" kinds — `agents/brainstorm-facilitator.md:87` states
@@ -254,10 +252,10 @@ function realpathOfPossiblyMissing(p) {
 
 // assertContained(treeRootReal, targetPath, streamId) — refuses a stream
 // target whose real (symlink-resolved) location falls outside the real
-// treeRoot (P11 Sol review finding 9: a `vision -> outside` pre-planted
-// directory symlink let `append vision-transcript` create
-// `outside/transcript.jsonl`, since the module joined the symbolic path and
-// called `appendRecord` without checking any path component). Every
+// treeRoot: a pre-planted `vision -> outside` directory symlink would
+// otherwise let `append vision-transcript` create
+// `outside/transcript.jsonl`, since joining the symbolic path and calling
+// `appendRecord` never checks any path component on its own. Every
 // STREAM_REGISTRY relPath is a fixed, trusted literal — this check is not
 // about a caller-supplied path, it is about a pre-existing symlinked
 // ancestor directory the caller cannot otherwise be prevented from
@@ -319,13 +317,12 @@ const RECORD_TOP_LEVEL_KEYS = ['kind', 'payload', 'correlation_id'];
 // appendToStream(treeRoot, streamId, record) -> the appended seq. record is
 // {kind, payload, correlation_id} — the same shape stream.js's own
 // appendRecord takes. Validated in order: the record carries no top-level
-// key beyond these three (P11 Sol review finding 7 — the prior destructure
-// silently dropped an "unexpected" extra key rather than refusing the whole
-// record), the kind is one this stream's own closed set accepts,
-// correlation_id is null or a non-empty string (never an object/array/
-// number — finding 7's second half), and the kind's own registered payload
-// contract holds — all BEFORE any write is attempted, and before the
-// symlink-containment check below ever runs.
+// key beyond these three (an "unexpected" extra key must never be silently
+// dropped rather than refusing the whole record), the kind is one this
+// stream's own closed set accepts, correlation_id is null or a non-empty
+// string (never an object/array/number), and the kind's own registered
+// payload contract holds — all BEFORE any write is attempted, and before
+// the symlink-containment check below ever runs.
 function appendToStream(treeRoot, streamId, record) {
   if (typeof treeRoot !== 'string' || treeRoot === '') {
     throw new TypeError('kind-registry: treeRoot must be a non-empty string');
@@ -360,11 +357,11 @@ function appendToStream(treeRoot, streamId, record) {
 
 // readStreamRecords(treeRoot, streamId) -> stream.js's own readRecords()
 // result ({records, errors, headerViolations}), with `records` filtered to
-// this stream's own registered kind set (P11 Sol review finding 8: a shared-
-// target stream like `onboarding-decision` resolves to the WHOLE
-// `ledger.jsonl`, which carries many other sanctioned writers' kinds too —
-// returning the unfiltered file would be a raw-ledger read path through a
-// symbolic stream id, contrary to the bounded-stream rule). `errors`/
+// this stream's own registered kind set: a shared-target stream like
+// `onboarding-decision` resolves to the WHOLE `ledger.jsonl`, which carries
+// many other sanctioned writers' kinds too — returning the unfiltered file
+// would be a raw-ledger read path through a symbolic stream id, contrary to
+// the bounded-stream rule. `errors`/
 // `headerViolations` are left as `readRecords` reported them, against the
 // FULL underlying file — they are diagnostic positions into that file, not
 // claims about the filtered view.
@@ -382,9 +379,9 @@ function readStreamRecords(treeRoot, streamId) {
 // stdin (the judge-verdict.js stdin pattern); `read <streamId> <treeRoot>`
 // takes no stdin and prints readStreamRecords()'s own result.
 //
-// parseArgv fails closed on a surplus positional argument (P11 Sol review
-// finding 13) — the same "every token is accounted for" discipline
-// validators.js's own parseArgv already applies to an unrecognized flag.
+// parseArgv fails closed on a surplus positional argument — the same
+// "every token is accounted for" discipline validators.js's own parseArgv
+// already applies to an unrecognized flag.
 function parseArgv(argv) {
   const [command, streamId, treeRoot, ...rest] = argv;
   const error = rest.length > 0 ? `unexpected extra argument(s): ${rest.join(' ')}` : null;

@@ -4,15 +4,14 @@ const { appendEvent, readAll } = require('./jsonl.js');
 
 const SCHEMA_VERSION = 1;
 
-// The common JSONL record header (synthesis §2: "Common JSONL record header",
-// shared by every stream in the tree). appendRecord owns these fields;
-// callers supply kind/payload/correlation_id only, never the header itself.
+// The common JSONL record header, shared by every stream in the tree.
+// appendRecord owns these fields; callers supply kind/payload/
+// correlation_id only, never the header itself.
 const RESERVED_KEYS = ['schema_version', 'seq', 'kind', 'ts', 'correlation_id'];
 
-// UTC only ('Z' suffix) — synthesis §2's header sketch shows `ts: "RFC3339
-// UTC"`, and §10's format law never sanctions a numeric-offset alternative.
-// A numeric offset (+02:00) is still valid ISO-8601 but not UTC, and would
-// let two producers disagree on wall-clock ordering while both "look" ISO.
+// UTC only ('Z' suffix) — never a numeric-offset alternative. A numeric
+// offset (+02:00) is still valid ISO-8601 but not UTC, and would let two
+// producers disagree on wall-clock ordering while both "look" ISO.
 const ISO_8601_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 function isPlainObject(value) {
@@ -38,10 +37,9 @@ function appendRecord(file, { kind, payload, correlation_id } = {}) {
     }
   }
 
-  // correlation_id is present-and-nullable per synthesis §2's header sketch
-  // ("correlation_id: chunk_C03 | consult-id | topic-id | null") — always
-  // stamped, defaulting to null, never simply omitted when the caller has no
-  // correlator to attach.
+  // correlation_id is present-and-nullable (chunk_C03 | consult-id |
+  // topic-id | null) — always stamped, defaulting to null, never simply
+  // omitted when the caller has no correlator to attach.
   const evt = {
     schema_version: SCHEMA_VERSION,
     kind,

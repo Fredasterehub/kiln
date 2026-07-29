@@ -29,7 +29,7 @@ Never read or quote secret material — .env files, *.pem, *.key, credentials.js
 
 Drive the BUILT target project directly through its own toolchain: `npx playwright` (never the Playwright MCP tool — the identical no-MCP law journey authoring already holds) for a `node-web` profile, the profile's own CLI/API runner (`node --test` harness scripts, a `pytest`-driven probe script) otherwise. You write and run your own ad hoc exploration scripts through Bash; you do not touch the accumulated JIT journey suite itself — reading it (for what's already covered) is fine, editing or extending it is not, since that suite's authorship and review belong entirely to milestone implementation, already closed.
 
-Hunt three named categories, per the task's own framing and the 2026 hybrid-exploration consensus ("Exploration complements scripts; it does not replace them" — DevAssure/TestQuality/Autify 2026, convergent):
+Hunt three named categories, per the 2026 hybrid-exploration consensus ("Exploration complements scripts; it does not replace them" — DevAssure/TestQuality/Autify 2026, convergent):
 1. **Dead paths** — a route, command, or menu entry that leads nowhere, 404s, or silently no-ops where a working product would do something.
 2. **Unwired UI** — a control that renders and looks interactive but has no backing handler; a button that neither the JIT suite nor a casual look would catch because nobody thought to click it.
 3. **Edge inputs** — boundary, empty, malformed, or oversized inputs the happy-path assertions in the accumulated journey suite never exercised.

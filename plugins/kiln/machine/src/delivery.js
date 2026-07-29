@@ -1,11 +1,10 @@
 'use strict';
 
-// Delivery phase machinery (ruled: "delivery: styled final
-// presentation + last-mile report — TWO artifacts"; the delivery voice law,
-// product/voice/kiln.md: "fact first, one breath of style", "no recorded
+// Delivery phase machinery: delivery is two artifacts — styled final
+// presentation + last-mile report. The delivery voice law
+// (product/voice/kiln.md): "fact first, one breath of style", "no recorded
 // event, no line", "red is red"; §1: "delivered scope never
-// silently incomplete"; the dev record's ruled `delivery/` tree shape and
-// divergence decisions).
+// silently incomplete".
 //
 // This module owns the machine-checkable half of delivery: a deterministic
 // PROJECTION over already-recorded truth, never a place new facts get
@@ -44,9 +43,9 @@ const { validatePark, PARK_ALL_FIELDS } = require('./validators.js');
 const LAST_MILE_SCHEMA_VERSION = 1;
 const FACTS_SCHEMA_VERSION = 1;
 
-// Bounded per the ruled projection law — the delivery presenter consumes a view, never the raw
-// ledger stream. 100 is a generous, still-bounded window over a stream
-// this project's own pace never approaches (one entry per phase
+// Bounded per the projection law — the delivery presenter consumes a view,
+// never the raw ledger stream. 100 is a generous, still-bounded window over
+// a stream this project's own pace never approaches (one entry per phase
 // transition/reopen, of which there are at most a handful per run).
 const LEDGER_FACTS_LAST_N = 100;
 
@@ -76,8 +75,8 @@ function factsPathOf(treeRoot) {
 
 // Reads last-mile.jsonl's own "park" records (workers request parking via
 // their envelopes; Maestro is this stream's sole writer, through
-// recordPark below — synthesis §2 — so what lands here is already routed,
-// never appended by this module directly). Genesis/other kinds are
+// recordPark below, so what lands here is already routed, never appended
+// by this module directly). Genesis/other kinds are
 // ignored, matching every other stream reader's non-genesis convention in
 // this codebase.
 function collectParks(treeRoot) {
@@ -97,9 +96,9 @@ function collectParks(treeRoot) {
   return items;
 }
 
-// The sole sanctioned producer of last-mile.jsonl "park" records (P11
-// finding F4: the blocker ladder's S2/S3 outcome named this file but no
-// mechanism ever wrote it). validatePark enforces the shape — summary and
+// The sole sanctioned producer of last-mile.jsonl "park" records: the
+// blocker ladder's S2/S3 outcome names this file, and this is the one
+// mechanism that ever writes it. validatePark enforces the shape — summary and
 // severity required, owner_phase optional, no unexpected keys — before
 // anything reaches disk; a caller with a malformed park gets a thrown
 // TypeError naming exactly which field is wrong, the same "fails closed
@@ -272,9 +271,9 @@ function assembleLastMile(treeRoot) {
 // the delivery phase's own sequence) since the last-mile-counts fact cites
 // it rather than recomputing it a second way.
 //
-// Provenance (P9 required revision #4; P9 Sol review MAJOR: "renderFacts
-// fabricates citation timestamps and can emit a line with no antecedent
-// event at all"). Every fact carries a `source` object locating recorded
+// Provenance: every fact must trace to a real recorded event, never a
+// fabricated citation timestamp or a line with no antecedent event at all.
+// Every fact carries a `source` object locating recorded
 // material on disk — {file} plus a seq or path where the source stream
 // carries one, the SAME shape assembleLastMile's own items already use —
 // and a `ts` that comes ONLY from a field some other writer actually
@@ -375,11 +374,11 @@ function renderFacts(treeRoot) {
 
   const doc = {
     schema_version: FACTS_SCHEMA_VERSION,
-    // Run-bound (P9 required revision #1): copied from the SAME suite-state
-    // snapshot the `suite-state` fact above cites, never derived a second
-    // way — null when no suite state exists yet, which correctly makes the
-    // registry's "run-bound" exit check on this file fail closed rather
-    // than pass on an absent identity.
+    // Run-bound: copied from the SAME suite-state snapshot the
+    // `suite-state` fact above cites, never derived a second way — null
+    // when no suite state exists yet, which correctly makes the registry's
+    // "run-bound" exit check on this file fail closed rather than pass on
+    // an absent identity.
     generated_from_run: generatedFromRun,
     facts,
   };
@@ -394,14 +393,13 @@ function renderFacts(treeRoot) {
 // named exit-check kinds rather than re-deriving any of these judgments a
 // second way — one native mechanism per constraint:
 // `suite-state-green` (run-currency check included) on the live suite
-// snapshot, and `run-bound` on each of this module's own two JSON outputs
-// (P9 required revision #1; P9 Sol review BLOCKING #1: "readiness accepts
-// stale delivery projections from an older run" — a projection assembled or
-// rendered from an OLDER run must fail here even though its file is
-// present and nonempty, so run-bound subsumes what a bare file-nonempty
-// check on these two files used to do; missing/empty/unparseable all still
-// fail closed under run-bound, they just also now catch "present but
-// stale").
+// snapshot, and `run-bound` on each of this module's own two JSON outputs:
+// readiness must never accept a stale delivery projection from an older
+// run — a projection assembled or rendered from an OLDER run must fail
+// here even though its file is present and nonempty, so run-bound subsumes
+// what a bare file-nonempty check on these two files would otherwise do;
+// missing/empty/unparseable all still fail closed under run-bound, they
+// just also now catch "present but stale".
 function checkDeliveryReady(treeRoot) {
   requireTreeRoot(treeRoot, 'checkDeliveryReady');
 
@@ -450,12 +448,11 @@ function main(argv) {
       if (!isPlainObject(parsed)) {
         throw new Error('park JSON via stdin must be a JSON object');
       }
-      // CLI adapter parity (P11 Sol review finding 5): recordPark below only
-      // ever reconstructs {summary, severity, owner_phase} from named
-      // fields, so an extra key on the raw parsed input would otherwise
-      // never reach validatePark's own extra-key check at all — the adapter
-      // validates the PARSED object's actual key set itself, before any
-      // reconstruction happens.
+      // CLI adapter parity: recordPark below only ever reconstructs
+      // {summary, severity, owner_phase} from named fields, so an extra key
+      // on the raw parsed input would otherwise never reach validatePark's
+      // own extra-key check at all — the adapter validates the PARSED
+      // object's actual key set itself, before any reconstruction happens.
       const allowedKeys = new Set([...PARK_ALL_FIELDS, 'correlation_id']);
       const extraKeys = Object.keys(parsed).filter((key) => !allowedKeys.has(key));
       if (extraKeys.length > 0) {

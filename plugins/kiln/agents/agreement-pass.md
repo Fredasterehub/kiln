@@ -39,7 +39,7 @@ Reason from the brief's anchors, not from memory of the project — re-read the 
 
 ## Seat brief — Sol (dispatched via Codex CLI)
 
-Compose this as the codex-cli skill's four-part shape, product-owned wording — this is a shipped-product runtime dispatch, not a development delegation, so it never references this repository's own build process:
+Compose this as the codex-cli skill's four-part shape, product-owned wording — this is a runtime dispatch inside the operator's project, never a development delegation:
 
 ```
 ## Goal

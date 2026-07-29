@@ -3,12 +3,9 @@
 // Mechanically derives the AskUserQuestion panel shape for Panel 3 of the
 // settings interview (product/onboarding/interview.md Step 3: Checkpoints +
 // Budget) from machine/settings-schema.json's knobs, so the 4x4 input
-// contract (ruled in the dev record: 1-4 questions
-// per AskUserQuestion call, 2-4 supplied options per question, the
-// automatic "Other" row is additional) is provable by a test rather than
-// only by prose review (P3 Sol review finding 8 — the old design gave each
-// ceiling question exactly one explicit option, "No ceiling", relying on
-// the free-text "Other" row alone for every numeric value).
+// contract — 1-4 questions per AskUserQuestion call, 2-4 supplied options
+// per question, the automatic "Other" row is additional — is provable by a
+// test rather than only by prose review.
 
 const HEADER_MAX = 12;
 const MIN_OPTIONS = 2;

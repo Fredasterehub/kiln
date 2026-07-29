@@ -59,12 +59,10 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-// CLI entrypoint (P11 convergence finding 3 — kept on THIS module, never a
-// new transcript.js boundary: "projection.js projectFile as a project-file
-// subcommand... it stays on projection.js, never a new transcript boundary"
-// — the crystallizer's transcript.jsonl read, research-chief's
+// CLI entrypoint: this stays on THIS module, never a new transcript.js
+// boundary — the crystallizer's transcript.jsonl read, research-chief's
 // decisions.jsonl/summary reads, and plan-author's decisions.jsonl read all
-// go through this one command). `project-file <file>` reads the spec object
+// go through this one command. `project-file <file>` reads the spec object
 // ({kinds?, lastN?, fields?, maxBytes?}) from stdin — an empty/absent spec
 // is valid (projectFile(file, {}) passes every record through, per
 // project()'s own no-clauses behavior above), so stdin must still be piped,

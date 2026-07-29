@@ -1,23 +1,23 @@
 'use strict';
 
-// Target-project toolchain scaffolding (research/r3/toolchain-scaffolding.md
-// §2, "ADOPTED design"): hybrid ownership, zero new artifacts on the
-// .kiln/ tree, one closed enum on `architecture/milestones.json`
-// (`toolchain_profile`, validated by validators.js), one gate. The
-// profile -> action mapping itself is versioned PRODUCT code (R3 §2.2:
-// "product code describing external tools that change over time... not
-// target-project data") — shipped as `machine/toolchain-profiles.json`, the
-// same data-as-code pattern `machine/phases-registry.json` already
-// establishes for phase sequencing, rather than a hand-written switch
-// statement duplicating the same three facts per profile in JS.
+// Target-project toolchain scaffolding: hybrid ownership, zero new
+// artifacts on the .kiln/ tree, one closed enum on
+// `architecture/milestones.json` (`toolchain_profile`, validated by
+// validators.js), one gate. The profile -> action mapping itself is
+// versioned PRODUCT code — product code describing external tools that
+// change over time, not target-project data — shipped as
+// `machine/toolchain-profiles.json`, the same data-as-code pattern
+// `machine/phases-registry.json` already establishes for phase sequencing,
+// rather than a hand-written switch statement duplicating the same three
+// facts per profile in JS.
 //
-// Version pinning is deliberately NOT this module's concern (R3 §1 Q5): the
-// target project's own package manager resolves and commits versions to its
-// own lockfile — that lockfile is the pin of record. This module only
-// detects the manager, composes the install command, and probes whether a
-// profile is already satisfied; it never runs an install itself (that stays
+// Version pinning is deliberately NOT this module's concern: the target
+// project's own package manager resolves and commits versions to its own
+// lockfile — that lockfile is the pin of record. This module only detects
+// the manager, composes the install command, and probes whether a profile
+// is already satisfied; it never runs an install itself (that stays
 // check-honesty.js's runGate, the one sanctioned command-execution-plus-
-// evidence mechanism, per R3 §1 Q4 — never duplicated here).
+// evidence mechanism — never duplicated here).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -25,15 +25,15 @@ const { spawnSync } = require('node:child_process');
 
 const DEFAULT_PROFILES_PATH = path.join(__dirname, '..', 'toolchain-profiles.json');
 
-// The v1-provable closed set (R3 §1 Q3): node-web (Playwright, hybrid-
+// The closed set this module supports: node-web (Playwright, hybrid-
 // installed), node-cli (node:test, zero-install), python-pytest (pytest,
 // venv+pip). A milestones.json `toolchain_profile` value of `null` ("nothing
 // needed") is validated by validators.js directly — it is a value the field
 // carries, never a member of this registry.
 const PROFILE_IDS = new Set(['node-web', 'node-cli', 'python-pytest']);
 
-// Lockfile-first package-manager detection (R3 §1 Q2(c)): the shared
-// algorithm behind detect-package-manager/package-manager-detector.
+// Lockfile-first package-manager detection: the shared algorithm behind
+// detect-package-manager/package-manager-detector.
 const KNOWN_PACKAGE_MANAGERS = new Set(['npm', 'yarn', 'pnpm', 'bun']);
 
 const LOCKFILE_MANAGERS = [
@@ -54,9 +54,9 @@ const PM_INSTALL_DEV_PREFIX = {
 
 // {pm}_exec — the per-manager "run a package's bin without a project-local
 // install" verb the node-web profile's `{pm_exec}` placeholder substitutes,
-// for the Playwright browser-install half of the same command (P7 Sol
-// review MAJOR: the browser-install half was hard-coded to `npx` regardless
-// of the detected manager). This is a distinct concern from the product law
+// for the Playwright browser-install half of the same command: the
+// browser-install half must track the detected manager, never a hardcoded
+// `npx` regardless of it. This is a distinct concern from the product law
 // that JOURNEY SCRIPTS run via `npx playwright` only, never the Playwright
 // MCP tool (implementer-sol.md/implementer-opus.md) — that law is about
 // avoiding the MCP tool at journey-run time, unrelated to which package
@@ -68,8 +68,8 @@ const PM_EXEC_PREFIX = {
   bun: 'bunx',
 };
 
-// PATH-probe fallback order (R3 §1's adopted design: lockfile, then
-// `packageManager`, then PATH) — npm first since Node itself ships it, then
+// PATH-probe fallback order (lockfile, then `packageManager`, then PATH) —
+// npm first since Node itself ships it, then
 // the three alternate managers in the same order LOCKFILE_MANAGERS lists
 // them.
 const PATH_PROBE_ORDER = ['npm', 'yarn', 'pnpm', 'bun'];
@@ -189,9 +189,9 @@ function defaultPathProbe(manager) {
   return result.error === undefined && result.status === 0;
 }
 
-// PATH-probe fallback (R3 §1 Q2(c)'s adopted third tier, P7 Sol review
-// BLOCKING: a fresh Node target with npm on PATH could not otherwise
-// preflight node-web at all). Tried only when neither a lockfile nor a
+// PATH-probe fallback (the third detection tier): without it, a fresh Node
+// target with npm on PATH but no lockfile or `packageManager` field could
+// never preflight node-web at all. Tried only when neither a lockfile nor a
 // declared `packageManager` field named anything — never as a replacement
 // for an explicitly-declared-but-unrecognized `packageManager` value, which
 // stays its own distinct null (a project that named a manager this registry
@@ -268,10 +268,8 @@ function detectPackageManager(dir, opts = {}) {
 // detectPackageManager, opts forwarded through for its PATH-probe override)
 // — throws if that directory has no detectable manager, since there is
 // then nothing honest to substitute. Both placeholders substitute from the
-// SAME resolved `pm` (P7 Sol review MAJOR: the browser-install half was
-// previously hard-coded to `npx` regardless of pm) — a yarn target gets
-// `yarn dlx playwright install`, never a mixed `yarn add ... && npx
-// playwright install`.
+// SAME resolved `pm` — a yarn target gets `yarn dlx playwright install`,
+// never a mixed `yarn add ... && npx playwright install`.
 function composeInstall(profileId, pmOrDir, opts = {}) {
   assertKnownProfileId(profileId);
   const registry = loadProfiles();
@@ -298,9 +296,9 @@ function composeInstall(profileId, pmOrDir, opts = {}) {
 }
 
 // scaffoldProfile(profileId, targetDir) -> {created[], skipped[]} —
-// materializes the scaffold INPUTS a profile's `scaffolds` list names (P7
-// Sol review BLOCKING: the registry previously listed scaffold path names
-// with nothing that ever wrote them). `node-cli` and a `null` profile are
+// materializes the scaffold INPUTS a profile's `scaffolds` list names: the
+// registry only lists scaffold path names, so this is the function that
+// actually writes them. `node-cli` and a `null` profile are
 // no-ops (node-cli ships with the runtime; `null` means "this milestone
 // needs nothing"). Never overwrites a file that already exists — an
 // existing `playwright.config.ts`/`requirements-dev.txt` is the target
@@ -338,11 +336,11 @@ const PYTHON_REQUIRED_LINE = 'pytest';
 // assertNotSymlink(targetPath, label) — refuses (throws) a target that
 // already exists as a symlink, the same lstat-first, fail-closed-before-any-
 // write discipline telemetry.js's own ensureSecureFile/ensureSecureUsageDir
-// pair already applies to the usage stream (P11 Sol review finding 12: a
-// pre-planted `requirements-dev.txt -> /outside/file` symlink let
+// pair already applies to the usage stream: a pre-planted
+// `requirements-dev.txt -> /outside/file` symlink would otherwise let
 // scaffoldProfile's existsSync/readFileSync/appendFileSync sequence follow
 // it straight through, appending `pytest` to a file entirely outside
-// targetDir while reporting the symlink's own path as "created"). A target
+// targetDir while reporting the symlink's own path as "created". A target
 // that does not exist at all is always safe — this function only ever
 // refuses an EXISTING symlink, never a plan to create one.
 function assertNotSymlink(targetPath, label) {
@@ -424,14 +422,13 @@ function scaffoldProfile(profileId, targetDir) {
 }
 
 // PROFILE_SATISFACTION_MARKER — the deterministic, fixture-checkable
-// filesystem fact each profile's satisfaction reduces to (R3 §1 Q4: "does
+// filesystem fact each profile's satisfaction reduces to: does
 // @playwright/test resolve in the target's node_modules, does pytest
-// resolve in the target's venv"). Presence-of-marker, never executing the
-// profile's own `probe_cmd` — this module's tests run over fixture
-// directories, never a real install (house rule), and a resolver-style probe
-// command needs a real, fully-formed target install to mean anything; the
-// marker path is the same fact stated in fs terms instead of a spawned
-// process's exit code.
+// resolve in the target's venv. Presence-of-marker, never executing the
+// profile's own `probe_cmd` — a resolver-style probe command needs a real,
+// fully-formed target install to mean anything, while the marker path
+// states the same fact in fs terms instead of a spawned process's exit
+// code, checkable against a fixture directory with no real install at all.
 const PROBE_MARKERS = {
   'node-web': path.join('node_modules', '@playwright', 'test'),
   'python-pytest': path.join('.venv', 'bin', 'pytest'),
@@ -439,8 +436,8 @@ const PROBE_MARKERS = {
 
 // probeSatisfied(profileId, dir) -> {satisfied, probe_cmd}. `probe_cmd` is
 // carried through from the profile registry as informational metadata for
-// whatever runs the real preflight (check-honesty.js's runGate, per R3 §1
-// Q4) — `satisfied` itself is decided by the marker check above, never by
+// whatever runs the real preflight (check-honesty.js's runGate) —
+// `satisfied` itself is decided by the marker check above, never by
 // executing probe_cmd here.
 function probeSatisfied(profileId, dir) {
   assertKnownProfileId(profileId);
@@ -456,11 +453,11 @@ function probeSatisfied(profileId, dir) {
   return { satisfied: fs.existsSync(path.join(dir, marker)), probe_cmd: probeCmd };
 }
 
-// CLI entrypoint (P11 convergence finding 3: product/implementation/flow.md's
-// toolchain-preflight step names detectPackageManager/probeSatisfied/
-// scaffoldProfile/composeInstall as commanded calls with no executable form;
-// agents/security-scanner.md's own detectPackageManager call is the same
-// site under a different worker). Four subcommands, one per function —
+// CLI entrypoint: product/implementation/flow.md's toolchain-preflight step
+// names detectPackageManager/probeSatisfied/scaffoldProfile/composeInstall
+// as commanded calls with no executable form otherwise; agents/security-
+// scanner.md's own detectPackageManager call is the same site under a
+// different worker. Four subcommands, one per function —
 // `scaffold-profile` alone accepts the literal string "null" for profileId
 // (scaffoldProfile's own "this milestone needs nothing" value; every other
 // subcommand requires a real PROFILE_IDS member, matching
@@ -476,8 +473,7 @@ const CLI_COMMANDS = ['detect-package-manager', 'probe-satisfied', 'scaffold-pro
 
 // Positional-argument count each subcommand actually takes (after the
 // command itself) — a surplus positional beyond this count is refused
-// below (P11 Sol review finding 13), rather than the CLI silently ignoring
-// it.
+// below, rather than the CLI silently ignoring it.
 const CLI_ARG_COUNTS = {
   'detect-package-manager': 1,
   'probe-satisfied': 2,
@@ -503,8 +499,7 @@ function main(argv) {
   }
   try {
     // A surplus positional beyond each subcommand's own arg count is
-    // refused here, fail-closed, rather than silently ignored (P11 Sol
-    // review finding 13).
+    // refused here, fail-closed, rather than silently ignored.
     const maxArgs = CLI_ARG_COUNTS[command];
     if (rest.length > maxArgs) {
       throw new Error(`${command} takes at most ${maxArgs} argument(s), got extra: ${rest.slice(maxArgs).join(' ')}`);
@@ -541,8 +536,8 @@ if (require.main === module) {
 module.exports = {
   PROFILE_IDS,
   // TOOLCHAIN_PROFILES: an array alias over the same closed set, for callers
-  // that want an ordered, spreadable list rather than a Set (several P7
-  // roster agent files — product/agents/{milestone-designer,implementer-sol,
+  // that want an ordered, spreadable list rather than a Set (several
+  // roster agent files — agents/{milestone-designer,implementer-sol,
   // implementer-opus}.md — name "TOOLCHAIN_PROFILES" in their own prose;
   // this alias keeps that prose accurate without a second, divergent source
   // of truth — both names read the exact same three ids, PROFILE_IDS never

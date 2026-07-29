@@ -58,9 +58,8 @@ function applySchema(obj, schema, opts) {
       continue;
     }
 
-    // A rule with `locked_by: '<siblingKey>'` (the floor-lock doctrine,
-    // settings-menu-design.md §4 point 4 layer (c), operator ruling
-    // 2026-07-28 [seq 48]) names a sibling key that must appear earlier in
+    // A rule with `locked_by: '<siblingKey>'` (the floor-lock doctrine)
+    // names a sibling key that must appear earlier in
     // this same schema, so its resolved value already sits in `settings` by
     // the time this key is reached. When that sibling resolves `true`, this
     // key's whole capability is not deployed in this install: it is omitted
@@ -218,8 +217,8 @@ function loadProductSchema(file) {
 // of "every setting quietly reset to default."
 //
 // opts.source is this call's provenance (product/onboarding/interview.md
-// Step 5, operator ruling 2026-07-28 [seq 48]): the settings interview is
-// the sole caller entitled to pass `{ source: 'interview' }`, which is what
+// Step 5): the settings interview is the sole caller entitled to pass
+// `{ source: 'interview' }`, which is what
 // lets a `floor_lock: false` pick in candidate actually land — every other
 // caller, including an omitted opts, gets the fail-closed 'hand-edit'
 // default, under which `applySchema`'s `interview_only` rule clamps

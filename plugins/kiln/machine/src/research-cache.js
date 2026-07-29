@@ -1,16 +1,16 @@
 'use strict';
 
-// research/index.json — synthesis §2 ("topic → {file, date, status};
-// cache-first discipline") and the ruled law ("research artifacts are the
-// cache — dated at retrieval; agents read the cache before any
-// re-research; re-verification fires on staleness or load-bearing
-// decisions, never as reflex token-burning"). This module is the ONE place
-// that shape and the cache-first gate live; workers cite
-// requireFreshOrExplain rather than re-deriving staleness logic themselves.
+// research/index.json: topic → {file, date, status}; cache-first
+// discipline. Research artifacts are the cache — dated at retrieval;
+// agents read the cache before any re-research; re-verification fires on
+// staleness or load-bearing decisions, never as reflex token-burning. This
+// module is the ONE place that shape and the cache-first gate live;
+// workers cite requireFreshOrExplain rather than re-deriving staleness
+// logic themselves.
 //
-// Entry shape (P5 build instruction): { topic, path, date, sources }, where
-// topic is the upsert key, date is an ISO YYYY-MM-DD retrieval date, and
-// sources is a non-empty array of { url, fetched_ts }.
+// Entry shape: { topic, path, date, sources }, where topic is the upsert
+// key, date is an ISO YYYY-MM-DD retrieval date, and sources is a
+// non-empty array of { url, fetched_ts }.
 
 const fs = require('node:fs');
 
@@ -38,8 +38,8 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-// Real calendar-date check (P5 Sol review MAJOR #1): DATE_RE only proves the
-// string is four-digits-dash-two-digits-dash-two-digits; JS's own Date
+// Real calendar-date check: DATE_RE only proves the string is
+// four-digits-dash-two-digits-dash-two-digits; JS's own Date
 // silently NORMALIZES an out-of-range month/day (2026-02-30 rolls forward to
 // March), so a Date.parse-succeeded check alone accepts impossible dates.
 // This constructs the UTC date from its parts and compares the parts back
@@ -123,8 +123,7 @@ function validateEntryShape(entry) {
 // unparseable JSON throws via atomic-json's own readJson, whose error
 // already names the path. Present-but-wrong-shape (bad schema_version, non-
 // array entries, any entry failing validateEntryShape, or duplicate topics
-// across entries — P5 Sol review MAJOR #1) throws here, with indexPath
-// always named in the message.
+// across entries) throws here, with indexPath always named in the message.
 function loadIndex(indexPath) {
   const raw = readJson(indexPath, MISSING_INDEX);
   if (raw === MISSING_INDEX) {
@@ -170,10 +169,10 @@ function loadIndex(indexPath) {
 // torn-write protection every other JSON snapshot in the tree gets — see
 // routing.js's setActive for the same read-then-writeAtomic shape). Rejects
 // (throws) BEFORE any read or write if the incoming entry fails shape
-// validation OR is dated in the future relative to opts.nowIso (P5 Sol
-// review MAJOR #1 — a cache entry claiming a retrieval date that hasn't
-// happened yet is invalid data, not merely "very fresh"), so a bad call
-// never touches the file on disk. opts.nowIso defaults to the real current
+// validation OR is dated in the future relative to opts.nowIso — a cache
+// entry claiming a retrieval date that hasn't happened yet is invalid
+// data, not merely "very fresh" — so a bad call never touches the file on
+// disk. opts.nowIso defaults to the real current
 // time; callers that need determinism (tests, a chief steering off a fixed
 // clock) pass it explicitly, the same DI shape ageDaysOf/isFresh/
 // requireFreshOrExplain already use for "now".
@@ -241,8 +240,8 @@ function ageDaysOf(entry, nowIso) {
 // Pure: an entry is fresh through and including its maxDays-th day
 // (inclusive boundary — a 7-day-old entry with maxDays=7 is still fresh;
 // day 8 is the first stale day). A negative age (a future-dated entry) is
-// never fresh (P5 Sol review MAJOR #1) — the re-verify-on-staleness
-// rule needs exactly one such boundary, defined once here.
+// never fresh — the re-verify-on-staleness rule needs exactly one such
+// boundary, defined once here.
 function isFresh(entry, nowIso, maxDays = DEFAULT_MAX_DAYS) {
   const age = ageDaysOf(entry, nowIso);
   return age >= 0 && age <= maxDays;
@@ -256,9 +255,8 @@ function listStale(index, nowIso, maxDays = DEFAULT_MAX_DAYS) {
   return index.entries.filter((entry) => !isFresh(entry, nowIso, maxDays));
 }
 
-// The cache-first gate (synthesis §2): workers call this before
-// re-researching a topic. opts.loadBearing (P5 fix pass, resolving Sol
-// review MAJOR #2's fresh-vs-load-bearing ambiguity) is the ONE rule that
+// The cache-first gate: workers call this before re-researching a topic.
+// opts.loadBearing is the ONE rule that
 // decides precedence between the chief's two branches: consume the cache
 // only when fresh AND NOT load-bearing; a load-bearing decision ALWAYS
 // re-verifies, regardless of the entry's age or even whether an entry
@@ -320,10 +318,10 @@ function requireFreshOrExplain(index, topic, nowIso, opts = {}) {
   };
 }
 
-// Appends one "freshness_gate" record to research/scratchpad.jsonl (P5 fix
-// pass — Sol review's auditability finding: cache-first and the
-// load-bearing exception were prompt law but left no machine-checkable
-// trace that the gate ever ran before a brief). The chief calls this once
+// Appends one "freshness_gate" record to research/scratchpad.jsonl:
+// cache-first and the load-bearing exception are prompt law, but without
+// this record there would be no machine-checkable trace that the gate ever
+// ran before a brief. The chief calls this once
 // per brief decision, right after requireFreshOrExplain, with that call's
 // own outcome — never a re-derived or paraphrased version of it. Written via
 // stream.appendRecord, the same single-writer/header-stamped path every
@@ -349,13 +347,13 @@ function recordGateCheck(scratchpadPath, { topic, fresh, reason, load_bearing } 
   });
 }
 
-// CLI entrypoint (P11 convergence finding 3/8: agents/research-chief.md's own
-// cache-first law and synthesis calls — requireFreshOrExplain,
-// recordGateCheck, upsertEntry — had no executable form for a Bash-only
-// worker). All three read their structured input from stdin, matching this
-// tree's stdin-JSON convention; `require-fresh-or-explain`/`upsert-entry`
-// load `research/index.json` internally via loadIndex rather than trusting
-// a caller-supplied index object.
+// CLI entrypoint: agents/research-chief.md's own cache-first law and
+// synthesis calls — requireFreshOrExplain, recordGateCheck, upsertEntry —
+// need an executable form for a Bash-only worker. All three read their
+// structured input from stdin, matching this tree's stdin-JSON convention;
+// `require-fresh-or-explain`/`upsert-entry` load `research/index.json`
+// internally via loadIndex rather than trusting a caller-supplied index
+// object.
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

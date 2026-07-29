@@ -1,41 +1,37 @@
 'use strict';
 
-// The handoff pair's stop writer (P11 parked question (c), converged: "a
-// purpose-named handoff-recorder seat backed by one `handoff.js write-stop
-// <treeRoot>` machine command... accept a bounded stop payload on stdin,
-// validate the closed stop-state vocabulary, append the stop event,
-// atomically update state.json, and render handoff.md as a mechanical view
-// carrying the same generation or event sequence"). Every Stop-state
-// (agents/maestro.md's own section) writes this SAME pair before a turn
-// ends — DONE, BLOCKED-OPERATOR, QUOTA-WAIT, BUDGET-CEILING, EXHAUSTED —
-// through this one sanctioned writer, never hand-authored prose.
+// The handoff pair's stop writer: a purpose-named handoff-recorder seat
+// backed by one `handoff.js write-stop <treeRoot>` machine command. It
+// accepts a bounded stop payload on stdin, validates the closed stop-state
+// vocabulary, appends the stop event, atomically updates state.json, and
+// renders handoff.md as a mechanical view carrying the same generation or
+// event sequence. Every Stop-state (agents/maestro.md's own section) writes
+// this SAME pair before a turn ends — DONE, BLOCKED-OPERATOR, QUOTA-WAIT,
+// BUDGET-CEILING, EXHAUSTED — through this one sanctioned writer, never
+// hand-authored prose.
 //
-// Convergence finding 21 (non-negotiable): a mid-phase stop must never race
-// a concurrent phase transition. This module's own state.json read-modify-
-// write takes jsonl.js's own withLock directly, on state.json's exact path —
-// the SAME shared lock atomic-json.js's updateJson takes on that file, which
-// phases.js's advance()/closeTerminal()/reopenPhase() and preflight.js's
-// run() already call through — never a second, parallel mechanism.
+// A mid-phase stop must never race a concurrent phase transition. This
+// module's own state.json read-modify-write takes jsonl.js's own withLock
+// directly, on state.json's exact path — the SAME shared lock atomic-json.js's
+// updateJson takes on that file, which phases.js's advance()/closeTerminal()/
+// reopenPhase() and preflight.js's run() already call through — never a
+// second, parallel mechanism.
 //
-// P11 Sol review pass-3 (parked question (c), STILL-OPEN after pass-2's
-// defects 3/4): writeStop and renderOnboarding are now ONE coherent critical
-// section EACH, both held on state.json's own lock (`jsonl.js`'s `withLock`
-// — the SAME lockfile `atomic-json.js`'s `updateJson` takes on this exact
-// path, so phases.js's advance()/closeTerminal()/reopenPhase() and
+// writeStop and renderOnboarding each run their whole transaction as ONE
+// coherent critical section, both held on state.json's own lock (`jsonl.js`'s
+// `withLock` — the SAME lockfile `atomic-json.js`'s `updateJson` takes on this
+// exact path, so phases.js's advance()/closeTerminal()/reopenPhase() and
 // preflight.js's run() stay serialized against every handoff.md writer, not
 // just against each other). Per this file's own transaction, in order: the
 // state precondition is checked (a missing/malformed state.json throws
 // before anything else runs); handoff.md's target containment is validated
 // — lstat for an existing symlink, realpath for an escaping parent — BEFORE
-// either mutation below, so a refusal here (pass-2 defect 2's own case)
-// leaves ledger.jsonl and state.json untouched too, closing pass-2 defect
-// 3's residual partial-mutation case; the ledger append allocates the seq;
-// state.json's own write records that exact seq as `last_stop`; and ONLY
-// THEN is handoff.md rendered and rename-committed, still inside this SAME
-// lock — closing pass-2 defect 4's residual render race, where a delayed
-// rename from an earlier call could overwrite a later call's committed
-// ledger/state view (Sol's own repro: ledger max seq and state.json.last_stop
-// at seq 2, handoff.md still naming seq 1). No concurrent writeStop or
+// either mutation below, so a refusal here leaves ledger.jsonl and
+// state.json untouched too; the ledger append allocates the seq; state.json's
+// own write records that exact seq as `last_stop`; and ONLY THEN is
+// handoff.md rendered and rename-committed, still inside this SAME lock —
+// so a delayed rename from an earlier call can never overwrite a later
+// call's committed ledger/state view. No concurrent writeStop or
 // renderOnboarding call can observe or commit a partial slice of this
 // transaction, and the two callers can no longer interleave their renders
 // against each other either, since both hold the identical lock.
@@ -78,15 +74,14 @@ function realpathOfPossiblyMissing(p) {
 }
 
 // validateContainedTarget(treeRoot, targetPath) — refuses (throws) if
-// targetPath already exists as a symlink (P11 Sol review pass-2 defect 2's
-// own probe: a scaffold with `handoff.md` replaced by a symlink to a
-// sibling file), or if targetPath's real, symlink-resolved location falls
-// outside treeRoot's own real path (a symlinked parent directory, or a
-// symlink target that itself escapes the tree). Pure validation — no
-// filesystem mutation of any kind — so a transaction can run this BEFORE
-// its first mutation and fail closed with nothing written anywhere (P11 Sol
-// review pass-3, parked question (c): the residual case where this check
-// ran only after the ledger and state.json had already been committed).
+// targetPath already exists as a symlink (a scaffold with `handoff.md`
+// replaced by a symlink to a sibling file), or if targetPath's real,
+// symlink-resolved location falls outside treeRoot's own real path (a
+// symlinked parent directory, or a symlink target that itself escapes the
+// tree). Pure validation — no filesystem mutation of any kind — so a
+// transaction can run this BEFORE its first mutation and fail closed with
+// nothing written anywhere, rather than only after the ledger and
+// state.json have already been committed.
 function validateContainedTarget(treeRoot, targetPath) {
   let lst;
   try {
@@ -171,8 +166,8 @@ function renderHandoffMd(state, stop, seq, ts) {
 // `withLock` transaction on state.json's own lock, in that exact order, so
 // every fallible check precedes the transaction's first mutation and the
 // render is fully serialized against every other writeStop or
-// renderOnboarding call (see this file's own header comment for why that
-// closes pass-2 defects 3/4's residual cases under parked question (c)).
+// renderOnboarding call (see this file's own header comment for the
+// concurrency guarantee this ordering provides).
 function writeStop(treeRoot, stop) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('handoff: treeRoot must be a non-empty string');
@@ -198,9 +193,8 @@ function writeStop(treeRoot, stop) {
     }
 
     // handoff.md's containment validated SECOND — still before either
-    // mutation below, so a symlinked or escaping target now refuses with
-    // the ledger and state.json both untouched (closing pass-2 defect 3's
-    // residual case, where this check ran only after both were committed).
+    // mutation below, so a symlinked or escaping target refuses with the
+    // ledger and state.json both untouched.
     validateContainedTarget(treeRoot, handoffPath);
 
     // Ledger-first (write-ahead), the same ordering discipline
@@ -209,8 +203,7 @@ function writeStop(treeRoot, stop) {
     // are writes over already-validated targets: state.json's own write,
     // then handoff.md's render-and-rename, both still inside this lock so
     // no concurrent writeStop/renderOnboarding call can interleave a render
-    // between two calls' ledger/state commits (closing pass-2 defect 4's
-    // residual render race).
+    // between two calls' ledger/state commits.
     const seq = appendRecord(ledgerPath, {
       kind: 'stop',
       payload: stop,
@@ -254,15 +247,14 @@ function renderOnboardingMd(state, settings, scoutInventory, intakeReport) {
   if (isPlainObject(scoutInventory) && Array.isArray(scoutInventory.files)) {
     lines.push(`- Brownfield scout: completed, ${scoutInventory.files.length} file(s) inventoried`);
   }
-  // The intake section (legacy-intake design §4.3 step (e)): present only
-  // when intake.js's own report is on disk, under the same omit-when-absent
-  // rule the scout line above already applies. `intakeReport` is already
-  // schema-checked by the caller through validators.js's own
-  // validateIntakeReport — the same law intake.js validates against before
-  // writing the file, never a second reading of the shape here — so a
-  // report this view cannot trust yields no line at all rather than a
-  // half-true one. The line states counts and locations only; what the old
-  // run proved is not restated, because nothing here carried it forward.
+  // The intake section is present only when intake.js's own report is on
+  // disk, under the same omit-when-absent rule the scout line above already
+  // applies. `intakeReport` is already schema-checked by the caller through
+  // validators.js's own validateIntakeReport — the same law intake.js
+  // validates against before writing the file, never a second reading of
+  // the shape here — so a report this view cannot trust yields no line at
+  // all rather than a half-true one. The line states counts and locations
+  // only; it never narrates what produced them.
   if (intakeReport !== null) {
     lines.push(
       `- Intake: tier ${intakeReport.tier}, an earlier tree set aside whole at ${intakeReport.archive_path}, ` +
@@ -274,22 +266,20 @@ function renderOnboardingMd(state, settings, scoutInventory, intakeReport) {
 }
 
 // renderOnboarding(treeRoot) -> {content} — the SOLE other writer of
-// handoff.md (P11 Sol review pass-2 defect 5: `onboarding-runner` was
-// separately, directly overwriting the same file with its own `Write`
-// tool, which meant a late onboarding close and a stop could race through
-// two formats and two write mechanisms, only one of which participated in
-// the state/ledger lock protocol). A mechanical view of onboarding facts
-// already on disk — phase, next_action, preflight mode/notice, the
-// settings preset, and (when present) scout's own completed inventory
-// count — through the SAME contained atomic writer writeStop uses. Never
-// touches ledger.jsonl or state.json's stop fields; this is a different
-// mechanical view of different facts, not a stop. Reads and renders inside
-// the SAME state.json lock writeStop takes (P11 Sol review pass-3, parked
-// question (c)'s "cross-call view coherence" residual): the two sanctioned
-// handoff.md writers are now fully serialized against each other, not just
-// against phases.js/preflight.js's own state.json writes, so an onboarding
-// close and a stop can no longer interleave their renders and leave
-// handoff.md showing whichever one happened to rename last by accident.
+// handoff.md: no other code path writes this file directly, so a late
+// onboarding close and a stop can never race through two formats and two
+// write mechanisms, only one of which would participate in the state/ledger
+// lock protocol. A mechanical view of onboarding facts already on disk —
+// phase, next_action, preflight mode/notice, the settings preset, and (when
+// present) scout's own completed inventory count — through the SAME
+// contained atomic writer writeStop uses. Never touches ledger.jsonl or
+// state.json's stop fields; this is a different mechanical view of
+// different facts, not a stop. Reads and renders inside the SAME state.json
+// lock writeStop takes: the two sanctioned handoff.md writers are fully
+// serialized against each other, not just against phases.js/preflight.js's
+// own state.json writes, so an onboarding close and a stop can never
+// interleave their renders and leave handoff.md showing whichever one
+// happened to rename last by accident.
 function renderOnboarding(treeRoot) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('handoff: treeRoot must be a non-empty string');
@@ -325,8 +315,7 @@ function renderOnboarding(treeRoot) {
 // CLI entrypoint (this codebase's flat one-command convention). `write-stop
 // <treeRoot>` reads the stop payload from stdin (the judge-verdict.js stdin
 // pattern) — never argv JSON. `render-onboarding <treeRoot>` takes no
-// stdin. parseArgv fails closed on a surplus positional argument (P11 Sol
-// review finding 13).
+// stdin. parseArgv fails closed on a surplus positional argument.
 function parseArgv(argv) {
   const [command, treeRoot, ...rest] = argv;
   const error = rest.length > 0 ? `unexpected extra argument(s): ${rest.join(' ')}` : null;

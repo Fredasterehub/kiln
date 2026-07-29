@@ -1,9 +1,9 @@
 'use strict';
 
-// Mechanical, replayable slot assignment for Maximal confrontation (P6 Sol
-// review BLOCKING #3: "the flow fixes plan-A as the Claude plan-author draft
-// and describes plan-B as Sol-authored... Random opaque slot assignment...
-// [is] missing"). Deciding which candidate is labeled "plan-A" by a coin
+// Mechanical, replayable slot assignment for Maximal confrontation: which
+// candidate is labeled "plan-A" must never be predictable from which
+// family authored it, and never a judgment call an agent makes. Deciding
+// which candidate is labeled "plan-A" by a coin
 // Maestro flips (Date.now(), Math.random()) would be unreplayable and, worse,
 // still a judgment call an agent makes — doctrine rule 6 ("Determinism
 // through workflows, not guardrails") puts exactly this kind of binary
@@ -69,16 +69,16 @@ function assignPlanSlot(candidates) {
     : { planA: second.id, planB: first.id };
 }
 
-// CLI entrypoint (P11 convergence finding 4 — Maximal confrontation's own
-// mechanical mid-protocol step, product/architecture/flow.md step 5:
-// "Maestro... call[s] machine/src/slot-assignment.js's assignPlanSlot(...)"
-// — a Bash-only orchestrator has no way to call this in-process). `assign
+// CLI entrypoint: Maximal confrontation's own mechanical mid-protocol step
+// (product/architecture/flow.md step 5) has Maestro call
+// machine/src/slot-assignment.js's assignPlanSlot(...) — a Bash-only
+// orchestrator has no way to call this in-process. `assign
 // <candidatesJson>` reads the two-entry `[{id, manifestDigest}, ...]` array
 // via stdin (the same shape assignPlanSlot itself takes) and prints the
 // `{planA, planB}` result.
 function main(argv) {
-  // Fails closed on a surplus positional argument (P11 Sol review finding
-  // 13) rather than silently ignoring it — this dispatcher takes no
+  // Fails closed on a surplus positional argument rather than silently
+  // ignoring it — this dispatcher takes no
   // arguments beyond the command itself, so anything past argv[0] is
   // already surplus.
   const [command, ...rest] = argv;

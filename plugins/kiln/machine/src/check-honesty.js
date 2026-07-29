@@ -16,11 +16,11 @@ const GATE_DECISIONS = new Set(['approved', 'auto-approved', 'rejected', 'reopen
 const APPROVED_DECISIONS = new Set(['approved', 'auto-approved']);
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 
-// The sanctioned gate.json schema version and decision_source vocabulary
-// (P6 Sol review BLOCKING #1: "the verifier trusts any sanctioned
-// gate.decision and never validates decision_source, schema_version,
-// decided_at, or evidence that the decision was emitted by the sanctioned
-// producer"). Owned HERE, the verifier module, rather than in plan-gate.js —
+// The sanctioned gate.json schema version and decision_source vocabulary:
+// the verifier must validate decision_source, schema_version, decided_at,
+// and evidence that the decision was emitted by the sanctioned producer,
+// never merely trust any gate.decision value on its face. Owned HERE, the
+// verifier module, rather than in plan-gate.js —
 // plan-gate.js already requires this module (verifyArchitectureGateApproved,
 // GATE_DECISIONS), so the reverse import would cycle; a producer importing
 // its vocabulary from the verifier that checks it is also the more honest
@@ -55,10 +55,10 @@ function latestGateRecord(ledgerRecords, gateId) {
   return latest;
 }
 
-// Some historical ledger records (P9-era and the P11 gate-evidence run) were
-// written with "command" instead of the schema's "cmd". Read tolerance only:
-// "cmd" wins when a record carries both, "command" is accepted when "cmd" is
-// absent. Sanctioned writers (runGate) still emit only "cmd" for new events.
+// Some ledger records may have been written with "command" instead of the
+// schema's "cmd". Read tolerance only: "cmd" wins when a record carries
+// both, "command" is accepted when "cmd" is absent. Sanctioned writers
+// (runGate) still emit only "cmd" for new events.
 function ledgerRecordCmd(record) {
   return typeof record.cmd === 'string' ? record.cmd : record.command;
 }
@@ -97,17 +97,17 @@ function findGateCmd(gates, gateName) {
   return null;
 }
 
-// Post-architecture-boundary cross-check (synthesis §3/§4): when gate.json
-// records an APPROVED decision, the artifacts it approved must still match
-// the digests frozen in the manifest.json it is bound to. Fails closed — an
+// Post-architecture-boundary cross-check: when gate.json records an
+// APPROVED decision, the artifacts it approved must still match the
+// digests frozen in the manifest.json it is bound to. Fails closed — an
 // unreadable/missing manifest, a digest-unbound manifest, or a manifest that
 // doesn't declare EXACTLY the canonical artifact set while gate says
 // approved is itself a violation, never a silent skip.
 //
 // architectureDir is always the tree-relative canonical location, derived
-// from statePath rather than accepted as an optional caller argument
-// (review [blocker] #1: an optional arg is an escape hatch — omitting it
-// used to skip the whole cross-check).
+// from statePath rather than accepted as an optional caller argument: an
+// optional argument would be an escape hatch that could skip the whole
+// cross-check by omission.
 //
 // opts.requireApproved (default false) selects which of two callers this
 // serves — the same digest/canonical-set/drift logic underneath either way
@@ -116,11 +116,11 @@ function findGateCmd(gates, gateName) {
 //           gate, so an absent gate.json or a rejected/reopened decision is
 //           simply nothing to cross-check yet, not a violation.
 //   true  — verifyArchitectureGateApproved()'s stricter question, asked at
-//           the plan_gate -> implementation phase-entry boundary (P2 review
-//           [blocker] #1): is there CURRENTLY an approved, digest-matched
-//           gate? Here an absent gate.json or a non-approved decision IS
-//           itself the violation — implementation must structurally refuse
-//           to start otherwise (synthesis §3/§4).
+//           the plan_gate -> implementation phase-entry boundary: is there
+//           CURRENTLY an approved, digest-matched gate? Here an absent
+//           gate.json or a non-approved decision IS itself the
+//           violation — implementation must structurally refuse to start
+//           otherwise.
 function checkArchitectureManifest(architectureDir, violations, opts = {}) {
   const requireApproved = opts.requireApproved === true;
   const gatePath = path.join(architectureDir, 'gate.json');
@@ -159,22 +159,22 @@ function checkArchitectureManifest(architectureDir, violations, opts = {}) {
     return; // rejected/reopened: nothing approved to cross-check (unless requireApproved, handled above)
   }
 
-  // Gate-forgery close (P6 Sol review BLOCKING #1): a decision reaching
-  // APPROVED_DECISIONS is not, by itself, evidence the decision was ever
-  // emitted by approveGate() — a probe that hand-edits gate.json's own bytes
-  // (`decision: "approved", decision_source: "forged"`) previously passed
-  // this function outright, because nothing past this point re-derived
-  // "approved" from anything but gate.json's own say-so. Two independent
-  // checks close that: (1) gate.json's own provenance fields must themselves
-  // be well-formed — a schema this module actually owns (GATE_SCHEMA_VERSION,
-  // DECISION_SOURCES), never merely "some string"; (2) gate.json's decision
-  // fields must match the LATEST "plan-gate-decision" ledger record
-  // approveGate() appends via stream.appendRecord — a record gate.json's own
-  // author (a Bash-capable worker or the plan-gate CLI) cannot rewrite
-  // without also rewriting an append-only, single-writer JSONL stream in a
-  // way the seq/ordering checks above would themselves catch. Both checks are
-  // deliberately non-blocking (pushed, not returned) so a malformed-provenance
-  // gate still gets every other violation this function would otherwise
+  // Gate-forgery close: a decision reaching APPROVED_DECISIONS is not, by
+  // itself, evidence the decision was ever emitted by approveGate() — a
+  // hand-edited gate.json (`decision: "approved", decision_source:
+  // "forged"`) would otherwise pass this function outright, since nothing
+  // past this point re-derives "approved" from anything but gate.json's own
+  // say-so. Two independent checks close that: (1) gate.json's own
+  // provenance fields must themselves be well-formed — a schema this module
+  // actually owns (GATE_SCHEMA_VERSION, DECISION_SOURCES), never merely
+  // "some string"; (2) gate.json's decision fields must match the LATEST
+  // "plan-gate-decision" ledger record approveGate() appends via
+  // stream.appendRecord — a record gate.json's own author (a Bash-capable
+  // worker or the plan-gate CLI) cannot rewrite without also rewriting an
+  // append-only, single-writer JSONL stream in a way the seq/ordering
+  // checks above would themselves catch. Both checks are deliberately
+  // non-blocking (pushed, not returned) so a malformed-provenance gate
+  // still gets every other violation this function would otherwise
   // report — reasons accumulate, they don't short-circuit each other.
   if (gate.schema_version !== GATE_SCHEMA_VERSION) {
     violations.push(`architecture gate: ${gatePath} must declare schema_version ${GATE_SCHEMA_VERSION} (got ${JSON.stringify(gate.schema_version)})`);
@@ -236,8 +236,8 @@ function checkArchitectureManifest(architectureDir, violations, opts = {}) {
 
   // The gate's manifest_digest must match manifest.json's OWN bytes on disk
   // — this is what stops a rewritten/shrunk manifest.json from being
-  // silently re-trusted after approval (review [blocker] #2): swapping the
-  // file changes its digest, which no longer matches what was approved.
+  // silently re-trusted after approval: swapping the file changes its
+  // digest, which no longer matches what was approved.
   const actualManifestDigest = sha256Of(manifestPath);
   if (actualManifestDigest !== manifestDigest) {
     violations.push(
@@ -253,8 +253,7 @@ function checkArchitectureManifest(architectureDir, violations, opts = {}) {
 
   // The manifest must declare EXACTLY the canonical artifact set — no
   // missing, no duplicate, no unexpected paths — so an approval can never be
-  // laundered through a manifest that quietly drops entries (review
-  // [blocker] #2).
+  // laundered through a manifest that quietly drops entries.
   const declaredPaths = manifestObj.artifacts
     .map((entry) => (entry !== null && typeof entry === 'object' ? entry.path : undefined))
     .filter((p) => typeof p === 'string');
@@ -289,10 +288,10 @@ function checkArchitectureManifest(architectureDir, violations, opts = {}) {
 // Stricter, standalone form of the same architecture-gate check, asked as an
 // unconditional question rather than a conditional-on-a-claim one: "is
 // implementation currently allowed to begin?" Used by
-// machine/src/phases.js's "architecture-gate-approved" entry check (P2
-// review [blocker] #1) — never duplicated there, since duplicating this
-// digest/canonical-set/drift logic in two modules is exactly what the
-// anti-redundant-enforcement rule forbids.
+// machine/src/phases.js's "architecture-gate-approved" entry check — never
+// duplicated there, since duplicating this digest/canonical-set/drift logic
+// in two modules is exactly what the anti-redundant-enforcement rule
+// forbids.
 function verifyArchitectureGateApproved(architectureDir) {
   const violations = [];
   checkArchitectureManifest(architectureDir, violations, { requireApproved: true });
@@ -312,12 +311,11 @@ function checkHonesty({ statePath, ledgerPath }) {
 
   const violations = [];
 
-  // gates/checklist are OPTIONAL: synthesis §2's state.json schema carries
-  // no such fields at all (they are a proof-of-work overlay this module
-  // adds on top). A freshly scaffolded tree's state.json has neither key and
-  // that is honest — zero obligations declared, zero evidence required. Only
-  // a PRESENT-but-wrong-typed value fails closed; absence does not (review
-  // [major] "scaffold and check-honesty disagree on the state contract").
+  // gates/checklist are OPTIONAL: state.json's own schema carries no such
+  // fields at all (they are a proof-of-work overlay this module adds on
+  // top). A freshly scaffolded tree's state.json has neither key and that
+  // is honest — zero obligations declared, zero evidence required. Only a
+  // PRESENT-but-wrong-typed value fails closed; absence does not.
   const gatesPresent = Object.prototype.hasOwnProperty.call(state, 'gates');
   const gatesOk = !gatesPresent || Array.isArray(state.gates);
   if (!gatesOk) violations.push('state.gates must be an array when present');
@@ -416,13 +414,12 @@ function checkHonesty({ statePath, ledgerPath }) {
 
 // The sole sanctioned producer of gate evidence. It actually executes cmd
 // and records the exit code the process really returned rather than
-// accepting a caller-supplied exit_code, so evidence can no longer be
-// hand-authored the way a generic ledger append previously allowed. Writes
-// through stream.appendRecord (the common JSONL header wrapper) rather than
+// accepting a caller-supplied exit_code, so evidence can never be
+// hand-authored through a generic ledger append. Writes through
+// stream.appendRecord (the common JSONL header wrapper) rather than
 // jsonl.appendEvent directly, so ledger.jsonl — one of the nine named
-// streams synthesis §2 binds to the common header — never mixes
-// header-complete and header-bare records (review [major] "the common JSONL
-// header is not applied to all nine streams").
+// streams bound to the common header — never mixes header-complete and
+// header-bare records.
 function runGate({ gateId, cmd, ledgerPath }) {
   if (typeof gateId !== 'string' || gateId === '') {
     throw new TypeError('runGate: gateId must be a non-empty string');
@@ -443,12 +440,12 @@ function runGate({ gateId, cmd, ledgerPath }) {
   return { gateId, cmd, exitCode, seq, stdout: outcome.stdout, stderr: outcome.stderr };
 }
 
-// The sole sanctioned producer of deviation evidence (P11 finding F12): a
-// generic, unvalidated ledger.jsonl append was deliberately never exposed —
-// runGate's own header comment names exactly why ("evidence can no longer be
-// hand-authored the way a generic ledger append previously allowed"), and a
-// deviation record deserves the same one-sanctioned-writer discipline, not a
-// second exemption from it. validateDeviation enforces the shape
+// The sole sanctioned producer of deviation evidence: a generic,
+// unvalidated ledger.jsonl append is deliberately never exposed — runGate's
+// own header comment names exactly why evidence must never be hand-authored
+// through a generic ledger append, and a deviation record deserves the same
+// one-sanctioned-writer discipline, not a second exemption from it.
+// validateDeviation enforces the shape
 // (reported_by/expected/actual/summary, all non-empty strings, no
 // unexpected keys) before anything reaches disk; a caller with a malformed
 // report gets a thrown TypeError naming exactly which field is wrong, the
@@ -472,16 +469,15 @@ function recordDeviation({ reportedBy, expected, actual, summary, ledgerPath, co
 }
 
 // CLI entrypoint. Three shapes: the original two-positional-argument audit
-// form (`checkHonesty`, unchanged), `record-deviation <ledgerPath>` (P11
-// finding F12's adjacent defect: recordDeviation had no invocation form a
-// Bash-only worker could actually call), and `run-gate <ledgerPath>` (P11
-// convergence finding 3: agents/security-scanner.md's own scan commands
-// name runGate as their one sanctioned command-execution-plus-evidence
-// mechanism, but a Bash-only worker had no way to reach it — this is the
-// narrow form it needs: `{gateId, cmd}` via stdin, never a generic "run any
-// command" surface beyond what runGate itself already sanctions and
-// evidences). Both stdin-consuming subcommands read the judge-verdict.js
-// stdin pattern.
+// form (`checkHonesty`, unchanged), `record-deviation <ledgerPath>`
+// (recordDeviation needs an invocation form a Bash-only worker can actually
+// call), and `run-gate <ledgerPath>` (agents/security-scanner.md's own scan
+// commands name runGate as their one sanctioned
+// command-execution-plus-evidence mechanism, but a Bash-only worker has no
+// other way to reach it — this is the narrow form it needs: `{gateId, cmd}`
+// via stdin, never a generic "run any command" surface beyond what runGate
+// itself already sanctions and evidences). Both stdin-consuming
+// subcommands read the judge-verdict.js stdin pattern.
 function main(argv) {
   if (argv[0] === 'run-gate') {
     const ledgerPath = argv[1];
@@ -521,12 +517,12 @@ function main(argv) {
       if (!isRecordObject(parsed)) {
         throw new Error('record-deviation: deviation JSON via stdin must be a JSON object');
       }
-      // CLI adapter parity (P11 Sol review finding 5): recordDeviation below
-      // only ever reconstructs {reported_by, expected, actual, summary} from
-      // named fields, so an extra key on the raw parsed input would
-      // otherwise never reach validateDeviation's own extra-key check at
-      // all — the adapter validates the PARSED object's actual key set
-      // itself, before any reconstruction happens.
+      // CLI adapter parity: recordDeviation below only ever reconstructs
+      // {reported_by, expected, actual, summary} from named fields, so an
+      // extra key on the raw parsed input would otherwise never reach
+      // validateDeviation's own extra-key check at all — the adapter
+      // validates the PARSED object's actual key set itself, before any
+      // reconstruction happens.
       const allowedKeys = new Set([...DEVIATION_FIELDS, 'correlation_id']);
       const extraKeys = Object.keys(parsed).filter((key) => !allowedKeys.has(key));
       if (extraKeys.length > 0) {
