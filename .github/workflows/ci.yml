@@ -1,0 +1,24 @@
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Release gate
+        run: ./validate.sh
+
+# jq and git are preinstalled on ubuntu-latest; node comes from setup-node.
+# The claude CLI is not installed here, so validate.sh skips its strict manifest
+# check with a visible notice and the maintainer covers it locally before a cut.
