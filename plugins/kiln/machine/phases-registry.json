@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "phases": [
+    {
+      "id": "onboarding",
+      "order": 1,
+      "title": "The Door",
+      "interactive": true,
+      "entry_requires": [],
+      "exit_emits": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md"
+      ],
+      "resumable": true
+    },
+    {
+      "id": "brainstorm",
+      "order": 2,
+      "title": "The Sketchbook",
+      "interactive": true,
+      "entry_requires": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md"
+      ],
+      "exit_emits": [
+        "vision/vision.md",
+        "vision/decisions.jsonl"
+      ],
+      "exit_checks": [
+        {
+          "file": "vision/transcript.jsonl",
+          "check": "jsonl-sealed"
+        },
+        {
+          "file": "vision/decisions.jsonl",
+          "check": "jsonl-min-records:1"
+        },
+        {
+          "file": "vision/vision.md",
+          "check": "file-nonempty"
+        }
+      ],
+      "resumable": true
+    },
+    {
+      "id": "research",
+      "order": 3,
+      "title": "The Field Desk",
+      "interactive": false,
+      "entry_requires": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md",
+        "vision/vision.md",
+        "vision/decisions.jsonl"
+      ],
+      "exit_emits": [
+        "research/index.json",
+        "research/scratchpad.jsonl",
+        "research/summary.md"
+      ],
+      "exit_checks": [
+        {
+          "file": "research/index.json",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "research/scratchpad.jsonl",
+          "check": "jsonl-min-records:3"
+        },
+        {
+          "file": "research/scratchpad.jsonl",
+          "check": "jsonl-has-kind:freshness_gate"
+        },
+        {
+          "file": "research/summary.md",
+          "check": "file-nonempty"
+        }
+      ],
+      "resumable": true
+    },
+    {
+      "id": "architecture",
+      "order": 4,
+      "title": "The Blueprint",
+      "interactive": false,
+      "entry_requires": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md",
+        "vision/vision.md",
+        "vision/decisions.jsonl",
+        "research/index.json",
+        "research/scratchpad.jsonl",
+        "research/summary.md"
+      ],
+      "exit_emits": [
+        "architecture/plan.md",
+        "architecture/criteria-register.json",
+        "architecture/milestones.json",
+        "architecture/artifact-map.json",
+        "architecture/manifest.json",
+        "architecture/gate.json",
+        "architecture/protocol-record.md"
+      ],
+      "exit_checks": [
+        {
+          "file": "architecture/plan.md",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "architecture/criteria-register.json",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "architecture/milestones.json",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "architecture/artifact-map.json",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "architecture/manifest.json",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "architecture/gate.json",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "architecture/protocol-record.md",
+          "check": "file-nonempty"
+        }
+      ],
+      "resumable": true
+    },
+    {
+      "id": "plan_gate",
+      "order": 5,
+      "title": "The Law",
+      "interactive": true,
+      "entry_requires": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md",
+        "vision/vision.md",
+        "vision/decisions.jsonl",
+        "research/index.json",
+        "research/scratchpad.jsonl",
+        "research/summary.md",
+        "architecture/plan.md",
+        "architecture/criteria-register.json",
+        "architecture/milestones.json",
+        "architecture/artifact-map.json",
+        "architecture/manifest.json",
+        "architecture/gate.json",
+        "architecture/protocol-record.md"
+      ],
+      "exit_emits": [
+        "architecture/gate.json"
+      ],
+      "exit_checks": [
+        {
+          "file": "architecture/gate.json",
+          "check": "file-nonempty"
+        }
+      ],
+      "resumable": true
+    },
+    {
+      "id": "implementation",
+      "order": 6,
+      "title": "The Anvil",
+      "interactive": false,
+      "entry_requires": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md",
+        "vision/vision.md",
+        "vision/decisions.jsonl",
+        "research/index.json",
+        "research/scratchpad.jsonl",
+        "research/summary.md",
+        "architecture/plan.md",
+        "architecture/criteria-register.json",
+        "architecture/milestones.json",
+        "architecture/artifact-map.json",
+        "architecture/manifest.json",
+        "architecture/gate.json",
+        "architecture/protocol-record.md"
+      ],
+      "entry_checks": [
+        "architecture-gate-approved"
+      ],
+      "exit_emits": [
+        "milestones/index.json"
+      ],
+      "exit_checks": [
+        {
+          "file": "milestones/index.json",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "milestones/index.json",
+          "check": "milestones-all-green"
+        }
+      ],
+      "resumable": true
+    },
+    {
+      "id": "verification",
+      "order": 7,
+      "title": "The Hundred Eyes",
+      "interactive": false,
+      "entry_requires": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md",
+        "vision/vision.md",
+        "vision/decisions.jsonl",
+        "research/index.json",
+        "research/scratchpad.jsonl",
+        "research/summary.md",
+        "architecture/plan.md",
+        "architecture/criteria-register.json",
+        "architecture/milestones.json",
+        "architecture/artifact-map.json",
+        "architecture/manifest.json",
+        "architecture/gate.json",
+        "architecture/protocol-record.md",
+        "milestones/index.json"
+      ],
+      "exit_emits": [
+        "verification/suite-state.json",
+        "verification/affected-map.json"
+      ],
+      "exit_checks": [
+        {
+          "file": "verification/suite-state.json",
+          "check": "suite-state-green"
+        },
+        {
+          "file": "verification/affected-map.json",
+          "check": "file-nonempty"
+        }
+      ],
+      "resumable": true
+    },
+    {
+      "id": "delivery",
+      "order": 8,
+      "title": "The Handover",
+      "interactive": false,
+      "entry_requires": [
+        "state.json",
+        "settings.json",
+        "routing/active.json",
+        "ledger.jsonl",
+        "handoff.md",
+        "vision/vision.md",
+        "vision/decisions.jsonl",
+        "research/index.json",
+        "research/scratchpad.jsonl",
+        "research/summary.md",
+        "architecture/plan.md",
+        "architecture/criteria-register.json",
+        "architecture/milestones.json",
+        "architecture/artifact-map.json",
+        "architecture/manifest.json",
+        "architecture/gate.json",
+        "architecture/protocol-record.md",
+        "milestones/index.json",
+        "verification/suite-state.json",
+        "verification/affected-map.json"
+      ],
+      "exit_emits": [
+        "delivery/last-mile-report.md",
+        "delivery/presentation.md",
+        "delivery/last-mile.json",
+        "delivery/facts.json"
+      ],
+      "exit_checks": [
+        {
+          "file": "delivery/last-mile-report.md",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "delivery/presentation.md",
+          "check": "file-nonempty"
+        },
+        {
+          "file": "verification/suite-state.json",
+          "check": "suite-state-green"
+        },
+        {
+          "file": "delivery/last-mile.json",
+          "check": "run-bound"
+        },
+        {
+          "file": "delivery/facts.json",
+          "check": "run-bound"
+        }
+      ],
+      "resumable": true
+    }
+  ]
+}

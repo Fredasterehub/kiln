@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "knobs": {
+    "facilitator": {
+      "default": "opus-5",
+      "enum": ["opus-5", "fable-5"],
+      "description": "Who runs your brainstorm sessions: Opus 5 is the default collaborative thinking partner; Fable 5 is the heavyweight essayist for decisions that are expensive to redo.",
+      "cost_note": "Opus 5 — the lighter seat per session, no measured figure yet; Fable 5 — roughly 2x Opus 5 per session, no measured figure yet."
+    },
+    "research_width": {
+      "default": 3,
+      "enum": [2, 3, 5],
+      "description": "How many parallel researchers work under the research chief: 2 for a focused question, 3 for standard breadth-first research, 5 for the widest fan-out that still pays off.",
+      "cost_note": "2 workers — the narrowest fan-out and the cheapest of the three, no measured figure yet; 3 workers — the middle of the three, no measured figure yet; 5 workers — the widest fan-out and the most expensive, no measured figure yet (the chief seat is a fixed cost, additional under every option)."
+    },
+    "planning": {
+      "default": "standard",
+      "enum": ["standard", "deep_scrutiny", "maximal_confrontation"],
+      "description": "How hard the plan gets challenged before building starts: Standard is one plan, written by the strongest planner, then checked over by the other model family to make sure nothing from your brainstorm or research got missed. Deep scrutiny writes a stronger first draft and adds two extra rounds of scrutiny, with both model families hunting for gaps. Maximal confrontation is the most thorough option available — both model families draft independently and the strongest draft wins.",
+      "cost_note": "Standard — the baseline, no measured figure yet; Deep scrutiny — roughly 2x standard, no measured figure yet; Maximal confrontation — two full independent drafts instead of one, no measured figure yet."
+    },
+    "reviews": {
+      "default": "floor",
+      "enum": ["floor", "x3", "x5"],
+      "description": "Verification never scales down. Floor is the minimum — every chunk of code is checked by the other model family, every milestone is checked by both models working together, and the full automated test suite always runs. x3/x5 add extra, independent check-again passes on top of that floor; there is no lower option.",
+      "cost_note": "Floor — fixed, not shaveable, no measured figure yet; Reinforced x3 — adds independent check-again passes per chunk on top of the floor, no measured figure yet; Maximum x5 — adds more of the same per chunk, no measured figure yet."
+    },
+    "checkpoints": {
+      "default": "milestone_pauses",
+      "enum": ["milestone_pauses", "autonomous"],
+      "description": "When the pipeline stops and shows you its work: Milestone pauses stop at each milestone review with a summary; Autonomous runs the whole slice end-to-end and only reviews at the finish line. Verification gates still block bad work internally either way.",
+      "cost_note": "No direct cost difference between the two options; both run the same verification floor."
+    },
+    "budget": {
+      "type": "object",
+      "description": "Hard ceiling per feature slice for each model family, plus an optional rough running-cost estimate you can turn on any time.",
+      "cost_note": "Ceiling values are operator-set dollar amounts; the raw schema default is no ceiling (null). Budget Solo and Balanced presets start from a rough estimate instead — never calibrated against measured spend; Max Rigor and Custom both start from no ceiling.",
+      "properties": {
+        "claude_ceiling_usd": {
+          "default": null,
+          "nullable": true,
+          "floor": 0,
+          "description": "Hard spend ceiling in USD for Claude-family seats on this slice. null means no ceiling.",
+          "cost_note": "Operator-set; the raw schema default is no ceiling (null). Budget Solo and Balanced presets start from a rough estimate instead — never calibrated against measured spend; Max Rigor and Custom both start from no ceiling."
+        },
+        "codex_ceiling_usd": {
+          "default": null,
+          "nullable": true,
+          "floor": 0,
+          "description": "Hard spend ceiling in USD for Codex/Sol-family seats on this slice. null means no ceiling.",
+          "cost_note": "Operator-set; the raw schema default is no ceiling (null). Budget Solo and Balanced presets start from a rough estimate instead — never calibrated against measured spend; Max Rigor and Custom both start from no ceiling."
+        },
+        "budget_report": {
+          "default": false,
+          "enum": [true, false],
+          "description": "Turn on a rough running-cost estimate even when you have no ceiling — useful if you're curious what you're spending without capping it.",
+          "cost_note": "The report itself costs nothing extra to produce; it reads the usage stream that already exists."
+        }
+      }
+    },
+    "telemetry_consent": {
+      "default": false,
+      "enum": [true, false],
+      "description": "Record anonymous, content-free build statistics (phase timings, review pass counts, which model handled which part of the build, costs) locally under .kiln/usage/ to improve defaults over time. Never your code, never your prompts, never leaves your machine.",
+      "cost_note": "No direct cost impact; writes a local JSONL stream only."
+    },
+    "blocking_preference": {
+      "default": "auto_remedy",
+      "enum": ["auto_remedy", "advise_me"],
+      "description": "When the pipeline hits a blocker: auto_remedy lets it attempt a fix on its own (the two model families work it out together) before asking you; advise_me always stops and asks first.",
+      "cost_note": "No direct cost impact; changes only who decides at a blocker."
+    },
+    "plan_review": {
+      "default": "auto_proceed",
+      "enum": ["auto_proceed", "review"],
+      "description": "After planning completes: auto_proceed moves straight into building; review pauses so you can read the plan first.",
+      "cost_note": "No direct cost impact; changes only whether the pipeline pauses after planning."
+    },
+    "floor_lock": {
+      "default": true,
+      "enum": [true, false],
+      "interview_only": true,
+      "source_locked_message": "floor_lock cannot be hand-unlocked; only the settings interview can set it to false, and the interview asks once — a completed install is not re-asked, and a hand-edit of this key is clamped back to true.",
+      "description": "Advanced operators only — this one is about tweaking my own machinery. The verification floor is my promise: every delivery fully verified, no setting goes below it. Should this install deploy a hand-editable override for that floor? Recommended: No.",
+      "cost_note": "No direct cost impact; determines only whether the override_verification_floor key below is deployed and hand-editable in this install."
+    },
+    "override_verification_floor": {
+      "default": false,
+      "enum": [true, false],
+      "locked_by": "floor_lock",
+      "locked_message": "floor is locked in this install; override_verification_floor is inert",
+      "warn_when": true,
+      "warn_message": "override_verification_floor is active in this install — the verification floor clamp is disabled for this run.",
+      "description": "A documented config key that disables the verification-floor clamp when set to true. Only exists at all when floor_lock is unlocked (false) — in a locked install this key is never deployed, no matter what a settings doc says. For operators who tune my own machinery.",
+      "cost_note": "No direct cost impact; changes only whether the floor clamp is enforced for this run."
+    }
+  },
+  "presets": {
+    "balanced": {
+      "budget": { "claude_ceiling_usd": 75, "codex_ceiling_usd": 75, "budget_report": false }
+    },
+    "budget_solo": {
+      "facilitator": "opus-5",
+      "research_width": 2,
+      "planning": "standard",
+      "reviews": "floor",
+      "checkpoints": "milestone_pauses",
+      "budget": { "claude_ceiling_usd": 30, "codex_ceiling_usd": 30, "budget_report": false }
+    },
+    "max_rigor": {
+      "facilitator": "fable-5",
+      "research_width": 5,
+      "planning": "maximal_confrontation",
+      "reviews": "x5",
+      "checkpoints": "autonomous",
+      "budget": { "budget_report": true }
+    },
+    "custom": {}
+  }
+}

@@ -1,0 +1,597 @@
+{
+  "schema_version": 1,
+  "categories": [
+    {
+      "id": "framing-reframing",
+      "title": "Framing & Reframing",
+      "description": "Techniques that change the sentence describing the problem before any solution gets generated."
+    },
+    {
+      "id": "analogy-transfer",
+      "title": "Analogy & Transfer",
+      "description": "Techniques that borrow a structure or mechanism from an unrelated domain and graft it onto the problem."
+    },
+    {
+      "id": "limit-games",
+      "title": "Limit Games",
+      "description": "Techniques that impose or remove an artificial constraint to force ideas that would not surface under normal conditions."
+    },
+    {
+      "id": "perspective-rotation",
+      "title": "Perspective Rotation",
+      "description": "Techniques that generate ideas by inhabiting a specific stakeholder, role, or vantage point."
+    },
+    {
+      "id": "combination-mutation",
+      "title": "Combination & Mutation",
+      "description": "Techniques that recombine or alter existing ideas already on the table to produce new hybrids and variants."
+    },
+    {
+      "id": "structured-decomposition",
+      "title": "Structured Decomposition",
+      "description": "Techniques that break the problem into explicit parts and generate ideas against each part in turn."
+    },
+    {
+      "id": "provocation-inversion",
+      "title": "Provocation & Inversion",
+      "description": "Techniques that deliberately generate the wrong, failing, or opposite answer first and mine it for the real one."
+    },
+    {
+      "id": "sensory-narrative",
+      "title": "Sensory & Narrative",
+      "description": "Techniques that use story, artifact, or physical imagination to surface ideas outside analytical language."
+    },
+    {
+      "id": "narrowing",
+      "title": "Narrowing",
+      "description": "Convergent techniques that reduce a generated idea set down to a committed short list."
+    },
+    {
+      "id": "pressure-test",
+      "title": "Pressure Test",
+      "description": "Critique techniques that stress-test a surviving idea before it is trusted."
+    }
+  ],
+  "techniques": [
+    {
+      "id": "question-ladder",
+      "name": "Question Ladder",
+      "category": "framing-reframing",
+      "mechanics": "Restate the problem as five different questions in a row, each climbing to a broader or narrower altitude than the last, then ideate against whichever rewrite feels least like the original.",
+      "goal_tags": ["strategy", "diagnosis", "planning"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "verb-swap",
+      "name": "Verb Swap",
+      "category": "framing-reframing",
+      "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next.",
+      "goal_tags": ["feature", "novelty"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "frame-flip",
+      "name": "Frame Flip",
+      "category": "framing-reframing",
+      "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original.",
+      "goal_tags": ["strategy", "diagnosis", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "silent-client",
+      "name": "Silent Client",
+      "category": "framing-reframing",
+      "mechanics": "Rewrite the brief entirely in the end-user's own words as if they dictated it, then ideate strictly inside that vocabulary, banning every term you would normally reach for.",
+      "goal_tags": ["feature", "personal"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "zoom-ladder",
+      "name": "Zoom Ladder",
+      "category": "framing-reframing",
+      "mechanics": "Restate the goal at five scopes in a row - one click, one session, one quarter, one decade, one civilization - and generate a fresh wave of ideas at each rung.",
+      "goal_tags": ["strategy", "planning", "novelty"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "borrowed-machinery",
+      "name": "Borrowed Machinery",
+      "category": "analogy-transfer",
+      "mechanics": "Pick an unrelated device or system, describe its core mechanism in one sentence, then force-map each of its working parts onto your own problem in turn.",
+      "goal_tags": ["feature", "novelty"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "distant-cousin",
+      "name": "Distant Cousin",
+      "category": "analogy-transfer",
+      "mechanics": "Name a field with zero obvious connection to your problem, imagine a practitioner from that field solving it, and translate their answer literally rather than metaphorically.",
+      "goal_tags": ["novelty", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "pattern-transplant",
+      "name": "Pattern Transplant",
+      "category": "analogy-transfer",
+      "mechanics": "Name the abstract pattern behind a solution you admire elsewhere, strip it of its original context in one sentence, then regrow that bare pattern inside your own problem.",
+      "goal_tags": ["feature", "novelty", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "rivals-playbook",
+      "name": "Rival's Playbook",
+      "category": "analogy-transfer",
+      "mechanics": "Assume your fiercest competitor solved this brilliantly last year, then reverse-engineer, move by move, what they must have done.",
+      "goal_tags": ["strategy", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "old-craft-new-problem",
+      "name": "Old Craft, New Problem",
+      "category": "analogy-transfer",
+      "mechanics": "Pick a centuries-old trade or craft, name three of its traditional tools or rules of thumb, then apply each one literally to your current problem.",
+      "goal_tags": ["novelty", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "vanishing-budget",
+      "name": "Vanishing Budget",
+      "category": "limit-games",
+      "mechanics": "Shrink your resources to zero across ten imagined rounds, generating one workable idea that survives at each shrinking checkpoint.",
+      "goal_tags": ["planning", "feature", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "floor-raise",
+      "name": "Floor Raise",
+      "category": "limit-games",
+      "mechanics": "Set a minimum bar the solution must clear, generate ideas that clear it, then raise the bar by one deliberate notch and regenerate - repeat five times, discarding nothing, so each round's floor forces a different kind of idea than the last.",
+      "goal_tags": ["novelty", "strategy", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "one-rule-only",
+      "name": "One Rule Only",
+      "category": "limit-games",
+      "mechanics": "Pick a single non-negotiable rule the solution must obey no matter what, then generate every idea as if that rule were sacred and everything else were negotiable.",
+      "goal_tags": ["feature", "planning"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "token-auction",
+      "name": "Token Auction",
+      "category": "limit-games",
+      "mechanics": "Allocate exactly twelve tokens across the solution's parts before building anything, then strip three tokens from whichever part holds the most and generate the idea that recovers what that part lost.",
+      "goal_tags": ["feature", "planning", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "forbidden-word",
+      "name": "Forbidden Word",
+      "category": "limit-games",
+      "mechanics": "Ban the single word most central to how you have been describing the solution, then keep generating ideas about it without ever using that word again.",
+      "goal_tags": ["novelty", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "silent-ballot",
+      "name": "Silent Ballot",
+      "category": "perspective-rotation",
+      "mechanics": "Hold a mock anonymous ballot among five unnamed stakeholder archetypes, force each to name the one single feature they would keep if only one could survive, then mine every place their votes disagree.",
+      "goal_tags": ["strategy", "feature", "planning"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "time-capsule-return",
+      "name": "Time Capsule Return",
+      "category": "perspective-rotation",
+      "mechanics": "Imagine a specialist who last touched this exact problem ten years ago returning today, list everything about the current approach that would genuinely surprise them, then ideate on why each surprise never got questioned.",
+      "goal_tags": ["diagnosis", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "future-auditor",
+      "name": "Future Auditor",
+      "category": "perspective-rotation",
+      "mechanics": "Imagine an auditor reviewing this decision five years from now, then have them list what they would praise and what they would flag as a red flag today.",
+      "goal_tags": ["strategy", "diagnosis", "planning"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "the-understudy",
+      "name": "The Understudy",
+      "category": "perspective-rotation",
+      "mechanics": "Solve the problem exactly as the least senior, least resourced person on the team would have to, using only what is already at hand.",
+      "goal_tags": ["feature", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "two-rooms",
+      "name": "Two Rooms",
+      "category": "perspective-rotation",
+      "mechanics": "Split the group into two imagined rooms, one obsessed only with ambition and one obsessed only with risk, let each produce its own list independently, then merge.",
+      "goal_tags": ["strategy", "planning"],
+      "audience_tags": ["group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "midpoint-interpolation",
+      "name": "Midpoint Interpolation",
+      "category": "combination-mutation",
+      "mechanics": "Pick your two most different existing ideas, name three dimensions they differ on, then construct the literal midpoint idea on each dimension one at a time until a genuinely new fourth idea sits between them.",
+      "goal_tags": ["novelty", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "fragment-recombination",
+      "name": "Fragment Recombination",
+      "category": "combination-mutation",
+      "mechanics": "Break three existing ideas into their smallest components, pool every piece together, then reassemble the pool into new combinations blind to their origin.",
+      "goal_tags": ["novelty", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "mutation-chain",
+      "name": "Mutation Chain",
+      "category": "combination-mutation",
+      "mechanics": "Take one idea and change exactly one property, five times in a row, each change building on the previous mutant, keeping every intermediate version.",
+      "goal_tags": ["novelty", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "cross-breed-round",
+      "name": "Cross-Breed Round",
+      "category": "combination-mutation",
+      "mechanics": "Pair every idea on the table against every other idea exactly once, keeping only the pairings that produce something genuinely new.",
+      "goal_tags": ["novelty", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "organ-donor",
+      "name": "Organ Donor",
+      "category": "combination-mutation",
+      "mechanics": "Force your strongest idea to donate its single most essential part to your weakest idea, then generate what the weakest idea becomes with that transplant and what the strongest idea becomes without it.",
+      "goal_tags": ["feature", "novelty"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "part-by-part-sweep",
+      "name": "Part-by-Part Sweep",
+      "category": "structured-decomposition",
+      "mechanics": "List every distinct component or step inside the problem, then generate at least one idea targeting each piece individually before recombining.",
+      "goal_tags": ["feature", "planning", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "sequence-swap",
+      "name": "Sequence Swap",
+      "category": "structured-decomposition",
+      "mechanics": "List the steps of the current approach in their normal order, then swap two adjacent steps at a time all the way down the list, generating one idea for whatever new approach each swap makes possible.",
+      "goal_tags": ["planning", "feature", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "chain-of-custody",
+      "name": "Chain of Custody",
+      "category": "structured-decomposition",
+      "mechanics": "Map the full sequence from raw need to finished outcome, then generate one intervention idea at each handoff point along that chain.",
+      "goal_tags": ["planning", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "layer-peel",
+      "name": "Layer Peel",
+      "category": "structured-decomposition",
+      "mechanics": "Peel the problem into surface, mechanism, and root-cause layers, then generate a distinct batch of ideas for each layer in turn.",
+      "goal_tags": ["diagnosis", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "input-output-audit",
+      "name": "Input/Output Audit",
+      "category": "structured-decomposition",
+      "mechanics": "List every input feeding the current approach and every output it produces, then generate an idea that changes exactly one input or output at a time.",
+      "goal_tags": ["feature", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "metric-hijack",
+      "name": "Metric Hijack",
+      "category": "provocation-inversion",
+      "mechanics": "Name the one measure of success you are least optimizing for right now, then generate ideas as if only that neglected measure mattered, ignoring every metric you actually care about - repeat for two more neglected measures in turn.",
+      "goal_tags": ["strategy", "diagnosis", "novelty"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "confession-chain",
+      "name": "Confession Chain",
+      "category": "provocation-inversion",
+      "mechanics": "Make the current approach confess out loud to its single biggest flaw, generate the fix that confession implies, then make the fixed version confess its own next flaw - chain five confessions deep.",
+      "goal_tags": ["diagnosis", "unstuck", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "foreign-tongue",
+      "name": "Foreign Tongue",
+      "category": "provocation-inversion",
+      "mechanics": "Restate the current approach's core assumption in the vocabulary of a totally unrelated profession - legal contract language, sports commentary, a recipe - then mine whatever that translation makes sound absurd or suddenly missing.",
+      "goal_tags": ["diagnosis", "novelty", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "loud-wrong-answer",
+      "name": "Loud Wrong Answer",
+      "category": "provocation-inversion",
+      "mechanics": "State the single most confidently wrong solution you can imagine, explain in detail why it fails, then mine that explanation for the real fix.",
+      "goal_tags": ["unstuck", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "opposite-day",
+      "name": "Opposite Day",
+      "category": "provocation-inversion",
+      "mechanics": "Solve the exact reverse of your stated goal for several rounds, then translate every reversal back into a forward move.",
+      "goal_tags": ["novelty", "unstuck"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "overheard-argument",
+      "name": "Overheard Argument",
+      "category": "sensory-narrative",
+      "mechanics": "Write the two-sided argument you would overhear between a future fan and a future critic of this idea, word for word, then mine every specific complaint and every specific defense for a concrete idea now.",
+      "goal_tags": ["novelty", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "taste-test",
+      "name": "Taste Test",
+      "category": "sensory-narrative",
+      "mechanics": "Describe the exact flavor this idea would have if it were a dish - name the dish, name the clashing ingredient inside it - then mine that specific clash for the place the idea is quietly inconsistent with itself.",
+      "goal_tags": ["novelty", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "walk-the-floor",
+      "name": "Walk the Floor",
+      "category": "sensory-narrative",
+      "mechanics": "Narrate physically walking through the solution as if it already existed - what you would see, touch, hear, and exactly where you would get stuck.",
+      "goal_tags": ["feature", "diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "one-line-pitch-marathon",
+      "name": "One-Line Pitch Marathon",
+      "category": "sensory-narrative",
+      "mechanics": "Write twenty different one-sentence pitches for the same idea back to back, never repeating a structure, then mine the outliers for what they reveal.",
+      "goal_tags": ["novelty", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "warning-label",
+      "name": "Warning Label",
+      "category": "sensory-narrative",
+      "mechanics": "Write the blunt product warning label this idea would legally need, one deadpan line per real risk, then mine each line for the specific design change that would let you delete that exact warning.",
+      "goal_tags": ["diagnosis", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "divergent"
+    },
+    {
+      "id": "cluster-and-name",
+      "name": "Cluster & Name",
+      "category": "narrowing",
+      "mechanics": "Group the raw idea list into affinity clusters by underlying theme, name each cluster in three words, then pick the strongest representative from each cluster.",
+      "goal_tags": ["planning", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "effort-payoff-plot",
+      "name": "Effort/Payoff Plot",
+      "category": "narrowing",
+      "mechanics": "Plot every surviving idea on a two-axis grid of effort required against expected payoff, then commit to everything landing in the low-effort, high-payoff quadrant first.",
+      "goal_tags": ["planning", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "now-later-buckets",
+      "name": "Now Bucket / Later Bucket",
+      "category": "narrowing",
+      "mechanics": "Sort every remaining idea into exactly two buckets - doable this cycle, everything else - and commit only to the first bucket.",
+      "goal_tags": ["planning"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "single-vote-each",
+      "name": "Single Vote Each",
+      "category": "narrowing",
+      "mechanics": "Give every participant exactly one vote per idea, no vote-stacking allowed, then rank the survivors by raw vote count.",
+      "goal_tags": ["planning", "strategy"],
+      "audience_tags": ["group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "necessary-useful-frivolous",
+      "name": "Necessary/Useful/Frivolous Split",
+      "category": "narrowing",
+      "mechanics": "Sort every idea into must-have, nice-to-have, or drop, then commit resources only to the must-have column for now.",
+      "goal_tags": ["planning"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "elimination-bracket",
+      "name": "Elimination Bracket",
+      "category": "narrowing",
+      "mechanics": "Pair ideas head-to-head in a single-elimination bracket, declaring one winner per round out loud until a single idea remains champion.",
+      "goal_tags": ["planning", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "ship-it-test",
+      "name": "Ship-It Test",
+      "category": "narrowing",
+      "mechanics": "For each surviving idea, ask only whether a rough version could ship in the next cycle - keep every yes, park every no.",
+      "goal_tags": ["planning", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "weighted-criteria-score",
+      "name": "Weighted Criteria Score",
+      "category": "narrowing",
+      "mechanics": "Pick the three criteria that matter most right now, score every idea one to five on each, then rank by total weighted score.",
+      "goal_tags": ["planning", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "regret-minimization",
+      "name": "Regret Minimization",
+      "category": "narrowing",
+      "mechanics": "For each surviving idea, ask which choice you would regret not having tried five years from now, then rank by regret weight.",
+      "goal_tags": ["planning", "personal"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "last-idea-standing",
+      "name": "The Last Idea Standing",
+      "category": "narrowing",
+      "mechanics": "Remove ideas one at a time, weakest first, explaining the reason out loud, until only the ideas you would actually defend remain.",
+      "goal_tags": ["planning", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "convergent"
+    },
+    {
+      "id": "pre-mortem-walk",
+      "name": "Pre-Mortem Walk",
+      "category": "pressure-test",
+      "mechanics": "Imagine the surviving idea failed spectacularly a year from now, then write the postmortem explaining exactly what went wrong.",
+      "goal_tags": ["diagnosis", "planning"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "weakest-link-audit",
+      "name": "Weakest Link Audit",
+      "category": "pressure-test",
+      "mechanics": "Name every dependency the idea relies on, then identify out loud which single one is most likely to break first.",
+      "goal_tags": ["diagnosis"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "skeptical-reviewer",
+      "name": "Skeptical Reviewer",
+      "category": "pressure-test",
+      "mechanics": "Voice the harshest fair-minded critic you know reviewing this idea line by line, then answer each of their objections in turn.",
+      "goal_tags": ["diagnosis", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "wrong-order-test",
+      "name": "Wrong Order Test",
+      "category": "pressure-test",
+      "mechanics": "Scramble the order of the idea's own steps at random, walk through the scrambled sequence as if someone actually followed it that way, and note every place a hidden dependency on the original order breaks.",
+      "goal_tags": ["diagnosis", "feature"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "cost-of-being-wrong",
+      "name": "Cost of Being Wrong",
+      "category": "pressure-test",
+      "mechanics": "Estimate exactly what it costs if the idea's core assumption turns out to be false, and whether that cost is recoverable.",
+      "goal_tags": ["diagnosis", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "neighbor-complaint",
+      "name": "Neighbor Complaint",
+      "category": "pressure-test",
+      "mechanics": "Imagine the idea succeeding completely, then write the formal complaint letter from whichever party benefits least, point by point, and answer each point in the letter before moving on.",
+      "goal_tags": ["diagnosis", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "fine-print-read",
+      "name": "The Fine-Print Read",
+      "category": "pressure-test",
+      "mechanics": "Rewrite the idea's promise as a contract clause, then read it back aloud as the person who has to live with the fine print.",
+      "goal_tags": ["diagnosis", "personal"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "judge-swap",
+      "name": "Judge Swap",
+      "category": "pressure-test",
+      "mechanics": "Recruit an imagined judge who preferred the runner-up, then let that judge argue for the runner-up using only the criteria the winning idea itself was justified by, and record every criterion where the argument actually lands.",
+      "goal_tags": ["diagnosis", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "sabotage-budget",
+      "name": "Sabotage Budget",
+      "category": "pressure-test",
+      "mechanics": "Give an imagined saboteur exactly three moves and nothing else to break the idea, decide which three moves they would spend given how limited that budget is, then patch only those three.",
+      "goal_tags": ["diagnosis", "feature", "strategy"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    },
+    {
+      "id": "silent-objection-draft",
+      "name": "Silent Objection Draft",
+      "category": "pressure-test",
+      "mechanics": "Write down the objection you suspect someone in the room is holding back but has not said aloud, then answer it directly.",
+      "goal_tags": ["diagnosis", "personal"],
+      "audience_tags": ["solo", "group"],
+      "phase": "critique"
+    }
+  ]
+}

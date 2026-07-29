@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "node-web": {
+      "scaffolds": ["playwright.config.ts", "tests/"],
+      "install_cmd_template": "{pm_install_dev} @playwright/test && {pm_exec} playwright install --with-deps",
+      "probe_cmd": "node -e \"require.resolve('@playwright/test')\"",
+      "reporter_flags": ["--reporter=json"]
+    },
+    "node-cli": {
+      "scaffolds": [],
+      "install_cmd_template": "true # node-cli: node:test ships with the Node runtime -- nothing to install",
+      "probe_cmd": "node -e \"require('node:test')\"",
+      "reporter_flags": ["--test-reporter=tap"]
+    },
+    "python-pytest": {
+      "scaffolds": ["requirements-dev.txt", ".venv/"],
+      "install_cmd_template": "python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt",
+      "probe_cmd": ".venv/bin/pytest --version",
+      "reporter_flags": ["--junitxml=report.xml"]
+    }
+  }
+}

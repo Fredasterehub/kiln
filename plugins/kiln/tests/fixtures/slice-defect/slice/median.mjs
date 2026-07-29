@@ -1,5 +1,0 @@
-export function median(xs) {
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m] + s[m + 1]) / 2;
-}

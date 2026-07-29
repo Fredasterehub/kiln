@@ -3,7 +3,7 @@
   "name": "kiln",
   "displayName": "Kiln",
   "version": "3.1.8",
-  "description": "Multi-model software creation pipeline. A conversation becomes running, tested software — an interactive brainstorm, then an autonomous walk from law to build to validation: GPT-5.6 writes the code, Claude shapes the plans and interfaces, and each family inspects the work of the other.",
+  "description": "Multi-model software creation pipeline. A conversation becomes running, tested software — an interactive brainstorm, then an autonomous build: GPT-5.6 writes the code, Claude shapes the plans and interfaces, and each family inspects the work of the other.",
   "author": {
     "name": "Fredastere",
     "url": "https://github.com/Fredasterehub"
@@ -13,9 +13,6 @@
   "commands": [
     "./commands/kiln-fire.md",
     "./commands/kiln-doctor.md"
-  ],
-  "agents": [
-    "./agents/da-vinci.md"
   ],
   "keywords": [
     "pipeline",
