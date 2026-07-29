@@ -77,3 +77,9 @@ run-data/
 # One-README ruling (S4): the root README is the single public truth — the plugin README
 # stays on disk, untracked
 /plugins/kiln/README.md
+
+# Maintainer tooling lives in the build repo, not the storefront (operator ruling 2026-07-29).
+# Copied in at release time, never tracked.
+/release.sh
+/validate.sh
+/.github/
