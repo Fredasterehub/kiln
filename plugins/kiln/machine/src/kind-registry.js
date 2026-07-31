@@ -214,7 +214,7 @@ const PAYLOAD_VALIDATORS = Object.freeze({
     },
   }),
   'onboarding-decision': Object.freeze({
-    // product/onboarding/interview.md's own Step 7, `agents/maestro.md`'s
+    // product/onboarding/interview.md's own Step 7, `product/charter.md`'s
     // Bash law point 8 — the one sanctioned event, exactly:
     // `{event:"settings_interview_completed", preset, telemetry_consent}`.
     decision(payload) {

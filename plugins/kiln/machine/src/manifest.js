@@ -227,7 +227,7 @@ function isPlainObject(value) {
 }
 
 // assertCanonicalRelPathSet(relPaths) — the Maximal-confrontation call edge:
-// `build-manifest` is only ever invoked, per `agents/maestro.md`'s Bash law
+// `build-manifest` is only ever invoked, per `product/charter.md`'s Bash law
 // point 1 and `product/architecture/flow.md` step 5, over a candidate's own
 // draft directory with EXACTLY the five canonical content artifacts
 // declared — never a caller-chosen subset. A shrunk `relPaths` set would

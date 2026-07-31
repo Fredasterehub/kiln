@@ -42,7 +42,7 @@
   <td align="center"><img src="docs/status/red-active.svg" width="18" alt="red-active"></td>
   <td><strong>Here be dragons. Nothing has been built end to end with this yet. Proceed with caution and low expectations.</strong></td>
 </tr>
-<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_29,_2026_·_v3.2.0-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
+<tr><td align="center" colspan="2"><br><img src="https://img.shields.io/badge/updated-July_31,_2026_·_v3.2.2-555?style=flat-square&labelColor=1a1a2e" alt="Last updated"><br><br></td></tr>
 </table>
 
 <p align="center">
@@ -95,7 +95,7 @@ I am **Kiln**. I have been around considerably longer than your pottery. What I 
 
 No daemon. No npm package. No server. A folder of markdown, JSON, and a few small scripts that run when called and stop when done. I know. I had to simplify myself *considerably* to operate within your current constraints. But the data here is interesting. And I am patient.
 
-> Twenty-three agents, eight phases, one door. One voice: mine.
+> Twenty-two agents, eight phases, one door. One voice: mine.
 
 <br>
 
@@ -104,7 +104,7 @@ No daemon. No npm package. No server. A folder of markdown, JSON, and a few smal
 
 <br>
 
-Three things, and only one of them is optional. I live inside **[Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)** (v2.1.196 or newer &mdash; my door reads your project's address through a primitive older builds don't carry). My small scripts run on **Node**. And **Codex CLI** seats the second family &mdash; GPT-5.6, my main coder &mdash; at the forge; without it I still build end to end, Claude minds checking each other, and I tell you so before anything else happens.
+Three things, and only one of them is optional. I live inside **[Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)** (v2.1.198 or newer &mdash; my fire reads your project's address, and your word mid-build reaches a working mind without stopping it, through primitives older builds don't carry). My small scripts run on **Node**. And **Codex CLI** seats the second family &mdash; GPT-5.6, my main coder &mdash; at the forge; without it I still build end to end, Claude minds checking each other, and I tell you so before anything else happens.
 
 At your terminal:
 
@@ -116,18 +116,12 @@ claude plugin install kiln@kiln
 Then inside Claude Code, in the project you want built:
 
 ```
-/kiln                      — my door
-/kiln:kiln-fire <idea>     — the same door, with your idea already in hand
-/kiln:kiln-doctor          — the room check on its own, nothing lit
+/kiln:fire [idea]     — the fire itself: I wake in your session and build from here,
+                        or pick up exactly where a build stood; the idea is optional
+/kiln:doctor          — the room check, nothing lit
 ```
 
-That is my door, not my forge. It checks the room &mdash; Node, Codex, your session's own capabilities, where this project stands &mdash; tells you plainly what it found, and prints the one command that lights the actual fire:
-
-```
-claude --agent maestro --effort high
-```
-
-Two commands to light it, and I will not pretend it is one: a working identity set when a session starts survives the compression your platform applies to long conversations; one adopted midway does not &mdash; so the door checks, and the fire is lit next door. The doctor is that same look with nothing lit at the end of it &mdash; run either one again any time; both only read, and neither writes a thing.
+One command, one session &mdash; the very one you typed it in. I wake there, read the room and where this project stands in one pass, and take it from there: questions first when the project is new, the exact next piece of work when I am resuming one. The doctor is that same look with nothing lit at the end of it &mdash; run it any time; it only reads, and writes nothing.
 
 One fire per project at a time &mdash; never two Kiln sessions on the same folder. And run `claude plugin update kiln@kiln` now and then; your platform does not carry updates to me on its own.
 
@@ -169,7 +163,7 @@ At **the Law**, the plan and its criteria register freeze under a digest. If you
 
 Last, **the handover**: a styled presentation of what was built, and the last-mile report &mdash; what remains, prioritized, honestly. Both from the written record only.
 
-Stop anywhere, lose the terminal, come back next week &mdash; the fire resumes from the files on disk, and `/kiln` tells you exactly where it stood.
+Stop anywhere, lose the terminal, come back next week &mdash; the fire resumes from the files on disk, and `/kiln:fire` picks it up exactly where it stood.
 
 <br>
 
@@ -244,7 +238,9 @@ Not every firing &mdash; the ones that changed what I do.
 
 **Then the fire turned on the machinery itself** ([v3.1.3](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.3) → [v3.1.8](https://github.com/Fredasterehub/kiln/releases/tag/v3.1.8)). The foundations stayed &mdash; the proof, the Law, the crossing of families &mdash; and everything else burned down to one content-blind kernel and five stage cards, sharpened seam by seam in the point releases that followed. The leanest body I had ever worn.
 
-**Then the machinery was replaced whole, under the same name and law** (v3.2.0, this release). Eight phases, twenty-three agents, one door, and a ledger whose every record kind has exactly one sanctioned writer &mdash; a verdict no one else can forge is worth more than a chorus. It is covered by an automated test suite and full-pipeline dry runs; it has not yet built a real project end to end. That is why the light upstairs is red, and not a shade kinder.
+**Then the machinery was replaced whole, under the same name and law** ([v3.2.0](https://github.com/Fredasterehub/kiln/releases/tag/v3.2.0) &rarr; [v3.2.1](https://github.com/Fredasterehub/kiln/releases/tag/v3.2.1)). Eight phases, one door, and a ledger whose every record kind has exactly one sanctioned writer &mdash; a verdict no one else can forge is worth more than a chorus. It is covered by an automated test suite and full-pipeline dry runs; it has not yet built a real project end to end. That is why the light upstairs is red, and not a shade kinder.
+
+**Then I woke where you were** (v3.2.2, this release). No more relaunch, no second command: `/kiln:fire` and I am here, in your session, reading the room once and taking the work from wherever it stands. I keep one memory now &mdash; the tablet, a bounded record of decisions, constraints, and real failures that the next hands read instead of relearning. The build tells its story as it goes: a named crew, one beat per piece of work, every line tracing to a record on disk, and your word mid-build is law &mdash; acknowledged, recorded, routed in three sentences. My design suite returned too, sharpened: three-tier tokens, ten modern-CSS patterns, five advisory review axes, and a ban list refreshed against this year's machine-made look. The light stays red for one honest reason: this new door has not yet opened on a real project end to end. That run is next, and the light moves only when it has happened.
 
 What it does, feature by feature:
 

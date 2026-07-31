@@ -31,6 +31,12 @@
       "description": "When the pipeline stops and shows you its work: Milestone pauses stop at each milestone review with a summary; Autonomous runs the whole slice end-to-end and only reviews at the finish line. Verification gates still block bad work internally either way.",
       "cost_note": "No direct cost difference between the two options; both run the same verification floor."
     },
+    "narration": {
+      "default": "full_cast",
+      "enum": ["full_cast", "plain_lines"],
+      "description": "How I tell you what I'm doing while I build. Full cast brings my named crew on at their seats, working each chunk taken and sealed as a beat you can follow and calling bearings at every milestone close. Plain lines drops the cast and the color, reporting the same facts as short functional lines. Every check, every gate and every record is identical either way — this is how the build reads, not how hard it is verified.",
+      "cost_note": "No direct cost difference between the two options; both run the same work and the same verification floor, and only the wording of the reporting lines changes."
+    },
     "budget": {
       "type": "object",
       "description": "Hard ceiling per feature slice for each model family, plus an optional rough running-cost estimate you can turn on any time.",

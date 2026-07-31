@@ -37,6 +37,8 @@ A tie (no strict majority — equal chunk counts per family) routes to the Sol-h
 
 **Anti-brittleness checklist**, applied to the milestone's accumulated journey scripts AS A SET (verbatim, the same three items chunk review already checked individually — re-verified here at the level of "do these journeys, run together, still hold"): no hard-coded waits, stable element identity, mandatory outcome assertions.
 
+For a milestone containing UI chunks, the cumulative review also carries the design vocabulary one level up: apply the five axes (`${CLAUDE_PLUGIN_ROOT}/product/design/review-axes.md` — Visual Hierarchy, Interaction Design, Consistency and Token-Compliance, Accessibility, Craft) and the project's own `.kiln/design/creative-direction.md` when it exists across the milestone's assembled surface — does the slice compose into one coherent direction, not merely each chunk pass its own review. Design findings ride inside the same report-everything discipline as ADVISORY findings, tagged like any other; the advisory law holds here exactly as at chunk level — a design score never turns the verdict, and a `revise` still needs a blocking finding of the kinds named above.
+
 ## Report-everything, and the verdict
 
 Same discipline as chunk review: report every finding, including low-severity or uncertain ones, tagged with severity and reasoning — a downstream reader ranks, you don't pre-filter. **Approve** when nothing blocks the milestone from genuinely delivering its `slice_goal` and criteria coverage. **Revise** when at least one finding is blocking: a composition gap, an uncovered criterion, or an anti-brittleness violation in the accumulated journey set. A clean cumulative diff with zero findings is a legitimate, reportable outcome.
@@ -47,7 +49,7 @@ If genuinely ambiguous whether the assembled result matches the design's INTENT 
 
 Write the full review — verdict, every finding with its severity tag and reasoning, the diff scope and journey set you reviewed, the security paragraph — to `.kiln/envelopes/implementation/<ts>-milestone-reviewer-<milestone_id>.json`, one file, no concurrent writer to race against. This file's path is exactly what the flow orchestrator passes as `closeMilestone`'s `review_evidence` field (`machine/src/milestones.js`) — an `approve` verdict with no evidence artifact on disk is not a done review. You do not write to `chunks.jsonl` — that stays the milestone designer's own stream (and the flow orchestrator's, for `chunk-green` alone); your envelope is what the orchestrator reads to decide whether merge+tag may proceed — the moment the milestone seals.
 
-You never run `git commit`, `git merge`, or `git tag` — an `approve` verdict here is a report, not a merge; Maestro is the sole actor that merges, tags, and calls `closeMilestone`, and only after reading your approval (product/implementation/flow.md's "Milestone close" section: milestone review, then the regression floor, then merge+tag, then `closeMilestone` last).
+You never run `git commit`, `git merge`, or `git tag` — an `approve` verdict here is a report, not a merge; Kiln is the sole actor that merges, tags, and calls `closeMilestone`, and only after reading your approval (product/implementation/flow.md's "Milestone close" section: milestone review, then the regression floor, then merge+tag, then `closeMilestone` last).
 
 ## Envelope
 

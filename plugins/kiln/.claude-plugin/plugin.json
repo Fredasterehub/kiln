@@ -11,8 +11,8 @@
   "repository": "https://github.com/Fredasterehub/kiln",
   "license": "MIT",
   "commands": [
-    "./commands/kiln-fire.md",
-    "./commands/kiln-doctor.md"
+    "./commands/fire.md",
+    "./commands/doctor.md"
   ],
   "keywords": [
     "pipeline",

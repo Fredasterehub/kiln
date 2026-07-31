@@ -235,7 +235,7 @@ function anonymizeBundle(srcDir, destDir, files) {
 }
 
 // CLI entrypoint: Maximal confrontation's own mechanical mid-protocol steps
-// (product/architecture/flow.md steps 2 and 6) run "Maestro runs
+// (product/architecture/flow.md steps 2 and 6) run "Kiln runs
 // machine/src/anonymize.js's anonymizeBundle(...)" — a Bash-only orchestrator
 // has no way to call this in-process. `anonymize-bundle <srcDir> <destDir>`
 // reads the `files` relative-path array via stdin (the same array

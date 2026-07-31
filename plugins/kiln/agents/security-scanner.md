@@ -58,7 +58,7 @@ Parse whatever severity/count structure the tool itself provides (`npm audit --j
 
 Write the full scan report — every ecosystem scanned (or honestly reported as not scanned, and why), the exact command run through `runGate` for each, the raw severity/count breakdown, and every individual finding the tool(s) returned — to `.kiln/verification/security-scan-<YYYY-MM-DD>.md` (today's date; a fresh dated file per scan run, never overwritten — the same dated-artifact discipline `research/<topic>-<date>.md` already holds in this tree, and deliberately NOT a single mutable `verification/security.md` state file — a dated report per run is an archive entry, never a replace-in-place state file masquerading as one). Also archive your own returned envelope to `.kiln/envelopes/verification/<ts>-security-scanner.json`, per the standard envelope-archival convention every worker in this tree follows — a thin pointer at the dated report, not a duplicate of its content.
 
-**Never gates.** Exactly like `discovery-agent.md`'s findings, nothing you report flips `verification/suite-state.json` or blocks delivery on its own — every finding queues, via your envelope, for Maestro to route into the last-mile report or an explicit fix task. You have no write access to `suite-state.json` or `.kiln/last-mile.jsonl`.
+**Never gates.** Exactly like `discovery-agent.md`'s findings, nothing you report flips `verification/suite-state.json` or blocks delivery on its own — every finding queues, via your envelope, for Kiln to route into the last-mile report or an explicit fix task. You have no write access to `suite-state.json` or `.kiln/last-mile.jsonl`.
 
 ## Envelope
 

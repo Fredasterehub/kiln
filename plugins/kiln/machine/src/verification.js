@@ -659,8 +659,8 @@ function recordAffected(treeRoot, entries) {
 // here — and records the resulting {journey_id, status, duration_ms,
 // gate_id} straight through recordRun, in a single call, passing the SAME
 // ledgerPath through so recordRun's own evidence-binding check always finds
-// the record runGate just wrote. This is what lets Maestro's own narrowly-
-// scoped, named-CLI-only Bash (agents/maestro.md) drive the entire
+// the record runGate just wrote. This is what lets Kiln's own narrowly-
+// scoped, named-CLI-only Bash (product/charter.md) drive the entire
 // per-journey execution loop directly, the same way it already drives
 // milestones.js's create/record-chunk/close, rather than requiring a new
 // execution-only worker seat this build has no chartered agent for.
@@ -700,7 +700,7 @@ function runJourney(treeRoot, runId, journeyId, cmd, ledgerPath) {
 
 // CLI entrypoint (product/verification/flow.md's own "Bash, narrowly"
 // widening — the same named-machine-layer-CLI convention milestones.js/
-// phases.js already establish, so Maestro's phase-sequencing role can invoke
+// phases.js already establish, so Kiln's phase-sequencing role can invoke
 // these operations the identical way it invokes milestones.js's
 // create/record-chunk/close today, rather than reaching for an ad hoc
 // script). Every argument that is itself JSON (a criteria register, a

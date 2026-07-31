@@ -5,9 +5,9 @@
 // tools are `Read` only — it cannot write anything itself, by construction,
 // so it structurally cannot touch `architecture/protocol-record.md` or any
 // of the other four content artifacts even by accident. Its full verdict is
-// returned as response text to whoever spawned it (Maestro), which relays
+// returned as response text to whoever spawned it (Kiln), which relays
 // it here via Bash — one of the narrow, named machine-layer CLIs
-// `agents/maestro.md`'s "Bash is for machine-layer CLIs only" law permits,
+// `product/charter.md`'s "Bash is for machine-layer CLIs only" law permits,
 // never an ad-hoc file write. This module does not parse, summarize, or
 // interpret the verdict text it's given — it writes exactly what it
 // received, a mechanical relay, so no third mind stands between the

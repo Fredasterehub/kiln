@@ -1,6 +1,6 @@
 ---
 purpose: The scripted settings interview onboarding runs before any other phase starts.
-runs_in: Maestro's top-level session only.
+runs_in: Kiln's top-level session only.
 ---
 
 # The settings interview
@@ -9,10 +9,10 @@ runs_in: Maestro's top-level session only.
 
 `AskUserQuestion` exists only in the top-level session. No subagent, worker, or
 delegated task can call it — the interview runs in the main skill context,
-never a subagent. `agents/maestro.md`'s
+never a subagent. `product/charter.md`'s
 Do/route boundary otherwise sends anything that touches disk or costs more
 than a handful of tool calls to a worker; this file is the deliberate
-exception. **Maestro executes every step below directly, in its own turn. No
+exception. **Kiln executes every step below directly, in its own turn. No
 step here is delegated.**
 
 One fire per project at a time — never two Kiln sessions on the same folder.
@@ -50,7 +50,8 @@ interview with no change to this file.
 ### Rendering one knob panel
 
 For a flat knob (`facilitator`, `research_width`, `planning`, `reviews`,
-`checkpoints`, `telemetry_consent`, `blocking_preference`, `plan_review`):
+`checkpoints`, `telemetry_consent`, `blocking_preference`, `plan_review`,
+`narration`):
 
 1. **Question text** = `knobs.<key>.description`, verbatim.
 2. **Options** = one per entry in `knobs.<key>.enum`, in the array's own
@@ -65,9 +66,9 @@ For a flat knob (`facilitator`, `research_width`, `planning`, `reviews`,
      clause starting with that option's own label. Split on `; `, clause *i* (trailing
      period trimmed) is option *i*'s cost line.
    - **Every other knob** (`checkpoints`, `telemetry_consent`,
-     `blocking_preference`, `plan_review`) — show the **whole** `cost_note`
-     identically under every option of that question. None of these have a
-     cost differential between their options.
+     `blocking_preference`, `plan_review`, `narration`) — show the **whole**
+     `cost_note` identically under every option of that question. None of
+     these have a cost differential between their options.
    - A schema edit that adds a cost-differentiated option to a knob not on
      the four-item list above must also update this list.
 
@@ -87,10 +88,11 @@ procedure never reaches them.
 | `floor` | Standard (floor) | | `auto_proceed` | Auto-proceed |
 | `x3` | Reinforced ×3 | | `review` | Review the plan first |
 | `2` / `3` / `5` (research_width) | "2 workers" / "3 workers" / "5 workers" | | | |
+| `full_cast` | Full cast | | `plain_lines` | Plain lines |
 
 ## Step 0 — re-run check (skip the interview entirely if it already ran)
 
-Read the settings currently on disk with `settings.js read <treeRoot>` — Maestro's own call, invocation form in `agents/maestro.md`'s Bash law point 8, which is where every runtime command this document names is written out.
+Read the settings currently on disk with `settings.js read <treeRoot>` — Kiln's own call, invocation form in `product/charter.md`'s Bash law point 8, which is where every runtime command this document names is written out.
 `machine/src/scaffold.js` writes this file as `{}` at tree genesis (see its
 "settings.json — onboarding genesis" comment, `machine/src/scaffold.js:130-137`)
 — so **file existence alone never means the interview ran**; an empty object
@@ -107,6 +109,10 @@ schema order).
   twice.
 - Absent (including the empty `{}` genesis case) → proceed to Step 1.
 
+A key absent from an already-completed settings document — a knob added to the
+schema after that document was written — reads as its schema default, and the
+recap labels the default accordingly: no migration, and no re-ask.
+
 ## Step 1 — Panel 1: the preset question (always asked first)
 
 One `AskUserQuestion` call, one question, four options — the happy path is one
@@ -116,13 +122,14 @@ The preset **mechanics** (which knob values each preset sets) come from
 `machine/settings-schema.json`'s `presets` object — `custom` is `{}` (pure
 schema defaults; the operator is walked through every knob instead of
 accepting the defaults silently), `balanced`, `budget_solo`, and `max_rigor`
-are named partial overrides (`machine/settings-schema.json:99-118`), each
+are named partial overrides (`machine/settings-schema.json:105-123`), each
 resolved through `applySchema`. Those preset objects also carry `budget`
 values, and no step here asks about them: no panel offers
 a ceiling, no recap row shows one, and nothing meters spend.
 They are reserved schema defaults — never a cap I
 claim to enforce. `telemetry_consent`, `blocking_preference`, and
-`plan_review` are asked identically regardless of preset, in Step 4.
+`plan_review` are asked identically regardless of preset, in Step 4;
+`narration` follows in Step 4b, on the same terms.
 
 The **framing copy** below (what the operator reads to choose a preset) is
 not schema-owned — no preset-level `description`/`cost_note` exists in
@@ -186,7 +193,7 @@ refuses any `mode` value that is not `"full-cross-family"` or
 One `AskUserQuestion` call, four questions — the panel law's exact max — run
 identically on every path — after Step 1 for a preset pick, after Step 3 for
 Custom — and always before the recap. These four never appear in any
-preset's override object (`machine/settings-schema.json:99-114`): plan review
+preset's override object (`machine/settings-schema.json:104-125`): plan review
 and blocking preference sit outside the tunable knob set and are asked of you
 whichever preset you took, and telemetry is always asked separately, never
 folded into a preset. Floor lock is the fourth — the sovereignty escape hatch,
@@ -194,7 +201,7 @@ asked here directly and never offered as its own menu-visible tier.
 
 | Header: `Telemetry` | |
 |---|---|
-| **Question** | (from schema) `knobs.telemetry_consent.description`, `machine/settings-schema.json:64`. |
+| **Question** | (from schema) `knobs.telemetry_consent.description`, `machine/settings-schema.json:70`. |
 | ▶ **No** | Nothing is recorded. This is asked once; changing it later means hand-editing `telemetry_consent` in `.kiln/settings.json`, which `applySchema` clamps like any other read. |
 | **Yes** | Anonymous build stats, local only, saved as plain files under `.kiln/usage/` (`machine/src/telemetry.js`'s `recordEvent`/`status`/`purge`). Never your code, never your prompt text — and never off this machine. `.kiln/usage/` is plain files in your own project — read them, or delete the folder; nothing reconstructs it. |
 
@@ -202,11 +209,11 @@ The consent text lives at `machine/settings-schema.json`'s
 `telemetry_consent.description` and is rendered from there like every other
 knob — never improvised and never paraphrased.
 Sets `telemetry_consent` (schema default `false`,
-`machine/settings-schema.json:62`).
+`machine/settings-schema.json:68`).
 
 | Header: `Blocking` | |
 |---|---|
-| **Question** | (from schema) `knobs.blocking_preference.description`, `machine/settings-schema.json:70`. |
+| **Question** | (from schema) `knobs.blocking_preference.description`, `machine/settings-schema.json:76`. |
 | ▶ **Auto-remedy** | I try the fix myself first — the two model families work it out between them — and bring it to you only when it does not hold. |
 | **Advise me first** | I stop at every blocker and ask before I touch a remedy. |
 
@@ -214,7 +221,7 @@ Sets `blocking_preference` (schema default `auto_remedy`).
 
 | Header: `Plan review` | |
 |---|---|
-| **Question** | (from schema) `knobs.plan_review.description`, `machine/settings-schema.json:76`. |
+| **Question** | (from schema) `knobs.plan_review.description`, `machine/settings-schema.json:82`. |
 | ▶ **Auto-proceed** | Planning gives way to building the moment the plan is ready — the Law locks without stopping for your word. |
 | **Review the plan first** | I hold at the plan gate. You read the plan; the Law locks on your word, never before. |
 
@@ -222,7 +229,7 @@ Sets `plan_review` (schema default `auto_proceed`).
 
 | Header: `Floor lock` | |
 |---|---|
-| **Question** | (from schema) `knobs.floor_lock.description`, `machine/settings-schema.json:84` — rendered from the schema verbatim, never paraphrased and never copied here. |
+| **Question** | (from schema) `knobs.floor_lock.description`, `machine/settings-schema.json:90` — rendered from the schema verbatim, never paraphrased and never copied here. |
 | ▶ **No — floor stays absolute (recommended)** | The floor cannot be moved in this install, by anyone — the override key is never deployed, not merely set to false. |
 | **Yes — deploy the hand-editable override** | A documented config key exists and works, and every run that uses it prints a loud warning. For operators who tune my own machinery. |
 
@@ -237,8 +244,25 @@ caller that carries this interview's own provenance marker. Answering
 `override_verification_floor` on — that remains at its own schema default
 (`false`) until an operator hand-edits it afterward, at which point every
 run using it prints the loud warning `knobs.override_verification_floor`'s
-own `warn_message` names (`machine/settings-schema.json:93`), through the
+own `warn_message` names (`machine/settings-schema.json:99`), through the
 same clamps-reporting channel, never a second one.
+
+## Step 4b — always-asked panel: Narration
+
+One `AskUserQuestion` call, one question — the always-asked set's last
+member, in its own call because Step 4 already sits at the panel law's max.
+Run identically on every path, immediately after Step 4 and always before
+the recap; no preset carries a `narration` override, so this is asked
+whichever preset you took.
+
+| Header: `Narration` | |
+|---|---|
+| **Question** | (from schema) `knobs.narration.description` — rendered from the schema like every other knob, never copied here. |
+| ▶ **Full cast** | That description's own Full cast sentence, rendered as it stands. |
+| **Plain lines** | That description's own Plain lines sentence, rendered as it stands. |
+
+Sets `narration` (schema default `full_cast` — the full
+cast).
 
 ## Step 5 — persist to `.kiln/settings.json`
 
@@ -246,16 +270,16 @@ Do not write the operator's raw picks straight to disk, and do not run them
 through `applySchema`/`writeAtomic` by hand — `machine/src/settings.js`'s own
 `write` CLI is the sole validation path, so there is exactly one place that
 enforces defaults and bounds — never two (one native mechanism per
-constraint; `agents/maestro.md`'s Bash law point 8 and
-`product/onboarding/flow.md`'s own step (c) name this exact call as Maestro's
+constraint; `product/charter.md`'s Bash law point 8 and
+`product/onboarding/flow.md`'s own step (c) name this exact call as Kiln's
 sole-caller call once the interview closes — never a second validation path,
 `settings.js`'s own `write` command is the only place its floor-clamping
 runs):
 
-1. Build a plain picks object from Steps 1–4's answers, keyed exactly as
+1. Build a plain picks object from Steps 1–4b's answers, keyed exactly as
    `knobs`' top-level keys (`facilitator`, `research_width`, `planning`,
    `reviews`, `checkpoints`, `telemetry_consent`, `blocking_preference`,
-   `plan_review`, `floor_lock`) — and nothing else. `budget` never enters the
+   `plan_review`, `floor_lock`, `narration`) — and nothing else. `budget` never enters the
    picks object: no step asks for it, and I do not guess a ceiling on your
    behalf; `applySchema` resolves it from the preset, or from the schema
    default, without me. Never include `override_verification_floor` here — this
@@ -274,7 +298,7 @@ runs):
    say "Custom, tuned by hand" apart from "Balanced, as-is."
 4. Pass the merged object as this call's sole JSON-string argument:
    ```
-   settings.js write <treeRoot> '<json>' --source interview      (form: agents/maestro.md, Bash law point 8)
+   settings.js write <treeRoot> '<json>' --source interview      (form: product/charter.md, Bash law point 8)
    ```
    `write` loads `machine/settings-schema.json` itself
    (`settings.js`'s own `DEFAULT_SCHEMA_PATH`, `__dirname`-anchored — never a
@@ -326,6 +350,7 @@ not part of the tree any phase gate names; nothing downstream reads it.
 | Blocking | <label> | <knobs.blocking_preference.description> | |
 | Plan review | <label> | <knobs.plan_review.description> | |
 | Floor lock | <Locked | Unlocked> | <knobs.floor_lock.description> | |
+| Narration | <label> | <knobs.narration.description> | |
 ```
 
 "Floor lock"'s pick renders `settings.floor_lock` as **Locked** (`true`,
@@ -346,8 +371,8 @@ operator answered always say the same thing.
 ## Step 7 — ledger event
 
 Record completion through the closed-contract writer for this record kind —
-`kind-registry.js append onboarding-decision <treeRoot>`, Maestro's own call
-(form: `agents/maestro.md`, Bash law point 8) — with this object piped via
+`kind-registry.js append onboarding-decision <treeRoot>`, Kiln's own call
+(form: `product/charter.md`, Bash law point 8) — with this object piped via
 stdin:
 
 ```
@@ -380,14 +405,15 @@ the authoritative values, defaults, and enums.
 | `planning` | enum `['standard','deep_scrutiny','maximal_confrontation']`, default `'standard'` (`machine/settings-schema.json:16-21`) | |
 | `reviews` | enum `['floor','x3','x5']`, default `'floor'` (`machine/settings-schema.json:22-27`) | `'floor'` is the verification-never-scales-down minimum — `applySchema` cannot resolve below it |
 | `checkpoints` | enum `['milestone_pauses','autonomous']`, default `'milestone_pauses'` (`machine/settings-schema.json:28-33`) | The one question Panel 3 asks |
-| `budget.claude_ceiling_usd` | `nullable: true, floor: 0`, default `null` (`machine/settings-schema.json:39-45`) | `null` = no ceiling, a first-class value (`machine/src/settings.js:95-100`), never an error state. Reserved: no panel asks for it, and no ceiling is enforced today |
-| `budget.codex_ceiling_usd` | `nullable: true, floor: 0`, default `null` (`machine/settings-schema.json:46-52`) | Reserved on the same terms as the Claude ceiling; never exercised by the pipeline, and never exercised at all in degraded-Claude-only mode |
-| `budget.budget_report` | enum `[true,false]`, default `false` (`machine/settings-schema.json:53-58`) | Reserved: never asked, and no cost readout renders today |
-| `telemetry_consent` | enum `[true,false]`, default `false` (`machine/settings-schema.json:61-66`) | Opt-in — off unless you say yes, asked in Step 4 |
-| `blocking_preference` | enum `['auto_remedy','advise_me']`, default `'auto_remedy'` (`machine/settings-schema.json:67-72`) | Asked on every path, in Step 4; no preset overrides it |
-| `plan_review` | enum `['auto_proceed','review']`, default `'auto_proceed'` (`machine/settings-schema.json:73-78`) | Asked on every path, in Step 4; no preset overrides it |
-| `floor_lock` | enum `[true,false]`, default `true`, `interview_only: true` (`machine/settings-schema.json:79-86`) | Only this interview's write call (Step 5, `{ source: 'interview' }`) can set it `false`; every other caller is clamped back to `true` |
-| `override_verification_floor` | enum `[true,false]`, default `false`, `locked_by: 'floor_lock'` (`machine/settings-schema.json:87-96`) | Not deployed at all while `floor_lock` is `true` — absent from `settings.json`, not merely `false`; never asked by this interview directly, only enabled for hand-editing once `floor_lock` is `false` |
+| `budget.claude_ceiling_usd` | `nullable: true, floor: 0`, default `null` (`machine/settings-schema.json:45-51`) | `null` = no ceiling, a first-class value (`machine/src/settings.js:95-100`), never an error state. Reserved: no panel asks for it, and no ceiling is enforced today |
+| `budget.codex_ceiling_usd` | `nullable: true, floor: 0`, default `null` (`machine/settings-schema.json:52-58`) | Reserved on the same terms as the Claude ceiling; never exercised by the pipeline, and never exercised at all in degraded-Claude-only mode |
+| `budget.budget_report` | enum `[true,false]`, default `false` (`machine/settings-schema.json:59-64`) | Reserved: never asked, and no cost readout renders today |
+| `telemetry_consent` | enum `[true,false]`, default `false` (`machine/settings-schema.json:67-72`) | Opt-in — off unless you say yes, asked in Step 4 |
+| `blocking_preference` | enum `['auto_remedy','advise_me']`, default `'auto_remedy'` (`machine/settings-schema.json:73-78`) | Asked on every path, in Step 4; no preset overrides it |
+| `plan_review` | enum `['auto_proceed','review']`, default `'auto_proceed'` (`machine/settings-schema.json:79-84`) | Asked on every path, in Step 4; no preset overrides it |
+| `floor_lock` | enum `[true,false]`, default `true`, `interview_only: true` (`machine/settings-schema.json:85-92`) | Only this interview's write call (Step 5, `{ source: 'interview' }`) can set it `false`; every other caller is clamped back to `true` |
+| `override_verification_floor` | enum `[true,false]`, default `false`, `locked_by: 'floor_lock'` (`machine/settings-schema.json:93-102`) | Not deployed at all while `floor_lock` is `true` — absent from `settings.json`, not merely `false`; never asked by this interview directly, only enabled for hand-editing once `floor_lock` is `false` |
+| `narration` | enum `['full_cast','plain_lines']`, default `'full_cast'` (`machine/settings-schema.json:34-39`) | The story's depth — asked on every path, in Step 4b; no preset overrides it |
 | `preset` | not schema-owned; bookkeeping only | Set by this interview (Step 5.5), preserved by `applySchema` as an unknown key |
 
 All other keys already present in `settings.json` (internal seat overrides,

@@ -54,7 +54,7 @@ function sha256Of(buf) {
 // which case the existing tree is removed and rebuilt fresh.
 //
 // opts.routingConfigPath (required): source path to the current dated
-// routing config (e.g. machine/routing/routing-2026-07-27-4.json) to copy
+// routing config (e.g. machine/routing/routing-2026-07-31-5.json) to copy
 // into the new tree's routing/ directory as its genesis dated config.
 //
 // Returns { created: [absolute paths, in creation order] }.
@@ -138,18 +138,18 @@ function scaffoldTree(targetRoot, opts = {}) {
   fs.writeFileSync(handoffPath, '# Handoff\n\nOnboarding in progress. No phase has completed yet.\n');
   created.push(handoffPath);
 
-  // ledger.jsonl — Maestro-only global event log genesis record.
+  // ledger.jsonl — Kiln-only global event log genesis record.
   const ledgerPath = path.join(root, 'ledger.jsonl');
   writeGenesisRecord(ledgerPath);
   created.push(ledgerPath);
 
-  // last-mile.jsonl — Maestro-only parking stream.
+  // last-mile.jsonl — Kiln-only parking stream.
   const lastMilePath = path.join(root, 'last-mile.jsonl');
   writeGenesisRecord(lastMilePath);
   created.push(lastMilePath);
 
   // vision/transcript.jsonl — the long brainstorm dialogue stream. NEVER
-  // projected into Maestro; genesis record only establishes
+  // projected into Kiln; genesis record only establishes
   // the stream, the facilitator is its sole writer from here.
   const transcriptPath = path.join(root, 'vision', 'transcript.jsonl');
   writeGenesisRecord(transcriptPath);

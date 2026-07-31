@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "calibrated": "2026-07-31",
+  "revision": 5,
+  "seats": {
+    "brainstorm_facilitator": {
+      "model": "opus-5",
+      "alt": "fable-5"
+    },
+    "research_chief": {
+      "model": "opus-5",
+      "effort": "high"
+    },
+    "researcher": {
+      "model": "sonnet-5",
+      "effort": "high"
+    },
+    "plan_draft": {
+      "model": "fable-5",
+      "fallback": "opus-5"
+    },
+    "coverage_check": {
+      "model": "gpt-5.6-sol",
+      "effort": "high",
+      "scope": "scoped"
+    },
+    "implementer": {
+      "model": "gpt-5.6-sol"
+    },
+    "implementer_ui_creative": {
+      "model": "opus-5"
+    },
+    "chunk_review_of_gpt_work": {
+      "model": "sonnet-5"
+    },
+    "chunk_review_of_claude_work": {
+      "model": "gpt-5.6-sol",
+      "effort": "medium",
+      "scope": "scoped"
+    },
+    "milestone_review": "cross-family",
+    "agreement_pass": {
+      "models": [
+        "fable-5",
+        "gpt-5.6-sol"
+      ],
+      "max_passes": 2
+    },
+    "scout_agent": {
+      "model": "sonnet-5",
+      "effort": "high"
+    },
+    "delivery_presenter": {
+      "model": "opus-5",
+      "effort": "high"
+    },
+    "onboarding_runner": {
+      "model": "sonnet-5",
+      "effort": "medium"
+    }
+  },
+  "degraded_seats": {
+    "note": "Applied only when state.json.preflight.mode is 'degraded-claude-only' (product/onboarding/preflight.md check 2 fails). Every seat below is a same-family Claude substitute for a seat this config's own \"seats\" section names as GPT-5.6-Sol-only, so no seat parks in degraded mode and the build completes end to end. The honest trade-off is losing cross-family error decorrelation — two different model families being wrong in different, uncorrelated ways — never a loss of throughput or a skipped seat.",
+    "implementer": {
+      "model": "opus-5",
+      "note": "Fable-never-implements ban still holds; Opus already owns UI/creative implementation in full-cross-family mode and becomes the sole degraded-mode implementer for every chunk, not just UI/creative ones."
+    },
+    "coverage_check": {
+      "model": "sonnet-5",
+      "effort": "high",
+      "scope": "scoped"
+    },
+    "chunk_review_of_claude_work": {
+      "note": "The reviewer must be a Claude model different from the chunk's own author, so degraded mode still gets two distinct minds on every chunk.",
+      "opus-5_authored": {
+        "model": "sonnet-5"
+      },
+      "sonnet-5_authored": {
+        "model": "opus-5"
+      }
+    },
+    "agreement_pass": {
+      "models": [
+        "fable-5",
+        "opus-5"
+      ],
+      "max_passes": 2
+    }
+  },
+  "bans": {
+    "haiku": "never",
+    "fable_as_implementer": "never",
+    "verification_scale_down": "never"
+  },
+  "note": "A declared dated bet on which model sits in which seat — not a measurement; refreshed event-driven. A dated config is immutable once written: routing changes by adding a new dated file and repointing routing/active.json, never by editing these bytes, so a rollback is a repoint and the exact table any past run used stays readable. Every seat mirrors its agent's own frontmatter model and effort (agents/*.md), so an agent spawned directly and the same agent dispatched through this table run identically — a seat here is the dated record of that pairing, not a second, competing source of truth. The session that orchestrates has no seat here: the operator opens it at any model and effort, and every heavy think happens in a worker pinned at spawn. degraded_seats governs Claude-only operation; bans hold in every mode."
+}

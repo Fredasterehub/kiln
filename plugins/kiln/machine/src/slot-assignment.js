@@ -4,7 +4,7 @@
 // candidate is labeled "plan-A" must never be predictable from which
 // family authored it, and never a judgment call an agent makes. Deciding
 // which candidate is labeled "plan-A" by a coin
-// Maestro flips (Date.now(), Math.random()) would be unreplayable and, worse,
+// Kiln flips (Date.now(), Math.random()) would be unreplayable and, worse,
 // still a judgment call an agent makes — doctrine rule 6 ("Determinism
 // through workflows, not guardrails") puts exactly this kind of binary
 // decision in a deterministic script, not an agent's head. The rule: the
@@ -70,7 +70,7 @@ function assignPlanSlot(candidates) {
 }
 
 // CLI entrypoint: Maximal confrontation's own mechanical mid-protocol step
-// (product/architecture/flow.md step 5) has Maestro call
+// (product/architecture/flow.md step 5) has Kiln call
 // machine/src/slot-assignment.js's assignPlanSlot(...) — a Bash-only
 // orchestrator has no way to call this in-process. `assign
 // <candidatesJson>` reads the two-entry `[{id, manifestDigest}, ...]` array

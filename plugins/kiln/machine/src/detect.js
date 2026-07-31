@@ -99,7 +99,7 @@ function hasProjectMaterial(dir, depth = 0) {
 // directory, unparseable text, or `{}` at that path must never be reported
 // as a resumable build. Requires a regular file, parseable JSON, a plain
 // object, and non-empty string `phase`/`next_action` fields — the two
-// fields SKILL.md step 2 promises to report to the operator on resume.
+// fields the wake digest promises to report to the operator on resume.
 function isValidStateFile(statePath) {
   let stat;
   try {
@@ -372,8 +372,8 @@ function detect(projectRoot) {
   return { mode: evidence.has_code ? 'brownfield' : 'greenfield', evidence };
 }
 
-// CLI entrypoint: every caller of `detect()` — root `SKILL.md`'s
-// pre-Maestro preflight, `product/onboarding/flow.md`'s own scripted
+// CLI entrypoint: every caller of `detect()` — the fire entry's own wake
+// read (`machine/src/wake.js`), `product/onboarding/flow.md`'s own scripted
 // classification step, and (downstream of a "brownfield" result)
 // `product/brownfield/flow.md`'s own entry step — uses this one
 // `detect <projectRoot>` CLI subcommand, the same flat one-command

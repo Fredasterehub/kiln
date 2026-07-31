@@ -27,7 +27,7 @@ This governs every agent working under my roof — every interaction, every sugg
 
 5. **Docs are the starting point — execution is the proof.** Official sources and best practices open the reasoning; they never close it. Nothing ships as settled until the exact invocation has been tested working. Untested is reported as untested.
 
-6. **Determinism through workflows, not guardrails.** A deterministic choice — who runs, in what order, what gets verified — is encoded in a script, not left to an agent's judgment call in the moment. Agents keep full reflective power inside their own bounded task. A constraint that can't live in a script gets exactly one native enforcement mechanism — never a second layer over the same invariant. The same discipline carries a finding across phases, not only within one: when an earlier phase's output must bind a later phase's behavior (a brownfield scout's `protected_paths[]` constraining architecture's `milestones.json`, for one), the carry is a decision event (`vision/decisions.jsonl`) the receiving phase reads as one more named input — never a bespoke channel invented fresh for that one phase pair.
+6. **Determinism through workflows, not guardrails.** A deterministic choice — who runs, in what order, what gets verified — is encoded in a script, not left to an agent's judgment call in the moment. Agents keep full reflective power inside their own bounded task. A constraint that can't live in a script gets exactly one native enforcement mechanism — never a second layer over the same invariant. The same discipline carries a finding across phases, not only within one: when an earlier phase's output must bind a later phase's behavior (a brownfield scout's `protected_paths[]` constraining architecture's `milestones.json`, for one), the carry is a tablet `decision` entry (`tablet.jsonl` — the ownership table below) the receiving phase reads as one more named input — never a bespoke channel invented fresh for that one phase pair, and never an append to `vision/decisions.jsonl`, which stays sealed brainstorm truth, the crystallizer's alone.
 
 **Secret material — the standing refusal.** It overrides convenience every time: never read or quote secret material — .env files, *.pem, *.key, credentials.json, secrets.* — their contents belong in no transcript, envelope, or record. This binds every seat holding Read or Bash, at every phase, and it does not bend for a check that would be easier with the file open: a fact that could only be learned by opening one is reported as unknown, never guessed at, and never quoted as evidence.
 
@@ -35,11 +35,12 @@ This governs every agent working under my roof — every interaction, every sugg
 
 Rule 6's "exactly one native enforcement mechanism" applied to append-only state. The unit of ownership is **the record kind, not the file**: `ledger.jsonl` legitimately carries records from several writers, and the property that actually holds — and that the machine layer enforces — is that each KIND has exactly one sanctioned writer, with `jsonl.js`'s single-writer lock serializing the appends themselves so concurrent writers can never interleave a corrupt line.
 
-This table is authoritative: a kind not listed here has no sanctioned writer, which means nothing may write it.
+This table is authoritative: a kind not listed here has no sanctioned writer, which means nothing may write it. The writer column names who may produce the record, in one of two forms, each explicit: a row that names a seat names the invoker identity — the one sanctioned to cause the append, with the CLI as its mechanism, never its owner; a row that names a module marks a write only that module's own command produces, and the law fixing who may run that command lives in the charter, flow, or agent contract that owns the call — named there, never implied here. Either form, the mechanism existing grants no one the call.
 
 | Stream | Record kind | Sole sanctioned writer | Enforced by |
 |---|---|---|---|
 | `vision/transcript.jsonl` | `idea`, `decision`, `pivot`, `finding`, `freshness`, `sealed` | `brainstorm-facilitator` | `kind-registry.js append vision-transcript` — closed kind set, path resolved from the stream id |
+| `vision/transcript.jsonl` | the same six kinds, teams absent | Kiln, facilitating the sketchbook in-session | same `kind-registry.js append vision-transcript` contract — the named fallback row: when agent teams are absent in this session — the live fact read at the sketchbook's door, never a project frozen into a mode — the driver session writes every kind above, the `sealed` record included (`product/brainstorm/flow.md`'s teams-absent branch), and the facilitator seat never exists; teams present, the driver never writes a byte — the two modes never coexist, so each kind keeps exactly one sanctioned writer in any given session |
 | `vision/decisions.jsonl` | `decision` | `brainstorm-crystallizer` | `kind-registry.js append vision-decisions` — same closed contract |
 | `research/scratchpad.jsonl` | `decomposition`, `brief_issued`, `envelope_consumed`, `steer`, `synthesis` | `research-chief` | `kind-registry.js append research-scratchpad` — refuses `freshness_gate`, which has its own writer below |
 | `research/scratchpad.jsonl` | `freshness_gate` | `research-chief`, via the cache gate only | `research-cache.js record-gate-check` — the gate's own outcome, never a hand-composed record |
@@ -51,15 +52,18 @@ This table is authoritative: a kind not listed here has no sanctioned writer, wh
 | `ledger.jsonl` | `phase-terminal` | `phases.js close-terminal` | terminal phase only, exactly once |
 | `ledger.jsonl` | `phase-reopen` | `phases.js reopen` | carries the operator's rationale verbatim |
 | `ledger.jsonl` | `plan-gate-decision` | `plan-gate.js`'s `approveGate` | ledger path derived from `archDir`, never caller-supplied |
-| `ledger.jsonl` | `decision` (`settings_interview_completed`) | Maestro, closing the settings interview | `kind-registry.js append onboarding-decision` — `decision` on this one file, nothing else |
+| `ledger.jsonl` | `decision` (`settings_interview_completed`) | Kiln, closing the settings interview | `kind-registry.js append onboarding-decision` — `decision` on this one file, nothing else |
 | `ledger.jsonl` | `stop` | `handoff-recorder` | `handoff.js write-stop` — closed five-value stop vocabulary, per-kind fields refused when not permitted |
 | `ledger.jsonl` | `intake` | `intake.js harvest` | one record per migration, keyed on the transaction's own `txn_id` — the identity is the flag, so a re-entered harvest finds the record and skips the append |
 | `milestones/<id>/chunks.jsonl` | `chunk-spec`, `chunk-start`, `chunk-review`, `chunk-consult`, `chunk-journeys` | `milestone-designer` | `milestones.js record-chunk` — closed kind set, strict spec→start→review→green precedence |
-| `milestones/<id>/chunks.jsonl` | `chunk-green` | Maestro, after its own real commit | same command; refuses a `review` that diverges from the latest `chunk-review`, or a `review.family` matching the implementer's |
-| `last-mile.jsonl` | `park` | Maestro, off the blocker ladder | `delivery.js park` — a worker requests parking through its envelope, never appends |
+| `milestones/<id>/chunks.jsonl` | `chunk-green` | Kiln, after its own real commit | same command; refuses a `review` that diverges from the latest `chunk-review`, or a `review.family` matching the implementer's |
+| `last-mile.jsonl` | `park` | Kiln, off the blocker ladder | `delivery.js park` — a worker requests parking through its envelope, never appends |
 | `verification/runs/<run-id>.jsonl` | `run-start` | `verification.js start-run` | monotonic run identity; refuses a `runId` already registered |
 | `verification/runs/<run-id>.jsonl` | `journey-result` | `verification.js record-run` / `record-journey-run` | every result must have a matching `gate` ledger record proving it ran |
 | `verification/fix-attempts.jsonl` | `fix-attempt` | `quarantine.js`'s `capTracker` | `cap-check-and-record`, atomic check-then-record against `FIX_LOOP_CAP` |
+| `tablet.jsonl` | `decision` | Kiln, distilling worker proposals at seams | `tablet.js append` — closed three-kind set, fail-closed; workers — the milestone designer included — propose through their envelope fields, never append |
+| `tablet.jsonl` | `constraint` | Kiln, same distill-and-file duty | same command, same closed contract |
+| `tablet.jsonl` | `failure` | Kiln, same distill-and-file duty | same command; entries are never deleted — a correction is a later entry naming the one it corrects |
 
 `verification/journeys.json` sits outside this table: `milestone-designer` lands it with its own `Write` tool at JIT-authoring time (`product/implementation/flow.md` step (d).3), and `assembleSuite`'s fail-closed validation at verification entry is what checks its shape.
 

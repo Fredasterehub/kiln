@@ -74,7 +74,7 @@ function factsPathOf(treeRoot) {
 // ---------- assembleLastMile ----------
 
 // Reads last-mile.jsonl's own "park" records (workers request parking via
-// their envelopes; Maestro is this stream's sole writer, through
+// their envelopes; Kiln is this stream's sole writer, through
 // recordPark below, so what lands here is already routed, never appended
 // by this module directly). Genesis/other kinds are
 // ignored, matching every other stream reader's non-genesis convention in

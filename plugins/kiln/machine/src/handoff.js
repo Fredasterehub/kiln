@@ -5,7 +5,7 @@
 // accepts a bounded stop payload on stdin, validates the closed stop-state
 // vocabulary, appends the stop event, atomically updates state.json, and
 // renders handoff.md as a mechanical view carrying the same generation or
-// event sequence. Every Stop-state (agents/maestro.md's own section) writes
+// event sequence. Every Stop-state (product/charter.md's own section) writes
 // this SAME pair before a turn ends — DONE, BLOCKED-OPERATOR, QUOTA-WAIT,
 // BUDGET-CEILING, EXHAUSTED — through this one sanctioned writer, never
 // hand-authored prose.
@@ -132,25 +132,75 @@ function writeContainedAtomic(targetPath, content) {
   }
 }
 
-// Purely mechanical: every line traces to a field already on `state` or
-// `stop` — never invented prose (the "no event no line" law,
-// applied here at the machine layer exactly as delivery.js's own renderers
-// already apply it). No stop kind gets a narrated sentence; the reader gets
-// the facts and, for BLOCKED-OPERATOR, the operator's own verbatim question.
-function renderHandoffMd(state, stop, seq, ts) {
+// projectResumeFacts(state, resumePoint) -> {phase, next_action,
+// can_resume, missing, stop} — the ONE place the resume-facing fields are
+// selected and shaped out of state.json, for every surface that shows a
+// tree's standing: this file's own handoff.md renderers, which depict the
+// moment a stop was recorded, and wake.js's digest, which depicts the tree
+// as it stands now. Pure: it reads the two objects handed to it, mutates
+// neither, and touches no disk.
+//
+// `resumePoint` is phases.js's own {phase, canResume, missing} result when
+// the caller has one, and null when it does not — a handoff.md render
+// speaks for state.json alone, so its can_resume is null (not computed)
+// rather than a guessed false. When a resumePoint IS given it is the
+// verified report on where the tree stands, so the phase comes from it;
+// state.json's own phase is the phase only for a caller with no resume
+// point. A field that is absent or malformed on its source comes back
+// null; presentation of that null — "(unknown)", "ABSENT" — belongs to
+// each renderer, never here.
+function projectResumeFacts(state, resumePoint) {
+  const source = isPlainObject(state) ? state : {};
+  const point = isPlainObject(resumePoint) ? resumePoint : null;
+  const lastStop = isPlainObject(source.last_stop) ? source.last_stop : null;
+
+  const stop =
+    lastStop !== null && isNonEmptyString(lastStop.stop_state)
+      ? {
+          stop_state: lastStop.stop_state,
+          reporter: isNonEmptyString(lastStop.reporter) ? lastStop.reporter : null,
+          question: isNonEmptyString(lastStop.question) ? lastStop.question : null,
+          earliest_resume: isNonEmptyString(lastStop.earliest_resume) ? lastStop.earliest_resume : null,
+          seq: Number.isInteger(lastStop.seq) ? lastStop.seq : null,
+          ts: isNonEmptyString(lastStop.ts) ? lastStop.ts : null,
+        }
+      : null;
+
+  const phaseSource = point !== null ? point : source;
+
+  return {
+    phase: isNonEmptyString(phaseSource.phase) ? phaseSource.phase : null,
+    next_action: isNonEmptyString(source.next_action) ? source.next_action : null,
+    can_resume: point !== null && typeof point.canResume === 'boolean' ? point.canResume : null,
+    missing: point !== null && Array.isArray(point.missing) ? [...point.missing] : [],
+    stop,
+  };
+}
+
+// Purely mechanical: every line traces to a field already on `state` —
+// never invented prose (the "no event no line" law, applied here at the
+// machine layer exactly as delivery.js's own renderers already apply it).
+// No stop kind gets a narrated sentence; the reader gets the facts and,
+// for BLOCKED-OPERATOR, the operator's own verbatim question. The stop's
+// own fields are re-sourced through projectResumeFacts from the state
+// writeStop has just written, so this view and wake.js's digest select the
+// same facts through the same selector.
+function renderHandoffMd(state) {
+  const facts = projectResumeFacts(state, null);
+  const stop = facts.stop;
   const lines = [
     '# Handoff',
     '',
-    `- Phase: ${isNonEmptyString(state.phase) ? state.phase : '(unknown)'}`,
-    `- Next action: ${isNonEmptyString(state.next_action) ? state.next_action : '(unknown)'}`,
+    `- Phase: ${facts.phase !== null ? facts.phase : '(unknown)'}`,
+    `- Next action: ${facts.next_action !== null ? facts.next_action : '(unknown)'}`,
     `- Stop state: ${stop.stop_state}`,
     `- Reporter: ${stop.reporter}`,
-    `- Stop recorded: ${ts} (ledger.jsonl seq ${seq})`,
+    `- Stop recorded: ${stop.ts} (ledger.jsonl seq ${stop.seq})`,
   ];
-  if (isNonEmptyString(stop.question)) {
+  if (stop.question !== null) {
     lines.push(`- Operator question: ${stop.question}`);
   }
-  if (isNonEmptyString(stop.earliest_resume)) {
+  if (stop.earliest_resume !== null) {
     lines.push(`- Earliest resume: ${stop.earliest_resume}`);
   }
   lines.push('');
@@ -218,7 +268,7 @@ function writeStop(treeRoot, stop) {
     };
     writeAtomic(statePath, newState);
 
-    writeContainedAtomic(handoffPath, renderHandoffMd(newState, stop, seq, newState.updated_utc));
+    writeContainedAtomic(handoffPath, renderHandoffMd(newState));
 
     return { seq, stop, state: newState };
   });
@@ -230,11 +280,12 @@ function writeStop(treeRoot, stop) {
 // whose backing fact isn't on disk is omitted outright, never guessed or
 // stubbed.
 function renderOnboardingMd(state, settings, scoutInventory, intakeReport) {
+  const facts = projectResumeFacts(state, null);
   const lines = [
     '# Handoff',
     '',
-    `- Phase: ${isNonEmptyString(state.phase) ? state.phase : '(unknown)'}`,
-    `- Next action: ${isNonEmptyString(state.next_action) ? state.next_action : '(unknown)'}`,
+    `- Phase: ${facts.phase !== null ? facts.phase : '(unknown)'}`,
+    `- Next action: ${facts.next_action !== null ? facts.next_action : '(unknown)'}`,
   ];
   const preflight = isPlainObject(state.preflight) ? state.preflight : null;
   if (preflight && isNonEmptyString(preflight.mode)) {
@@ -361,4 +412,4 @@ if (require.main === module) {
   main(process.argv.slice(2));
 }
 
-module.exports = { writeStop, renderOnboarding };
+module.exports = { writeStop, renderOnboarding, projectResumeFacts };

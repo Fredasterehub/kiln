@@ -7,7 +7,7 @@
 // already draws for architecture: it never authors spec.md (the kept-warm
 // designer's own anchor source) and it never runs git as a general
 // mechanism — the rollback protocol's own branch/merge/tag commands stay
-// Maestro's narrowly-scoped Bash, never JS-layer machinery (one native
+// Kiln's narrowly-scoped Bash, never JS-layer machinery (one native
 // mechanism per constraint). The one exception is closeMilestone's own git
 // READ-ONLY verification below — it never runs a mutating git command,
 // only `git rev-parse --verify`, so a milestone can never report green
@@ -55,7 +55,7 @@ const MILESTONE_STATUSES = { OPEN: 'open', GREEN: 'green' };
 // hex characters, git's own abbreviation floor through a full sha1/sha256
 // object id) — refuses an obviously fabricated value like "commit:
 // not-a-sha". This is a format check only; milestones.js still never
-// shells out to verify a CHUNK commit against git (that stays Maestro's
+// shells out to verify a CHUNK commit against git (that stays Kiln's
 // own real `git rev-parse HEAD` at commit time) — only closeMilestone's
 // merge_sha/tag verification, below, does.
 const COMMIT_SHA_RE = /^[0-9a-f]{7,40}$/i;

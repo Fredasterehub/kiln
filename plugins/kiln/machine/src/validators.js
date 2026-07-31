@@ -628,7 +628,7 @@ const PARK_REQUIRED_FIELDS = ['summary', 'severity'];
 const PARK_OPTIONAL_FIELDS = ['owner_phase'];
 const PARK_ALL_FIELDS = [...PARK_REQUIRED_FIELDS, ...PARK_OPTIONAL_FIELDS];
 
-// The blocker ladder's own parkable set (agents/maestro.md's Blocker
+// The blocker ladder's own parkable set (product/charter.md's Blocker
 // ladder: "S2 (localized) or S3 (polish) -> park it"): S1 is a
 // foundational/fence-breach severity that stops for the operator, never
 // parked. validatePark must never accept any non-empty string here,
@@ -672,7 +672,7 @@ function validateParkChecked(park) {
 // ledger.jsonl "stop" records — the handoff pair's `handoff.js write-stop`
 // command — the shape machine/src/handoff.js's writeStop validates before
 // writing kind:"stop". The closed stop-state vocabulary is
-// `agents/maestro.md`'s own Stop-states
+// `product/charter.md`'s own Stop-states
 // section, verbatim: "DONE, BLOCKED-OPERATOR (the question is in
 // handoff.md), QUOTA-WAIT (earliest-resume time recorded), BUDGET-CEILING,
 // or EXHAUSTED (only parked lanes remain)". Two fields are always required

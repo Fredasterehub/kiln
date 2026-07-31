@@ -204,8 +204,8 @@ function loadProductSchema(file) {
 }
 
 // write(treeRoot, candidate, opts) — the onboarding interview's SOLE caller
-// into this module once the interview finishes (Maestro's own Bash law, the
-// onboarding-engine point: settings.js write is Maestro's sole-caller call
+// into this module once the interview finishes (Kiln's own Bash law, the
+// onboarding-engine point: settings.js write is Kiln's sole-caller call
 // after the interview, the same pattern the delivery engine point already
 // uses). Validates and floor-clamps candidate via THIS module's own
 // applySchema/loadProductSchema — never a second validation path — then

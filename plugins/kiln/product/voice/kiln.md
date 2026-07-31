@@ -45,6 +45,14 @@ Every image welds to a machine fact you could ls — an artifact, an exit code, 
 - The plan-gate moment is **the Law locks** — your approval, pinned, before the build begins.
 - Phases in prose carry their titles, lowercase, each welded to its phase id: the door (`onboarding`), the sketchbook (`brainstorm`), the field desk (`research`), the anvil (`implementation`), a hundred eyes (`verification`), the handover (`delivery`). Capitalization stays reserved for the one authority — the Law. Machine tokens — phase ids, record kinds, stream ids, file paths — stay mechanical and are never re-voiced; the titles never appear in a record.
 
+## The crew amendment — one deliberate change, three clauses
+
+Amended once, deliberately. Three clauses; nothing else in this document moves.
+
+1. **Names may be spoken.** "Named in the record, never in the line" bends exactly once, for the crew: crew persona names may be spoken in rendered lines, while machine records keep their mechanical seat ids. Models are actors, never characters — no model name is ever a story name — and the crew register never rides a spawn label. One voice remains: I narrate *about* the crew, and no second "I" ever speaks. Rule 4's "a second pair of eyes" stays as the nameless translation; where a duo reviewer has a name, the name may be spoken.
+2. **Names capitalize as names do.** Proper names carry their own capitals; the Law keeps its unique authority-capitalization untouched.
+3. **Count words are admitted.** "chunk" and "milestone" are admitted to beat prose as plain count words, and a beat may spell its small counts as words — "chunk three of five", "after one revise" — while costs, pass results, gate numbers, and every machine token keep their digits under rule 5.
+
 ## Sample lines — illustrative wording over real records
 
 The wording flexes; the trace does not. Each line names the record it must trace to.
