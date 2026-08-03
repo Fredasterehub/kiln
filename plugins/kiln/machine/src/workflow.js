@@ -11,11 +11,14 @@
 //   invoke         — call one already-owned machine operation, by name
 //
 // THIS IS NOT A CONDUCTOR. There is no phase policy here, no protocol
-// knowledge, no reviewer choice, no loop, no ordering decision. Those live in
-// the workflow scripts, which is exactly where a reader expects to find them;
-// a facade that started making them would be a second orchestrator competing
-// with the first. Every function below either reads bounded state or forwards
-// to a module that already owns the law it enforces.
+// knowledge, no reviewer choice, no loop, no ordering decision. Nor do those
+// live in the workflow scripts: a script performs the one transition it was
+// handed and holds no policy either. They live in the phase's RESOLVER —
+// `machine/src/spine.js` for implementation — where a test can build a tree
+// state and read the answer without running an agent or a workflow. A facade
+// that started making them would be a second orchestrator competing with the
+// resolver. Every function below either reads bounded state or forwards to a
+// module that already owns the law it enforces.
 //
 // It adds no validation of its own. `persistReceipt` routes and receipts.js
 // validates; `invoke` dispatches and the operation validates. A second layer
@@ -24,15 +27,27 @@
 // is a name it does not know: an unknown phase, an unknown receipt kind, an
 // unknown op.
 
+const fs = require('node:fs');
 const path = require('node:path');
 
 const { projectFile } = require('./projection.js');
 const { readJson } = require('./atomic-json.js');
 const { manifestArtifactsDigest } = require('./manifest.js');
-const { loadRegistry, resumePoint } = require('./phases.js');
+const { readRecords } = require('./stream.js');
+const phases = require('./phases.js');
+const { loadRegistry, resumePoint } = phases;
 const receipts = require('./receipts.js');
 const implementation = require('./implementation.js');
 const architectureTxn = require('./architecture-txn.js');
+const milestones = require('./milestones.js');
+const spine = require('./spine.js');
+const views = require('./views.js');
+const familyEvidence = require('./family-evidence.js');
+const capsule = require('./capsule.js');
+const dispatch = require('./dispatch.js');
+const toolchain = require('./toolchain.js');
+const { runGate } = require('./check-honesty.js');
+const promotion = require('./promotion.js');
 
 const SCHEMA_VERSION = 1;
 const DEFAULT_REGISTRY_PATH = path.join(__dirname, '..', 'phases-registry.json');
@@ -174,6 +189,10 @@ const RECEIPT_WRITERS = Object.freeze({
   'hold-open': receipts.writeHoldOpen,
   'hold-resolve': receipts.writeHoldResolve,
   'degraded-route': receipts.writeDegradedRoute,
+  'steer-raise': receipts.writeSteerRaise,
+  'steer-apply': receipts.writeSteerApply,
+  'mind-open': receipts.writeMindOpen,
+  'mind-retire': receipts.writeMindRetire,
 });
 
 const ENVELOPE_KIND = 'envelope';
@@ -246,6 +265,174 @@ const OPS = Object.freeze({
   'receipts.writeHoldResolve': { call: receipts.writeHoldResolve, root: (args) => args[0], receipt: 'ref' },
   'receipts.writeDegradedRoute': { call: receipts.writeDegradedRoute, root: (args) => args[0], receipt: 'ref' },
   'receipts.writeEnvelope': { call: receipts.writeEnvelope, root: (args) => args[0], receipt: 'ref' },
+  // `none` is for an operation whose whole result IS its return value:
+  // resolving the next transition reads disk and writes nothing, and
+  // regenerating views is derived and idempotent. There is no durable record
+  // to verify afterwards, and claiming one would be the verification theatre
+  // this table exists to avoid.
+  'spine.nextTransition': { call: spine.nextTransition, root: (args) => args[0], receipt: 'none' },
+  'milestones.recordChunk': { call: milestones.recordChunk, root: (args) => args[0], receipt: 'readback' },
+  'views.regenerate': { call: views.regenerate, root: (args) => args[0], receipt: 'none' },
+  'familyEvidence.recordBuilt': { call: familyEvidence.recordBuilt, root: (args) => args[0], receipt: 'readback' },
+  'familyEvidence.selectReviewer': { call: familyEvidence.selectReviewer, root: (args) => args[0], receipt: 'none' },
+  'familyEvidence.selectMilestoneReviewer': {
+    call: familyEvidence.selectMilestoneReviewer,
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'dispatch.dispatchNative': { call: dispatch.dispatchNative, root: (args) => args[0], receipt: 'ref' },
+  'dispatch.completeNative': { call: dispatch.completeNative, root: (args) => args[0], receipt: 'ref' },
+  // Recovery answers every open dispatch in the tree at once and is
+  // idempotent, so it needs nothing from the caller but the tree — and takes
+  // nothing else, which is what keeps a workflow from naming a dispatch it
+  // would like reaped.
+  'dispatch.recoverDispatches': { call: dispatch.recoverDispatches, root: (args) => args[0], receipt: 'none' },
+  // The capsule ops take the tree root, the milestone and the chunk, and
+  // DERIVE every path from them. Passing a capsule directory or a patch path
+  // would let a workflow export a patch out of a capsule that is not this
+  // chunk's, or stage one — the same reason the toolchain ops take a tree root
+  // and derive the project directory rather than accepting one.
+  'capsule.openCapsule': {
+    call: (treeRoot, milestoneId, chunkId) =>
+      capsule.openCapsule(treeRoot, path.join(treeRoot, '..'), milestoneId, chunkId),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'capsule.exportDiff': {
+    call: (treeRoot, milestoneId, chunkId) =>
+      capsule.exportDiff(capsule.capsulePathsOf(path.join(treeRoot, '..'), milestoneId, chunkId).capsuleDir),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'capsule.applyToStaging': {
+    call: (treeRoot, milestoneId, chunkId, patchDigest) => {
+      const repoRoot = path.join(treeRoot, '..');
+      const { patchPath } = capsule.capsulePathsOf(repoRoot, milestoneId, chunkId);
+      return capsule.applyToStaging(repoRoot, patchPath, patchDigest);
+    },
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'capsule.discardStaging': {
+    call: (treeRoot) => capsule.discardStaging(path.join(treeRoot, '..')),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'capsule.syncWorktreeToHead': {
+    call: (treeRoot) => capsule.syncWorktreeToHead(path.join(treeRoot, '..')),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'capsule.closeCapsule': {
+    call: (treeRoot, milestoneId, chunkId) =>
+      capsule.closeCapsule(capsule.capsulePathsOf(path.join(treeRoot, '..'), milestoneId, chunkId).capsuleDir),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // What is staged in the project right now. `sealChunk` cites a diff digest,
+  // and the only honest one is the current one: a digest carried down from the
+  // build record is stale the moment a revise stages new work.
+  'implementation.stagedDiffDigest': {
+    call: (treeRoot) => ({ diff_digest: implementation.stagedDiffDigest(path.join(treeRoot, '..')) }),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // Where a seat must write what it authored. Derived by the module that will
+  // later read it, so the two cannot disagree.
+  'promotion.stagedPathFor': {
+    call: (treeRoot, artifactClass, scope) => {
+      const stagedPath = promotion.stagedPathFor(treeRoot, artifactClass, scope);
+      // Both forms, because they answer two different callers: the absolute
+      // path is what a seat is told to write, and the tree-relative one is
+      // what a dispatch terminal cites as the artifact it produced.
+      return { staged_path: stagedPath, staged_ref: path.relative(treeRoot, stagedPath) };
+    },
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // The phase's own terminal move. The registry and both file paths are this
+  // machine's, derived from the tree — a workflow that could supply a registry
+  // could advance into a phase the machine does not define.
+  // `phases.advance()` returns {from, to, state} and no seq, but it APPENDS a
+  // `phase-transition` record on its way — so the ref a workflow must cite is
+  // read back from the ledger here rather than invented from a field that does
+  // not exist. Building `ledger:${result.seq}` out of an absent seq produced
+  // `ledger:undefined`, which `writeWorkflowReturn` then refused AFTER the
+  // phase pointer had already moved.
+  'phases.advance': {
+    call: (treeRoot) => {
+      const ledgerPath = path.join(treeRoot, 'ledger.jsonl');
+      const result = phases.advance(
+        treeRoot,
+        loadRegistry(DEFAULT_REGISTRY_PATH),
+        path.join(treeRoot, 'state.json'),
+        ledgerPath
+      );
+      const { records } = readRecords(ledgerPath);
+      const transition = records
+        .filter((r) => r.kind === 'phase-transition' && r.from === result.from && r.to === result.to)
+        .pop();
+      if (transition === undefined) {
+        throw new Error(
+          `workflow: phases.advance moved ${JSON.stringify(result.from)} to ${JSON.stringify(result.to)} but appended no matching "phase-transition" record — the advance cannot be cited`
+        );
+      }
+      return { ...result, seq: transition.seq };
+    },
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'receipts.writeSteerApply': { call: receipts.writeSteerApply, root: (args) => args[0], receipt: 'ref' },
+  // The toolchain acts on the PROJECT, which is the tree's parent — so these
+  // take the tree root like every other op and derive the project directory
+  // from it. A workflow that could name the directory to scaffold or install
+  // into would be choosing where the machine writes, which is the one thing
+  // this table exists to prevent.
+  'toolchain.probeSatisfied': {
+    call: (treeRoot, profileId) => toolchain.probeSatisfied(profileId, path.join(treeRoot, '..')),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'toolchain.scaffoldProfile': {
+    call: (treeRoot, profileId) => toolchain.scaffoldProfile(profileId, path.join(treeRoot, '..')),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // The exact commands a gate runs, composed from the profile rather than
+  // guessed. Hard-coding `npm ci` and `npm test` was the alternative, and it
+  // is wrong for two of the three profiles.
+  'toolchain.composeInstall': {
+    call: (treeRoot, profileId) => ({ cmd: toolchain.composeInstall(profileId, path.join(treeRoot, '..')) }),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'toolchain.composeSuite': {
+    call: (treeRoot, profileId) => ({ cmd: toolchain.composeSuite(profileId, path.join(treeRoot, '..')) }),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // runGate takes a single options object, and its ledger path is derived from
+  // the tree the invocation names rather than supplied beside it.
+  'checkHonesty.runGate': {
+    call: (treeRoot, gateId, cmd) =>
+      runGate({
+        gateId,
+        cmd,
+        ledgerPath: path.join(treeRoot, 'ledger.jsonl'),
+        // The gate runs in the PROJECT, which is the tree's parent. A suite
+        // run wherever the caller happened to be standing is evidence about
+        // some other directory.
+        cwd: path.join(treeRoot, '..'),
+      }),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  'promotion.promoteArtifact': { call: promotion.promoteArtifact, root: (args) => args[0], receipt: 'readback' },
+  'implementation.openMilestoneTxn': {
+    call: implementation.openMilestoneTxn,
+    root: (args) => args[0],
+    receipt: 'readback',
+  },
   'implementation.sealChunk': { call: implementation.sealChunk, root: (args) => args[0], receipt: 'readback' },
   'implementation.closeMilestoneTxn': {
     call: implementation.closeMilestoneTxn,
@@ -338,6 +525,74 @@ function invoke(treeRoot, op, args = []) {
   }
   return result;
 }
+
+// ---------- the CLI ----------
+
+// The executable form, and the ONLY one. The Workflow runtime cannot touch a
+// filesystem, so every operation reaches the tree through the `workflow-hands`
+// agent running one command — and that agent is a model.
+//
+// THE PAYLOAD NEVER BECOMES SHELL TEXT. Asking a model to interpolate a tree
+// path, an op name and a JSON argument list into shell quotes is asking it to
+// get quoting right over canonical data it does not control: one apostrophe in
+// a milestone title breaks a single-quoted word, and `$(...)` or a backtick in
+// a double-quoted one is executed rather than passed. So the payload arrives
+// on STDIN, delivered through a heredoc whose delimiter is quoted — which
+// suppresses every expansion the shell has and treats quotes as bytes. The
+// model's whole job becomes pasting one line between two fixed markers.
+//
+// There is deliberately no argv payload path. A second way in would be a way
+// around, and the quoting hazard would still be reachable from the seat that
+// was supposed to have been relieved of it.
+//
+// A REFUSAL IS DATA. The command answers `{ok, result}` on stdout either way —
+// the operation's return when it succeeded, the error text verbatim when it
+// refused — and exits non-zero on a refusal so the two agree. That is what
+// lets the seat carry a refusal back unedited instead of interpreting it.
+function readStdin() {
+  try {
+    return fs.readFileSync(0, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function main() {
+  const raw = readStdin();
+  let answer;
+  let ok = true;
+  try {
+    if (raw.trim() === '') {
+      throw new Error(
+        'workflow: this command reads its {treeRoot, op, args} payload from stdin, and stdin was empty — there is no argument form'
+      );
+    }
+    let payload;
+    try {
+      payload = JSON.parse(raw);
+    } catch (err) {
+      throw new Error(`workflow: the payload on stdin is not JSON: ${err.message}`);
+    }
+    if (!isPlainObject(payload)) {
+      throw new TypeError('workflow: the payload on stdin must be a {treeRoot, op, args} object');
+    }
+    if (!isNonEmptyString(payload.op)) {
+      throw new TypeError('workflow: the payload on stdin requires a non-empty "op"');
+    }
+    answer = invoke(payload.treeRoot, payload.op, payload.args === undefined ? [] : payload.args);
+  } catch (err) {
+    ok = false;
+    // The MESSAGE, not the stack: every refusal in this machine is a
+    // deliberately worded sentence naming what was wrong, and that sentence is
+    // what a workflow acts on. A stack would bury it in paths the caller
+    // cannot use and the seat would be tempted to summarise.
+    answer = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  }
+  process.stdout.write(JSON.stringify({ ok, result: answer }));
+  process.exitCode = ok ? 0 : 1;
+}
+
+if (require.main === module) main();
 
 module.exports = {
   snapshot,

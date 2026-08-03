@@ -24,23 +24,31 @@ const { spawnSync } = require('node:child_process');
 
 const { appendRecord, readRecords } = require('./stream.js');
 const { readJson, writeAtomic } = require('./atomic-json.js');
-const { DESIGNER_FAMILIES } = require('./validators.js');
+const { DESIGNER_FAMILIES, FAMILY_OF_BUILDER, TRANSPORT_OF_BUILDER } = require('./validators.js');
+const { stagedDiffDigest } = require('./staged-diff.js');
 const { PROFILE_IDS } = require('./toolchain.js');
 
 const INDEX_SCHEMA_VERSION = 1;
 
-// The six chunk-record kinds this stream carries across a chunk's lifecycle.
-// The first four are the strict, ORDERED lifecycle spine (LIFECYCLE_KINDS,
-// below) — spec, start, review (one or more, across a capped revise loop),
-// green. "chunk-consult" and "chunk-journeys" are the designer's own
-// side-channel records (mailbox consult answers; JIT journey authorship
-// notices) — they carry a chunk_id and require the chunk to already exist,
-// but they never participate in the strict spec->start->review->green
-// precedence check, and never become the "latest lifecycle record" a
-// precedence check reads. The designer file uses the recordChunk API only
-// for these two kinds; milestone-designer.md never writes "chunk-green" —
-// that stays orchestrator-only, below.
-const LIFECYCLE_KINDS = ['chunk-spec', 'chunk-start', 'chunk-review', 'chunk-green'];
+// The seven chunk-record kinds this stream carries across a chunk's
+// lifecycle. The first five are the strict, ORDERED lifecycle spine
+// (LIFECYCLE_KINDS, below) — spec, start, built, review (one or more, across
+// a capped revise loop), green. "chunk-consult" and "chunk-journeys" are the
+// designer's own side-channel records (mailbox consult answers; JIT journey
+// authorship notices) — they carry a chunk_id and require the chunk to
+// already exist, but they never participate in the strict
+// spec->start->built->review->green precedence check, and never become the
+// "latest lifecycle record" a precedence check reads. The designer file uses
+// the recordChunk API only for these two kinds; milestone-designer.md never
+// writes "chunk-green" — that stays orchestrator-only, below.
+//
+// "chunk-built" sits between start and review because a reviewer cannot be
+// chosen before it is known who actually built the chunk: chunk-start records
+// the seat routing INTENDED, and a dispatch that timed out and fell back to
+// another family makes that intent false. family-evidence.js is its sole
+// writer and owns the evidence it must carry; what this module requires is
+// the one field its own cross-family law will read.
+const LIFECYCLE_KINDS = ['chunk-spec', 'chunk-start', 'chunk-built', 'chunk-review', 'chunk-green'];
 const CHUNK_RECORD_KINDS = [...LIFECYCLE_KINDS, 'chunk-consult', 'chunk-journeys'];
 
 // Closed set: reviewer contracts and the flow both produce approve|revise,
@@ -59,6 +67,13 @@ const MILESTONE_STATUSES = { OPEN: 'open', GREEN: 'green' };
 // own real `git rev-parse HEAD` at commit time) — only closeMilestone's
 // merge_sha/tag verification, below, does.
 const COMMIT_SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+// The ref grammar receipts.js writes and the digest form implementation.js
+// signs with — both restated as shapes here because a build record cites one
+// and carries two, and a claim that is not even shaped like its subject
+// cannot be checked against it.
+const LEDGER_REF_RE = /^ledger:(0|[1-9]\d*)$/;
+const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
@@ -207,6 +222,39 @@ function assertChunkRecordShape(record) {
     }
   }
 
+  // A build record is a CLAIM ABOUT A RECEIPT, so it carries the receipt it
+  // claims and every field it claims about it. The claims are checked against
+  // the real terminal in assertBuildIsEvidenced below; what is checked here is
+  // that all of them are present and well-shaped, because a claim with a
+  // missing field cannot be contradicted by anything.
+  if (record.kind === 'chunk-built') {
+    if (!DESIGNER_FAMILIES.has(record.actual_family)) {
+      throw new TypeError(
+        `milestones: "chunk-built" record requires "actual_family" to be one of ${[...DESIGNER_FAMILIES].join(', ')} (got ${JSON.stringify(record.actual_family)})`
+      );
+    }
+    if (!DESIGNER_FAMILIES.has(record.intended_family)) {
+      throw new TypeError(
+        `milestones: "chunk-built" record requires "intended_family" to be one of ${[...DESIGNER_FAMILIES].join(', ')} (got ${JSON.stringify(record.intended_family)})`
+      );
+    }
+    if (typeof record.dispatch_ref !== 'string' || !LEDGER_REF_RE.test(record.dispatch_ref)) {
+      throw new TypeError(
+        `milestones: "chunk-built" record requires a "dispatch_ref" of the form ledger:<seq> (got ${JSON.stringify(record.dispatch_ref)}) — a build is a claim about a receipt, and it must name the receipt`
+      );
+    }
+    if (!isNonEmptyString(record.model_id)) {
+      throw new TypeError('milestones: "chunk-built" record requires a non-empty "model_id"');
+    }
+    for (const field of ['result_digest', 'diff_digest']) {
+      if (typeof record[field] !== 'string' || !DIGEST_RE.test(record[field])) {
+        throw new TypeError(
+          `milestones: "chunk-built" record requires a "${field}" of the form sha256:<64 lowercase hex> (got ${JSON.stringify(record[field])})`
+        );
+      }
+    }
+  }
+
   if (record.kind === 'chunk-review' || record.kind === 'chunk-green') {
     const review = record.review;
     if (
@@ -266,6 +314,134 @@ function assertChunkRecordShape(record) {
   }
 }
 
+// A build record's authority is the RECEIPT IT CITES, and this is where that
+// stops being a formality. Without it, `chunk-built` would be the one
+// lifecycle record whose content is whatever its writer said: anyone could
+// mint one, obtain a reviewer, and skip the evidence entirely — which is the
+// exact hole family-evidence.js exists to close, left open one layer down.
+//
+// EVERY EVIDENCE CHECK LIVES HERE, at the public write boundary, and nowhere
+// else. family-evidence.js composes a build record out of a terminal; this
+// decides whether the tree will accept one. A check that ran only during
+// composition would protect only the callers who went through composition,
+// which is precisely the set of callers that were never the problem.
+//
+// Four things are asked, in the order that fails cheapest first:
+//   1. the cited ref resolves to a SUCCESSFUL dispatch terminal
+//   2. that terminal describes a result at all, and could have come out of
+//      the transport its own dispatch went out on
+//   3. the record's claims — family, model, result digest — are the
+//      terminal's own
+//   4. the diff digest it carries is the diff that is actually staged
+//
+// After which forging a build means forging a `dispatch-terminal` — receipts.js's
+// closed vocabulary, sole-writer discipline and correlation law to defeat —
+// AND arranging for the repository to hold the matching work.
+function assertBuildIsEvidenced(treeRoot, record, opts) {
+  const ledgerPath = path.join(treeRoot, 'ledger.jsonl');
+  const { records, errors, headerViolations } = readRecords(ledgerPath);
+  if (errors.length > 0 || headerViolations.length > 0) {
+    throw new Error(
+      `milestones: ${ledgerPath} does not read whole — refusing to verify a "chunk-built" claim against a stream this module cannot trust`
+    );
+  }
+
+  const seq = Number(LEDGER_REF_RE.exec(record.dispatch_ref)[1]);
+  const terminal = records.find((entry) => entry.seq === seq);
+  if (terminal === undefined || terminal.kind !== 'dispatch-terminal') {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" cites ${JSON.stringify(record.dispatch_ref)}, which is not a "dispatch-terminal" record — a build must name the receipt that proves it`
+    );
+  }
+  if (terminal.status !== 'ok') {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" cites a terminal with status "${terminal.status}" — a dispatch that did not succeed built nothing`
+    );
+  }
+
+  // A WELL-FORMED RECORD IS NOT A TRUE ONE. receipts.js enforces this shape
+  // when it writes; reading a stream is not the same act as writing to it, and
+  // a ledger can be hand-edited or restored. A terminal that cannot describe
+  // its own result is not evidence of one.
+  if (!isNonEmptyString(terminal.model_id) || !DIGEST_RE.test(terminal.result_digest || '')) {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" cites a terminal that reports success without describing the result (model_id ${JSON.stringify(terminal.model_id)}, result_digest ${JSON.stringify(terminal.result_digest)})`
+    );
+  }
+
+  // And an internally impossible one is a forgery however well it parses: Sol
+  // reports out of a codex child and nothing else, a Claude fallback out of a
+  // native Agent step and nothing else. Checked against the terminal's OWN
+  // dispatch, resolved here rather than taken on the record's word.
+  const dispatch = records.find(
+    (entry) => entry.kind === 'dispatch' && entry.dispatch_id === terminal.dispatch_id
+  );
+  if (dispatch === undefined) {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" cites a terminal whose own dispatch ${JSON.stringify(terminal.dispatch_id)} is not on the ledger`
+    );
+  }
+  if (TRANSPORT_OF_BUILDER[terminal.builder] !== dispatch.transport) {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" cites a terminal claiming builder ${JSON.stringify(terminal.builder)} out of the "${dispatch.transport}" transport, which only ever produces ${JSON.stringify(TRANSPORT_OF_BUILDER[terminal.builder] || null)} — a dispatch that could not have happened`
+    );
+  }
+
+  const provenFamily = FAMILY_OF_BUILDER[terminal.builder];
+  if (provenFamily === undefined || provenFamily !== record.actual_family) {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" claims actual_family ${JSON.stringify(record.actual_family)}, but its terminal's builder ${JSON.stringify(terminal.builder)} proves ${JSON.stringify(provenFamily === undefined ? null : provenFamily)}`
+    );
+  }
+  for (const field of ['model_id', 'result_digest']) {
+    if (record[field] !== terminal[field]) {
+      throw new Error(
+        `milestones: "chunk-built" for chunk "${record.chunk_id}" claims ${field} ${JSON.stringify(record[field])}, but its terminal recorded ${JSON.stringify(terminal[field])}`
+      );
+    }
+  }
+
+  // ONE DISPATCH BUILDS ONE CHUNK, across the whole tree. A dispatch_id names
+  // a ledger record every milestone can see, so a check scoped to one stream
+  // would let the next milestone adopt the same terminal — genuine evidence,
+  // belonging to somebody else.
+  const claimed = claimOfDispatch(treeRoot, record.dispatch_ref);
+  if (claimed !== null) {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" cites ${JSON.stringify(record.dispatch_ref)}, already claimed by chunk "${claimed.chunkId}" of milestone "${claimed.milestoneId}" — one dispatch builds one chunk`
+    );
+  }
+
+  // And the diff it claims is the diff that is there. Without this the record
+  // attests a digest nobody ever compared to anything: a build could cite real
+  // work, a real model and a real receipt while the repository held something
+  // else entirely.
+  const repoRoot = isNonEmptyString(opts.repoRoot) ? opts.repoRoot : path.join(treeRoot, '..');
+  const staged = stagedDiffDigest(repoRoot);
+  if (staged !== record.diff_digest) {
+    throw new Error(
+      `milestones: "chunk-built" for chunk "${record.chunk_id}" claims diff_digest ${record.diff_digest}, but ${repoRoot} has ${staged} staged — a build record describes work that is actually there`
+    );
+  }
+}
+
+// Which chunk, in which milestone, already claims this terminal — or null.
+// Reads every milestone the index names, because the question is about the
+// tree rather than about one stream.
+function claimOfDispatch(treeRoot, dispatchRef) {
+  const index = readIndex(treeRoot);
+  if (!isPlainObject(index) || !Array.isArray(index.milestones)) return null;
+  for (const entry of index.milestones) {
+    if (!isPlainObject(entry) || !isNonEmptyString(entry.id)) continue;
+    for (const record of readChunkRecordsOrThrow(chunksPathOf(treeRoot, entry.id))) {
+      if (record.kind === 'chunk-built' && record.dispatch_ref === dispatchRef) {
+        return { milestoneId: entry.id, chunkId: record.chunk_id };
+      }
+    }
+  }
+  return null;
+}
+
 // The latest record among LIFECYCLE_KINDS only, for one chunk_id — the
 // pointer both the precedence check and closeMilestone's own "is every
 // chunk green" question read. "chunk-consult"/"chunk-journeys" records
@@ -299,15 +475,31 @@ function findChunkStartRecord(records, chunkId) {
   return found;
 }
 
+// The chunk's own build record. There is exactly one per chunk — a second
+// would need a `chunk-start` immediately before it, and the lifecycle pointer
+// has moved past that by then; a revise re-dispatches and returns straight to
+// review without recording another. Taking the last match is defensive
+// uniformity with the lookup above, not a claim that several exist.
+function findChunkBuiltRecord(records, chunkId) {
+  let found;
+  for (const record of records) {
+    if (isPlainObject(record) && record.kind === 'chunk-built' && record.chunk_id === chunkId) {
+      found = record;
+    }
+  }
+  return found;
+}
+
 // Enforces the strict lifecycle precedence per chunk_id (spec -> start ->
-// review -> green; out-of-order rejected) plus chunk-green's cross-record
-// checks:
+// built -> review -> green; out-of-order rejected), the build stage's own
+// intent cross-check, plus chunk-green's cross-record checks:
 // the immediately-preceding chunk-review must carry verdict "approve", that
 // same review's family/ref is what chunk-green's own "review" must match
 // exactly (never a caller-invented family/ref disconnected from a real
 // review record — the forged-green probe's exact hole), and that family
-// must differ from the chunk's own recorded implementer_family (the
-// cross-family review law).
+// must differ from the family the chunk's own "chunk-built" record proves
+// ACTUALLY built it (the cross-family review law, against authorship rather
+// than against intent).
 function assertLifecycleAndCrossChecks(records, record) {
   const chunkId = record.chunk_id;
   const latest = latestLifecycleRecord(records, chunkId);
@@ -330,10 +522,32 @@ function assertLifecycleAndCrossChecks(records, record) {
     return;
   }
 
-  if (record.kind === 'chunk-review') {
-    if (!latest || (latest.kind !== 'chunk-start' && latest.kind !== 'chunk-review')) {
+  if (record.kind === 'chunk-built') {
+    if (!latest || latest.kind !== 'chunk-start') {
       throw new TypeError(
-        `milestones: "chunk-review" for chunk "${chunkId}" requires the chunk's prior lifecycle record to be "chunk-start" or "chunk-review" (got ${latest ? `"${latest.kind}"` : 'none'})`
+        `milestones: "chunk-built" for chunk "${chunkId}" requires the chunk's prior lifecycle record to be "chunk-start" (got ${latest ? `"${latest.kind}"` : 'none'})`
+      );
+    }
+    // The intent on a build is the intent this chunk actually went out with,
+    // not a family the caller supplies alongside its own outcome. Checking it
+    // against the chunk's own chunk-start is what keeps the divergence the
+    // record exists to show from being flattened by whoever writes it.
+    const startRecord = findChunkStartRecord(records, chunkId);
+    if (record.intended_family !== startRecord.implementer_family) {
+      throw new TypeError(
+        `milestones: "chunk-built" for chunk "${chunkId}" declares intended_family ${JSON.stringify(record.intended_family)}, but its "chunk-start" recorded ${JSON.stringify(startRecord.implementer_family)} — the intent is the chunk's, not the build's`
+      );
+    }
+    return;
+  }
+
+  // A review follows the BUILD, never the dispatch: which family reviews is
+  // decided from who actually built, so a chunk that has not recorded that
+  // yet has no reviewer to have been given to.
+  if (record.kind === 'chunk-review') {
+    if (!latest || (latest.kind !== 'chunk-built' && latest.kind !== 'chunk-review')) {
+      throw new TypeError(
+        `milestones: "chunk-review" for chunk "${chunkId}" requires the chunk's prior lifecycle record to be "chunk-built" or "chunk-review" (got ${latest ? `"${latest.kind}"` : 'none'})`
       );
     }
     return;
@@ -355,15 +569,32 @@ function assertLifecycleAndCrossChecks(records, record) {
         `milestones: "chunk-green" for chunk "${chunkId}" must carry the exact "review" (family/ref) of the latest "chunk-review" record — got family=${JSON.stringify(record.review.family)}/ref=${JSON.stringify(record.review.ref)}, expected family=${JSON.stringify(latest.review.family)}/ref=${JSON.stringify(latest.review.ref)} — a green record cannot invent evidence no real review record ever carried`
       );
     }
-    const startRecord = findChunkStartRecord(records, chunkId);
-    if (!startRecord) {
+    // THE LAW IS ABOUT WHO ACTUALLY BUILT, NOT WHO WAS MEANT TO. Comparing
+    // against `chunk-start.implementer_family` compares against INTENT, and
+    // intent and outcome part company exactly where the law matters: a chunk
+    // dispatched to the Sol-hosting seat whose run comes back attested as a
+    // Claude fallback was built by claude, so a claude review of it is a
+    // same-family review that the intent comparison waves through. The same
+    // comparison also refused the LAWFUL post-fallback pairing — the reviewer
+    // `family-evidence.js#selectReviewer` routes such a chunk to is the one
+    // whose family differs from the ACTUAL builder, which after a fallback is
+    // the family the chunk was originally dispatched to — leaving a fallen-back
+    // chunk with no reviewer it could ever seal under.
+    //
+    // `chunk-built` carries the actual family, proven at its own write boundary
+    // from the dispatch terminal's builder, and the lifecycle guarantees one
+    // exists before any review (a chunk-review requires a chunk-built or
+    // another chunk-review before it). So this is one comparison, against the
+    // evidenced fact rather than the recorded plan.
+    const builtRecord = findChunkBuiltRecord(records, chunkId);
+    if (!builtRecord) {
       throw new TypeError(
-        `milestones: "chunk-green" for chunk "${chunkId}" cannot cross-check reviewer family — no "chunk-start" record found`
+        `milestones: "chunk-green" for chunk "${chunkId}" cannot cross-check reviewer family — no "chunk-built" record found, so nothing proves who built it`
       );
     }
-    if (record.review.family === startRecord.implementer_family) {
+    if (record.review.family === builtRecord.actual_family) {
       throw new TypeError(
-        `milestones: "chunk-green" for chunk "${chunkId}" requires review.family ("${record.review.family}") to differ from the chunk's implementer_family ("${startRecord.implementer_family}") — cross-family review law`
+        `milestones: "chunk-green" for chunk "${chunkId}" requires review.family ("${record.review.family}") to differ from the family that actually built it ("${builtRecord.actual_family}") — cross-family review law`
       );
     }
     return;
@@ -409,7 +640,7 @@ function readChunkRecordsOrThrow(chunksPath) {
 // "green" — closeMilestone is the sole writer of that status, and a
 // milestone it has already closed accepts no further chunk writes: a
 // nominally "done" milestone's own evidence stream must never stay mutable.
-function recordChunk(treeRoot, milestoneId, record) {
+function recordChunk(treeRoot, milestoneId, record, opts = {}) {
   if (!isNonEmptyString(treeRoot)) {
     throw new TypeError('milestones: treeRoot must be a non-empty string');
   }
@@ -435,6 +666,7 @@ function recordChunk(treeRoot, milestoneId, record) {
 
   const records = readChunkRecordsOrThrow(chunksPath);
   assertLifecycleAndCrossChecks(records, record);
+  if (record.kind === 'chunk-built') assertBuildIsEvidenced(treeRoot, record, opts);
 
   const { kind, chunk_id, ...rest } = record;
   const seq = appendRecord(chunksPath, { kind, payload: { chunk_id, ...rest }, correlation_id: chunk_id });

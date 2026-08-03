@@ -19,7 +19,7 @@ This governs every agent working under my roof — every interaction, every sugg
 
 1. **Freshness first, at official sources.** Never build on captured knowledge of Claude Code, SDKs, models, or their APIs. Re-verify the primitive at its official documentation before relying on it — every time, no matter how recent the last check.
 
-2. **Never guess — ask.** Ambiguity is never resolved by assumption. Ambiguity about what the *operator* wants — scope, priority, an unstated preference, intent — is resolved by asking the operator directly. A **block** — any point where the build cannot proceed and operator feedback would otherwise be the default next step — goes to the agreement pass first: Fable (when available) and GPT-5.6-Sol take the decision together, and only if that pass fails to produce a consensus does it escalate to the operator — an operator ruling, and it binds. The operator drives the sequence. The kept-warm milestone designer's consult channel handles in-flight implementation questions the same way — these channels exist precisely so operator-direct questions stay rare and real: preference and intent, never blocks the passes could have settled.
+2. **Never guess — ask.** Ambiguity is never resolved by assumption. Ambiguity about what the *operator* wants — scope, priority, an unstated preference, intent — is resolved by asking the operator directly. A **block** — any point where the build cannot proceed and operator feedback would otherwise be the default next step — goes to the agreement pass first: Fable (when available) and GPT-5.6-Sol take the decision together, and only if that pass fails to produce a consensus does it escalate to the operator — an operator ruling, and it binds. The operator drives the sequence. The milestone designer's consult seam handles in-flight implementation questions the same way — these channels exist precisely so operator-direct questions stay rare and real: preference and intent, never blocks the passes could have settled.
 
 3. **Model routing.** Never Haiku. Mechanical work (fetch, validate, report) runs on Sonnet at medium or low effort. Synthesis, architecture, and judgment run on a strong model. Effort scales with the corpus and the stakes in front of it, never bumped to the top tier by reflex.
 
@@ -55,8 +55,9 @@ This table is authoritative: a kind not listed here has no sanctioned writer, wh
 | `ledger.jsonl` | `decision` (`settings_interview_completed`) | Kiln, closing the settings interview | `kind-registry.js append onboarding-decision` — `decision` on this one file, nothing else |
 | `ledger.jsonl` | `stop` | `handoff-recorder` | `handoff.js write-stop` — closed five-value stop vocabulary, per-kind fields refused when not permitted |
 | `ledger.jsonl` | `intake` | `intake.js harvest` | one record per migration, keyed on the transaction's own `txn_id` — the identity is the flag, so a re-entered harvest finds the record and skips the append |
-| `milestones/<id>/chunks.jsonl` | `chunk-spec`, `chunk-start`, `chunk-review`, `chunk-consult`, `chunk-journeys` | `milestone-designer` | `milestones.js record-chunk` — closed kind set, strict spec→start→review→green precedence |
-| `milestones/<id>/chunks.jsonl` | `chunk-green` | Kiln, after its own real commit | same command; refuses a `review` that diverges from the latest `chunk-review`, or a `review.family` matching the implementer's |
+| `milestones/<id>/chunks.jsonl` | `chunk-spec`, `chunk-start`, `chunk-built`, `chunk-review` | the implementation workflow, per transition | `milestones.js record-chunk` — closed kind set, strict spec→start→built→review→green precedence; no seat writes one |
+| `milestones/<id>/chunks.jsonl` | `chunk-consult`, `chunk-journeys` | the implementation workflow — sanctioned, NO live writer | same command, same closed contract; no transition records either kind today (a consult promotes its answer and nothing logs it; nothing records journey authorship), so both stand unwritten alongside `verification/journeys.json` below |
+| `milestones/<id>/chunks.jsonl` | `chunk-green` | `implementation.js`'s seal transaction, fused to its own commit | same command; refuses a `review` that diverges from the latest `chunk-review`, or a `review.family` matching the family that actually built the chunk |
 | `last-mile.jsonl` | `park` | Kiln, off the blocker ladder | `delivery.js park` — a worker requests parking through its envelope, never appends |
 | `verification/runs/<run-id>.jsonl` | `run-start` | `verification.js start-run` | monotonic run identity; refuses a `runId` already registered |
 | `verification/runs/<run-id>.jsonl` | `journey-result` | `verification.js record-run` / `record-journey-run` | every result must have a matching `gate` ledger record proving it ran |
@@ -65,7 +66,7 @@ This table is authoritative: a kind not listed here has no sanctioned writer, wh
 | `tablet.jsonl` | `constraint` | Kiln, same distill-and-file duty | same command, same closed contract |
 | `tablet.jsonl` | `failure` | Kiln, same distill-and-file duty | same command; entries are never deleted — a correction is a later entry naming the one it corrects |
 
-`verification/journeys.json` sits outside this table: `milestone-designer` lands it with its own `Write` tool at JIT-authoring time (`product/implementation/flow.md` step (d).3), and `assembleSuite`'s fail-closed validation at verification entry is what checks its shape.
+`verification/journeys.json` sits outside this table and currently has NO writer. It was landed by the milestone designer at JIT-authoring time under the manual chunk step; that step is gone, and no workflow transition replaced the write (`product/implementation/flow.md` §"The honest gaps"). `assembleSuite`'s fail-closed validation at verification entry is still what checks its shape, so an unassemblable catalog surfaces there rather than silently.
 
 ## Runtime anti-goals
 

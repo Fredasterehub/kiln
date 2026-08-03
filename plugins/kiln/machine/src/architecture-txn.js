@@ -59,6 +59,28 @@
 // still replays exactly once. Making `reopenPhase` idempotent under its own
 // reopen identity is the fix, and it belongs to whoever makes this path live.
 //
+// THE TWO-WRITERS GUARD. A promotion may be attributed to the mind that made
+// it — `{mind, scope, generation}` — and when it is, the marker records that
+// attribution and this module refuses any promotion that does not come from
+// the generation the LEDGER currently shows seated over that scope. The
+// hazard is a superseded mind whose process is still running: it holds a
+// staged revision, it believes it is the architect, and nothing about its own
+// staged bytes reveals otherwise. Which generation is live is therefore
+// re-derived here from `mind-open`/`mind-retire` (receipts.js's kinds, read
+// straight off the ledger) rather than taken from the caller, whose belief is
+// the very thing in question.
+//
+// Attribution is optional so the pre-mind promotion path still works, but it
+// RATCHETS: once a marker carries one, an unattributed promotion is refused,
+// because a guard a writer can skip by declining to identify itself guards
+// nothing. Generations are counted per (mind, scope), so the comparison is
+// always within one scope — another scope's later generation says nothing
+// about this one.
+//
+// Staging is deliberately NOT guarded. A stale mind that stages a revision
+// writes a directory nobody promotes; it is the promotion that makes a
+// revision the live architecture, so that is where the question is asked.
+//
 // This module never writes a gate: `plan-gate.js#approveGate` is the sole
 // producer of the manifest+gate pair for a SEALED architecture, and a
 // promotion deliberately leaves any existing `gate.json` alone — a new
@@ -82,6 +104,7 @@ const {
   SHA256_DIGEST_RE,
 } = require('./manifest.js');
 const { reopenPhase } = require('./phases.js');
+const { withLifecycleLock } = require('./receipts.js');
 
 const SCHEMA_VERSION = 1;
 const MARKER_FILENAME = 'revision.json';
@@ -97,6 +120,12 @@ const TXN_LOCK_BASE = 'architecture-txn';
 // Before anything is promoted the live set is at revision 0 — a number, not
 // a special case, so "the next revision" is one expression everywhere.
 const NO_REVISION = 0;
+
+// The mind lifecycle kinds this module READS (receipts.js writes them), and
+// the three marker fields that record an attributed promotion.
+const MIND_OPEN_KIND = 'mind-open';
+const MIND_RETIRE_KIND = 'mind-retire';
+const MIND_MARKER_FIELDS = Object.freeze(['mind', 'mind_scope', 'mind_generation']);
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
@@ -159,6 +188,33 @@ function assertMarkerShape(marker, markerPath) {
   if (typeof marker.manifest_digest !== 'string' || !SHA256_DIGEST_RE.test(marker.manifest_digest)) {
     throw new Error(
       `architecture-txn: the marker at ${markerPath} carries no sha256 manifest_digest — the promoted revision cannot be bound to its content`
+    );
+  }
+  assertMarkerAttribution(marker, markerPath);
+}
+
+// A promotion is attributed to a whole mind or to none. A marker holding part
+// of one is corruption of the field the guard reads, and reading it as
+// "unattributed" would quietly retire the ratchet: the next writer would need
+// to name nobody.
+function assertMarkerAttribution(marker, markerPath) {
+  const present = MIND_MARKER_FIELDS.filter((field) =>
+    Object.prototype.hasOwnProperty.call(marker, field)
+  );
+  if (present.length === 0) return;
+  if (present.length !== MIND_MARKER_FIELDS.length) {
+    throw new Error(
+      `architecture-txn: the marker at ${markerPath} carries a partial mind attribution (${present.join(', ')}) — refusing to guess which mind promoted the live revision`
+    );
+  }
+  if (
+    !isNonEmptyString(marker.mind) ||
+    !isNonEmptyString(marker.mind_scope) ||
+    !Number.isSafeInteger(marker.mind_generation) ||
+    marker.mind_generation < 1
+  ) {
+    throw new Error(
+      `architecture-txn: the marker at ${markerPath} carries an unreadable mind attribution — refusing to compare a generation against it`
     );
   }
 }
@@ -370,7 +426,97 @@ function requireVerifiedRevision(archDir, revision) {
   return { revisionDir, manifest, manifestPath };
 }
 
-// promoteStaged(archDir, revision, expectedArtifactsDigest) — the staged
+// ---------- the mind generation guard ----------
+
+// The caller's attribution, whole, or null when it named no mind. Partial is
+// a caller defect rather than a refusal to weigh: it means the caller intended
+// to identify itself and got the shape wrong, and silently treating that as
+// "unattributed" would skip the guard on a typo.
+//
+// The option set is CLOSED, and that is part of the guard rather than
+// housekeeping. A promoting mind that could pass any extra option is one
+// naming convention away from redirecting something the guard depends on —
+// the ledger it is judged by, most of all — so an option this module does not
+// know is refused instead of ignored.
+const PROMOTE_OPTIONS = Object.freeze(['mind', 'scope', 'generation']);
+
+function mindAttributionOf(opts) {
+  const unexpected = Object.keys(opts).filter((key) => !PROMOTE_OPTIONS.includes(key));
+  if (unexpected.length > 0) {
+    throw new TypeError(
+      `architecture-txn: promoteStaged got unexpected option(s) ${JSON.stringify(unexpected)} — it takes only {${PROMOTE_OPTIONS.join(', ')}}, and the ledger it reads is derived from the tree being promoted`
+    );
+  }
+  const declared = PROMOTE_OPTIONS.filter(
+    (field) => opts[field] !== undefined && opts[field] !== null
+  );
+  if (declared.length === 0) return null;
+  // No separate "are all three here?" check: a field that is absent is a
+  // field that fails its own value check below, so counting them would refuse
+  // the same inputs with the same sentence one line earlier.
+  if (
+    !isNonEmptyString(opts.mind) ||
+    !isNonEmptyString(opts.scope) ||
+    !Number.isSafeInteger(opts.generation) ||
+    opts.generation < 1
+  ) {
+    throw new TypeError(
+      `architecture-txn: promoteStaged attribution requires all of {mind, scope, generation} or none (got ${JSON.stringify(declared)})`
+    );
+  }
+  return { mind: opts.mind, scope: opts.scope, generation: opts.generation };
+}
+
+// Rendered the way receipts.js renders the same pair, so a refusal here and a
+// refusal there name the mind identically.
+function mindKey(mind, scope) {
+  return `mind ${JSON.stringify([mind, scope])}`;
+}
+
+// Which generation of this mind is seated over this scope right now, or null
+// when none is: the highest generation ever opened, unless it has since been
+// retired. Derived from the stream on every call, because the answer changes
+// underneath a long-running writer — which is the whole point.
+function liveGenerationOf(ledgerPath, mind, scope) {
+  const records = readLedgerOrThrow(ledgerPath).filter(
+    (record) => record.mind === mind && record.scope === scope
+  );
+  const opened = records.filter((record) => record.kind === MIND_OPEN_KIND);
+  if (opened.length === 0) return null;
+  const latest = Math.max(...opened.map((record) => record.generation));
+  const retired = records.some(
+    (record) => record.kind === MIND_RETIRE_KIND && record.generation === latest
+  );
+  return retired ? null : latest;
+}
+
+function requireLiveGeneration(ledgerPath, attribution) {
+  const key = mindKey(attribution.mind, attribution.scope);
+  const live = liveGenerationOf(ledgerPath, attribution.mind, attribution.scope);
+  if (live === null) {
+    throw new Error(
+      `architecture-txn: ${key} has no live generation in ${ledgerPath} — refusing a promotion from a mind that is not seated`
+    );
+  }
+  if (live !== attribution.generation) {
+    throw new Error(
+      `architecture-txn: generation ${attribution.generation} of ${key} is not live (generation ${live} is) — refusing a promotion from a superseded mind`
+    );
+  }
+}
+
+// The ratchet. An attributed marker is the tree saying minds own this
+// architecture; from then on a promotion that names nobody is not a legacy
+// caller, it is the second writer with its name left off.
+function requireAttributionRatchet(marker, attribution) {
+  if (attribution !== null || marker === null) return;
+  if (!Object.prototype.hasOwnProperty.call(marker, 'mind')) return;
+  throw new Error(
+    `architecture-txn: revision ${marker.revision} was promoted by ${mindKey(marker.mind, marker.mind_scope)} at generation ${marker.mind_generation}, and this promotion names no mind — refusing to let an unattributed promotion supersede one`
+  );
+}
+
+// promoteStaged(archDir, revision, expectedArtifactsDigest, opts) — the staged
 // revision becomes the live set. Promotion is a single atomic marker write, so
 // it has no internal steps to crash between: the marker is either the old
 // revision or the new one, and both name a directory that is whole.
@@ -385,9 +531,19 @@ function requireVerifiedRevision(archDir, revision) {
 // A re-call for the already-promoted revision compares that same full input,
 // and additionally that the manifest file on disk is still the one the marker
 // recorded at promotion. Returning a receipt for a revision whose bytes have
-// since been swapped would vouch for content that never went live.
-function promoteStaged(archDir, revision, expectedArtifactsDigest) {
+// since been swapped would vouch for content that never went live. It answers
+// the generation question too: a superseded mind re-calling it would otherwise
+// read the receipt as confirmation that it is still the one seated.
+//
+// opts: {mind, scope, generation} — the promoting mind, all three or none,
+// and nothing else. The ledger the generation is read from is DERIVED from
+// archDir, never passed: a promoting mind that could name its own judge would
+// only have to point at a tree where it is still seated.
+function promoteStaged(archDir, revision, expectedArtifactsDigest, opts = {}) {
   requireArchDir(archDir);
+  if (!isPlainObject(opts)) {
+    throw new TypeError('architecture-txn: promoteStaged opts must be an object');
+  }
   if (!Number.isInteger(revision) || revision < 1) {
     throw new TypeError(
       `architecture-txn: promoteStaged requires an integer revision >= 1 (got ${JSON.stringify(revision)})`
@@ -399,9 +555,45 @@ function promoteStaged(archDir, revision, expectedArtifactsDigest) {
     );
   }
 
+  const attribution = mindAttributionOf(opts);
+  const treeRoot = path.dirname(archDir);
+  const ledgerPath = path.join(treeRoot, 'ledger.jsonl');
+
+  // The generation check and the act it authorizes, as ONE step with respect
+  // to lifecycle writes. Checking under the transaction lock alone would only
+  // exclude other promotions: a retire lands under the RECEIPTS lock, so a
+  // generation could pass the check, be superseded while the manifest is
+  // verified, and still write the marker — leaving a tree whose live mind is
+  // N+1 and whose live architecture is attributed to N.
+  //
+  // Lock order is fixed and shallow: architecture-txn, then receipts, then
+  // (inside receipts) the ledger. receipts.js takes no lock of this module's,
+  // so the order cannot close into a cycle. The hold is short by
+  // construction — everything expensive is already done before it is taken,
+  // and the marker write is the promotion's last step.
+  const underGuard = (act) =>
+    attribution === null
+      ? act()
+      : withLifecycleLock(treeRoot, () => {
+          requireLiveGeneration(ledgerPath, attribution);
+          return act();
+        });
+
   return withLock(path.join(archDir, TXN_LOCK_BASE), () => {
     const marker = readMarker(archDir);
     const current = revisionOf(marker);
+
+    // Asked before anything is read about the revision, so a stale writer is
+    // refused on the same grounds whether its revision is coherent or not.
+    requireAttributionRatchet(marker, attribution);
+    // The cheap precondition, unlocked and advisory, in the same spirit as
+    // reopenBlocker below: it costs one ledger read and it means a superseded
+    // mind is told it is superseded, rather than being told its manifest is
+    // damaged by a verification it was never entitled to run. It transfers no
+    // ownership of the law — the check that DECIDES is the one inside
+    // underGuard, adjacent to the write and holding the lifecycle lock, and
+    // this one is free to be stale by the time that runs.
+    if (attribution !== null) requireLiveGeneration(ledgerPath, attribution);
 
     if (revision === current) {
       const { manifest, manifestPath } = requireVerifiedRevision(archDir, revision);
@@ -411,7 +603,10 @@ function promoteStaged(archDir, revision, expectedArtifactsDigest) {
           `architecture-txn: revision ${revision} is already promoted from different content than the revision now on disk — refusing to vouch for content that never went live`
         );
       }
-      return readCurrent(archDir);
+      // Nothing is written on this path, but the question is still asked: a
+      // superseded mind must not read this receipt as confirmation that it is
+      // still the one seated.
+      return underGuard(() => readCurrent(archDir));
     }
     if (revision < current) {
       throw new Error(
@@ -428,13 +623,24 @@ function promoteStaged(archDir, revision, expectedArtifactsDigest) {
     requireIntendedPayload(revision, manifest, expectedArtifactsDigest);
 
     // The whole promotion: one atomic write, binding the revision to the
-    // exact manifest bytes that were verified a line above.
-    writeAtomic(markerPathOf(archDir), {
-      schema_version: SCHEMA_VERSION,
-      revision,
-      manifest_digest: digestOfFile(manifestPath),
-      promoted_at: new Date().toISOString(),
-    });
+    // exact manifest bytes that were verified a line above, and to the mind
+    // that made it live when one was named — checked to be seated in the same
+    // hold that writes it.
+    underGuard(() =>
+      writeAtomic(markerPathOf(archDir), {
+        schema_version: SCHEMA_VERSION,
+        revision,
+        manifest_digest: digestOfFile(manifestPath),
+        promoted_at: new Date().toISOString(),
+        ...(attribution === null
+          ? {}
+          : {
+              mind: attribution.mind,
+              mind_scope: attribution.scope,
+              mind_generation: attribution.generation,
+            }),
+      })
+    );
 
     return readCurrent(archDir);
   });

@@ -74,7 +74,13 @@ const PM_EXEC_PREFIX = {
 // them.
 const PATH_PROBE_ORDER = ['npm', 'yarn', 'pnpm', 'bun'];
 
-const PROFILE_ENTRY_FIELDS = ['scaffolds', 'install_cmd_template', 'probe_cmd', 'reporter_flags'];
+const PROFILE_ENTRY_FIELDS = [
+  'scaffolds',
+  'install_cmd_template',
+  'suite_cmd_template',
+  'probe_cmd',
+  'reporter_flags',
+];
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value !== '';
@@ -293,6 +299,50 @@ function composeInstall(profileId, pmOrDir, opts = {}) {
   return template
     .replace('{pm_install_dev}', PM_INSTALL_DEV_PREFIX[pm])
     .replace('{pm_exec}', PM_EXEC_PREFIX[pm]);
+}
+
+// composeSuite(profileId, pmOrDir, opts) -> string (the exact shell command
+// that runs the target project's OWN full suite, never executed here).
+//
+// The per-chunk gate and the milestone regression floor both need this, and
+// both had been hard-coding `npm test` — which is wrong for two of the three
+// profiles and reports nothing machine-readable for the third. The command is
+// a property of the toolchain profile exactly as the install command is, so it
+// lives in the registry beside it; the reporter flags the registry already
+// carried were unusable on their own, because nobody had said which command
+// they attach to.
+//
+// EVERY declared reporter flag is appended, not the first one: a suite that
+// reported on part of itself while looking like it reported on all of it is
+// the failure this function exists to make impossible. `node-web` resolves its
+// package manager exactly as composeInstall does, and for the same reason —
+// a yarn target runs `yarn dlx playwright test`, never a mixed invocation.
+function composeSuite(profileId, pmOrDir, opts = {}) {
+  assertKnownProfileId(profileId);
+  const registry = loadProfiles();
+  const entry = registry.profiles[profileId];
+  const flags = entry.reporter_flags.join(' ');
+
+  let template = entry.suite_cmd_template;
+  if (template.includes('{pm_exec}')) {
+    template = template.replace('{pm_exec}', PM_EXEC_PREFIX[resolveManager(profileId, pmOrDir, opts)]);
+  }
+  return flags === '' ? template : `${template} ${flags}`;
+}
+
+// The manager both composeInstall and composeSuite resolve the same way: a
+// known manager name is used directly, anything else is a target directory to
+// detect one in, and a directory with no detectable manager has nothing honest
+// to substitute.
+function resolveManager(profileId, pmOrDir, opts) {
+  if (typeof pmOrDir === 'string' && KNOWN_PACKAGE_MANAGERS.has(pmOrDir)) return pmOrDir;
+  const { pm, reason } = detectPackageManager(pmOrDir, opts);
+  if (pm === null) {
+    throw new Error(
+      `toolchain: composing a "${profileId}" command could not resolve a package manager for ${pmOrDir}: ${reason}`
+    );
+  }
+  return pm;
 }
 
 // scaffoldProfile(profileId, targetDir) -> {created[], skipped[]} —
@@ -549,6 +599,7 @@ module.exports = {
   validateProfiles,
   detectPackageManager,
   composeInstall,
+  composeSuite,
   probeSatisfied,
   scaffoldProfile,
 };

@@ -2,22 +2,37 @@
   "schema_version": 1,
   "profiles": {
     "node-web": {
-      "scaffolds": ["playwright.config.ts", "tests/"],
+      "scaffolds": [
+        "playwright.config.ts",
+        "tests/"
+      ],
       "install_cmd_template": "{pm_install_dev} @playwright/test && {pm_exec} playwright install --with-deps",
+      "suite_cmd_template": "{pm_exec} playwright test",
       "probe_cmd": "node -e \"require.resolve('@playwright/test')\"",
-      "reporter_flags": ["--reporter=json"]
+      "reporter_flags": [
+        "--reporter=json"
+      ]
     },
     "node-cli": {
       "scaffolds": [],
       "install_cmd_template": "true # node-cli: node:test ships with the Node runtime -- nothing to install",
+      "suite_cmd_template": "node --test",
       "probe_cmd": "node -e \"require('node:test')\"",
-      "reporter_flags": ["--test-reporter=tap"]
+      "reporter_flags": [
+        "--test-reporter=tap"
+      ]
     },
     "python-pytest": {
-      "scaffolds": ["requirements-dev.txt", ".venv/"],
+      "scaffolds": [
+        "requirements-dev.txt",
+        ".venv/"
+      ],
       "install_cmd_template": "python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt",
+      "suite_cmd_template": ".venv/bin/pytest",
       "probe_cmd": ".venv/bin/pytest --version",
-      "reporter_flags": ["--junitxml=report.xml"]
+      "reporter_flags": [
+        "--junitxml=report.xml"
+      ]
     }
   }
 }

@@ -387,6 +387,85 @@ function validateCriteriaRegisterChecked(reg) {
 
 const DESIGNER_FAMILIES = new Set(['claude', 'gpt']);
 
+// WHICH AGENT ACTUALLY RUNS A SEAT, keyed by the FAMILY the routing config
+// selected — not by the config's slot name.
+//
+// Two closed vocabularies had never been joined: `machine/routing/*.json`
+// names slots (`chunk_review_of_claude_work`, `milestone_review`), and
+// `agents/` holds the seats that exist (`chunk-reviewer-sol`,
+// `milestone-reviewer`). A selector returned the slot name, a workflow passed
+// it as an `agentType`, and it bound no agent at all. This map is the join,
+// and it lives here beside the family vocabulary for the reason C2 established
+// when builder→family needed a home: a map between two closed vocabularies is
+// a fact, not a policy, and belongs where they meet.
+//
+// KEYED BY FAMILY, AND THAT IS LOAD-BEARING RATHER THAN TIDY. Keying by slot
+// looks equivalent and is wrong in exactly the case that matters: in degraded
+// mode the config substitutes a CLAUDE model into
+// `chunk_review_of_claude_work`, and a slot-keyed map would then dispatch
+// `chunk-reviewer-sol` — the agent whose whole body dispatches Codex — at the
+// one moment Codex is known to be unreachable. Resolving from the family the
+// selected model belongs to is correct in both modes, because the family is
+// what decides which agent can run the model at all.
+//
+// The suite asserts every name below exists as `agents/<name>.md`, so a seat
+// renamed or deleted fails the tests rather than the live run.
+const SEAT_AGENTS = Object.freeze({
+  chunk_review: Object.freeze({ gpt: 'chunk-reviewer-sol', claude: 'chunk-reviewer-sonnet' }),
+  milestone_review: 'milestone-reviewer',
+  implementer: Object.freeze({ gpt: 'implementer-sol', claude: 'implementer-opus' }),
+});
+
+// Every installed seat name the map can yield, for the existence check.
+function seatAgentNames() {
+  return [
+    ...Object.values(SEAT_AGENTS.chunk_review),
+    SEAT_AGENTS.milestone_review,
+    ...Object.values(SEAT_AGENTS.implementer),
+  ];
+}
+
+// How a dispatch terminal's PROVEN builder maps onto those two families, and
+// which transport each builder can possibly have come out of. Both are facts
+// about two closed vocabularies meeting — receipts.js's `builder` and the
+// families above — rather than any one module's policy, which is why they sit
+// here beside the vocabulary they join rather than in either module that
+// reads them. `milestones.js` needs them to verify a build record against the
+// terminal it cites; `family-evidence.js` needs them to gather that evidence
+// in the first place, and it is the same fact both times.
+//
+// `null` is deliberately absent from the family map: a terminal that cannot
+// name its builder proves no family, which is not the same as proving an
+// unknown one. And the transport map is what makes an internally impossible
+// terminal — Sol reporting out of a native Agent step, or a Claude fallback
+// reporting out of a codex child — recognisable as the contradiction it is.
+// Which family a model belongs to. It lived in family-evidence.js, where it
+// was the only reader; `dispatch.js` now needs it too, and a second copy of a
+// closed vocabulary is how two truths about one thing start to drift. Same
+// move, same reason, as the builder and seat maps beside it.
+const FAMILY_OF_MODEL = Object.freeze({
+  'gpt-5.6-sol': 'gpt',
+  'opus-5': 'claude',
+  'sonnet-5': 'claude',
+  'fable-5': 'claude',
+});
+
+// The seats that run their model through the Codex CLI inside a native Agent
+// step — the only ones whose dispatch may claim a hosted Sol run. A claim is
+// bound to who may lawfully make it, because shape alone is evidence of
+// nothing: without this, any native Opus result carrying a UUID-shaped string
+// would become GPT-family evidence and the cross-family law would be deciding
+// on a coincidence.
+const HOSTED_GPT_SEATS = Object.freeze(['implementer-sol', 'chunk-reviewer-sol', 'milestone-reviewer']);
+
+const FAMILY_OF_BUILDER = Object.freeze({ sol: 'gpt', 'sol-hosted': 'gpt', 'claude-fallback': 'claude' });
+// `sol-hosted` maps to native on purpose, and it is what keeps the
+// internally-impossible-record check intact: a hosted Sol run really did go out
+// as a native Agent step, so the record it produces is not a dispatch that
+// could not have happened. What differs from `claude-fallback` is only who did
+// the work inside it, which is exactly what the builder value carries.
+const TRANSPORT_OF_BUILDER = Object.freeze({ sol: 'codex', 'sol-hosted': 'native', 'claude-fallback': 'native' });
+
 // architecture/milestones.json cross-checked against criteria-register.json
 // (the "lost-nothing" floor): {schema_version,
 // milestones:[{id, order, title, designer_family, slice_goal,
@@ -1244,6 +1323,12 @@ module.exports = {
   checkIntakeTxn,
   TRUST_FLAGS,
   DESIGNER_FAMILIES,
+  SEAT_AGENTS,
+  seatAgentNames,
+  FAMILY_OF_MODEL,
+  HOSTED_GPT_SEATS,
+  FAMILY_OF_BUILDER,
+  TRANSPORT_OF_BUILDER,
   DEVIATION_FIELDS,
   PARK_ALL_FIELDS,
   STOP_STATES,

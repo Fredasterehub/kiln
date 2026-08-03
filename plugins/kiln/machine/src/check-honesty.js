@@ -420,7 +420,12 @@ function checkHonesty({ statePath, ledgerPath }) {
 // jsonl.appendEvent directly, so ledger.jsonl — one of the nine named
 // streams bound to the common header — never mixes header-complete and
 // header-bare records.
-function runGate({ gateId, cmd, ledgerPath }) {
+// `cwd` is optional and names WHERE the gate runs. A gate that runs "wherever
+// the process happened to be" is not evidence about anything: the target
+// project's suite has to be run in the target project, and inheriting a
+// caller's working directory silently answers about a different tree. Omitted,
+// the behaviour is unchanged — the calling process's own directory.
+function runGate({ gateId, cmd, ledgerPath, cwd }) {
   if (typeof gateId !== 'string' || gateId === '') {
     throw new TypeError('runGate: gateId must be a non-empty string');
   }
@@ -430,7 +435,7 @@ function runGate({ gateId, cmd, ledgerPath }) {
   if (typeof ledgerPath !== 'string' || ledgerPath === '') {
     throw new TypeError('runGate: ledgerPath must be a non-empty string');
   }
-  const outcome = spawnSync(cmd, { shell: true, encoding: 'utf8' });
+  const outcome = spawnSync(cmd, { shell: true, encoding: 'utf8', cwd });
   const exitCode = outcome.status === null ? 1 : outcome.status; // signal-killed -> treated as failure
   const seq = appendRecord(ledgerPath, {
     kind: 'gate',

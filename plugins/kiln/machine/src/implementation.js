@@ -61,14 +61,16 @@
 // holds the same discipline for the same reason).
 
 const path = require('node:path');
-const { createHash } = require('node:crypto');
-const { spawnSync } = require('node:child_process');
 
 const { withLock } = require('./jsonl.js');
 const { readRecords } = require('./stream.js');
 const { readJson } = require('./atomic-json.js');
-const { recordChunk, closeMilestone, LIFECYCLE_KINDS } = require('./milestones.js');
+const { recordChunk, closeMilestone, createMilestone, LIFECYCLE_KINDS } = require('./milestones.js');
 const { resolveRef } = require('./receipts.js');
+// The staged-diff digest and the git primitives it rests on live in their own
+// module so `milestones.js` can recompute the same digest without importing
+// this one, which imports it. Re-exported below, unchanged.
+const { stagedDiffDigest, git, gitOrThrow, requireRepo } = require('./staged-diff.js');
 
 // withLock(file) creates and removes `<file>.lock`; the base path itself is
 // never written, so this names a lock, not a file in the tree.
@@ -97,34 +99,8 @@ function milestoneBranchOf(milestoneId) {
 
 // ---------- git ----------
 
-// Every git invocation in this module goes through these two. `-c` settings
-// that would otherwise vary the BYTES of a diff or a log line are pinned at
-// the call sites that read them, never left to the repository's own config.
-function git(repoRoot, args) {
-  const result = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
-  if (result.error !== undefined) {
-    throw new Error(`implementation: could not run git in ${repoRoot} — ${result.error.message}`);
-  }
-  return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '' };
-}
-
-function gitOrThrow(repoRoot, args) {
-  const result = git(repoRoot, args);
-  if (result.status !== 0) {
-    throw new Error(
-      `implementation: git ${args.join(' ')} failed in ${repoRoot} (exit ${result.status}): ${result.stderr.trim()}`
-    );
-  }
-  return result.stdout;
-}
-
-function requireRepo(repoRoot) {
-  const result = git(repoRoot, ['rev-parse', '--is-inside-work-tree']);
-  if (result.status !== 0 || result.stdout.trim() !== 'true') {
-    throw new Error(`implementation: ${repoRoot} is not a git repository — refusing to run a git transaction against it`);
-  }
-}
-
+// The branch HEAD is on — this module's own question, since only its
+// transactions care which branch a chunk commits to.
 function currentBranch(repoRoot) {
   return gitOrThrow(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
 }
@@ -150,34 +126,6 @@ function findSignedCommit(repoRoot, ref, needles) {
   if (result.status !== 0) return null;
   const sha = result.stdout.trim();
   return sha === '' ? null : sha;
-}
-
-// stagedDiffDigest(repoRoot) — the canonical digest of what is staged right
-// now, and the value a reviewer cites when it approves a diff. Every flag
-// here pins a git config knob that could otherwise change the bytes without
-// changing the change: rename detection, external and textconv drivers,
-// color, abbreviation width, and non-ASCII path quoting. Binary content is
-// included (as git's own base85) so a binary-only change is never digested as
-// an empty diff.
-function stagedDiffDigest(repoRoot) {
-  if (!isNonEmptyString(repoRoot)) {
-    throw new TypeError('implementation: repoRoot must be a non-empty string');
-  }
-  requireRepo(repoRoot);
-  const diff = gitOrThrow(repoRoot, [
-    '-c',
-    'core.abbrev=40',
-    '-c',
-    'core.quotePath=true',
-    'diff',
-    '--cached',
-    '--no-color',
-    '--no-ext-diff',
-    '--no-textconv',
-    '--no-renames',
-    '--binary',
-  ]);
-  return `sha256:${createHash('sha256').update(diff, 'utf8').digest('hex')}`;
 }
 
 // ---------- the commit messages, which are also the idempotency keys ----------
@@ -584,9 +532,90 @@ function closeMilestoneTxn(treeRoot, milestoneId, closeInfo, opts = {}) {
   });
 }
 
+// openMilestoneTxn(treeRoot, entry, opts) — a milestone's branch and its own
+// genesis records, as ONE recoverable transaction. The mirror of
+// closeMilestoneTxn at the other end of a milestone's life, and re-enterable
+// for the same reason: two durable writes (the branch, then the milestone)
+// with a crash point between them.
+//
+// The order is branch FIRST. A milestone in the index whose branch does not
+// exist is a milestone nothing can commit to, and the only way out of it is
+// to make the branch anyway — so the sequence puts the recoverable half
+// first, and re-entry finishes whichever half is missing. `createMilestone`
+// is a one-shot genesis operation that refuses a repeat, so replay is
+// answered here, from the index entry it already wrote.
+//
+// opts: {repoRoot = <treeRoot>/.., branch = milestone/<id>, base = "main"}.
+function openMilestoneTxn(treeRoot, entry, opts = {}) {
+  if (!isNonEmptyString(treeRoot)) {
+    throw new TypeError('implementation: treeRoot must be a non-empty string');
+  }
+  if (!isPlainObject(entry) || !isNonEmptyString(entry.id)) {
+    throw new TypeError('implementation: openMilestoneTxn requires a milestone entry with a non-empty "id"');
+  }
+  const milestoneId = entry.id;
+  const repoRoot = isNonEmptyString(opts.repoRoot) ? opts.repoRoot : path.join(treeRoot, '..');
+  const branch = isNonEmptyString(opts.branch) ? opts.branch : milestoneBranchOf(milestoneId);
+  const base = isNonEmptyString(opts.base) ? opts.base : DEFAULT_BASE_BRANCH;
+
+  return withLock(path.join(treeRoot, IMPLEMENTATION_LOCK_BASE), () => {
+    // Already open: the index entry IS the receipt, and it is only a replay
+    // if it describes the same milestone. A second call under a different
+    // title or family is a different milestone wearing a recorded id.
+    const existing = indexEntryOf(treeRoot, milestoneId);
+    if (existing !== null) {
+      for (const field of ['title', 'designer_family']) {
+        if (entry[field] !== undefined && existing[field] !== entry[field]) {
+          throw new Error(
+            `implementation: milestone "${milestoneId}" is already open as ${JSON.stringify(existing[field])} — refusing to reopen it as ${JSON.stringify(entry[field])}`
+          );
+        }
+      }
+      // The toolchain profile is compared ALWAYS, not only when the caller
+      // supplied it. Omitting it is not "no opinion": `createMilestone`
+      // records an omission as `null`, a real value meaning this milestone
+      // needs nothing, so an absent field is a claim like any other. And it is
+      // the claim with consequences — it decides whether the milestone
+      // preflights at all, and which install and suite commands its gates run
+      // — so a replay free to re-describe it would leave a milestone's gate
+      // records and its recorded toolchain describing different milestones.
+      const wantProfile = Object.prototype.hasOwnProperty.call(entry, 'toolchain_profile')
+        ? entry.toolchain_profile
+        : null;
+      if (existing.toolchain_profile !== wantProfile) {
+        throw new Error(
+          `implementation: milestone "${milestoneId}" is already open with toolchain_profile ${JSON.stringify(existing.toolchain_profile)} — refusing to reopen it as ${JSON.stringify(wantProfile)}`
+        );
+      }
+      requireRepo(repoRoot);
+      ensureBranch(repoRoot, branch, base);
+      return { milestoneId, branch, entry: existing };
+    }
+
+    requireRepo(repoRoot);
+    ensureBranch(repoRoot, branch, base);
+    createMilestone(treeRoot, entry);
+    return { milestoneId, branch, entry: indexEntryOf(treeRoot, milestoneId) };
+  });
+}
+
+// The branch exists and is checked out, whether this call made it or found
+// it. Checking out a branch that is already current is a no-op in git, so
+// re-entry costs nothing and asserts the state the caller is owed.
+function ensureBranch(repoRoot, branch, base) {
+  if (commitOf(repoRoot, branch) === null) {
+    gitOrThrow(repoRoot, ['checkout', '--quiet', '-b', branch, base]);
+    return;
+  }
+  if (currentBranch(repoRoot) !== branch) {
+    gitOrThrow(repoRoot, ['checkout', '--quiet', branch]);
+  }
+}
+
 module.exports = {
   sealChunk,
   closeMilestoneTxn,
+  openMilestoneTxn,
   stagedDiffDigest,
   chunkCommitMessage,
   milestoneMergeMessage,
