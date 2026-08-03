@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "classes": {
+    "mechanical_step": 300000,
+    "research_read": 900000,
+    "review": 1800000,
+    "chunk_implementation": 2700000,
+    "mind_consult": 900000,
+    "codex_dispatch": 1800000
+  },
+  "notes": "Wallclock bounds in milliseconds, one per task class, and this file is their only home — no per-seat timeout prose lives anywhere else. The bounds are deliberately generous per the operator's ruling: a worker is never killed for thinking, only for hanging, so thirty and forty-five minute bounds are correct where the class warrants them. FOR WHOEVER BUILDS THE CODEX DISPATCH WRAPPER: enforcing codex_dispatch means killing a real process tree, and the kill sweep must enumerate BY THE RECORDED CODEX SESSION ID. setsid makes the dispatched child a session leader, and codex spawns its MCP servers into sibling process groups inside that same session, so a plain PGID kill leaves them running. Never match on process name."
+}
