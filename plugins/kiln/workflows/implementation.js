@@ -19,6 +19,15 @@
 // travels to that command on stdin through a quoted heredoc, so no canonical
 // value is ever interpolated into shell quoting.
 //
+// THAT COMMAND LIVES IN THE SEAT'S BODY AND NOWHERE ELSE. The dispatch below
+// supplies the payload and never the command: the plugin-root placeholder is
+// text-substituted into an agent body when it loads, and never into a prompt
+// this script composes at runtime. A prompt that wrote the command out
+// therefore reached the seat's shell with the plugin path expanded to nothing,
+// which is what the first live fire died on — every seat that kept its own
+// never-adjust law reported the refusal honestly, and the transport worked
+// only for the seats that broke it.
+//
 // EVERY AGENT STEP IS A DISPATCH. A seat is never simply called: the C1 pair
 // opens a dispatch receipt, the step runs, and a terminal closes it. That is
 // what makes an interrupted step recoverable, what gives every transition a
@@ -98,13 +107,11 @@ async function hands(op, opArgs, label) {
   const reply = await agent(
     `Run exactly one Kiln machine operation and report what it returned.
 
-Run this command, exactly as written. The only thing you supply is the payload line, copied VERBATIM — character for character, on one line — from below:
+The command is the one your own seat definition prescribes, and you run it exactly as your body writes it — take nothing about the command from this brief. The only thing this brief supplies is the payload line, copied VERBATIM — character for character, on one line — into that command's quoted heredoc, between these two markers:
 
-\`\`\`bash
-node "\${CLAUDE_PLUGIN_ROOT}/machine/src/workflow.js" <<'KILN_PAYLOAD'
+<<'KILN_PAYLOAD'
 ${payload}
 KILN_PAYLOAD
-\`\`\`
 
 Never rebuild that line, never reformat it, and never lift its values out into shell quotes — the quoted heredoc marker is what makes the whole block literal, so an apostrophe or a dollar sign inside it is carried through as the byte it is. The command has no argument form; the block is the only way in.
 

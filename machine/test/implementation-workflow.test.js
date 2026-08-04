@@ -155,6 +155,13 @@ function payloadIn(prompt) {
   return JSON.parse(match[1]);
 }
 
+// The prompt with its payload lifted out: what the prompt SAYS, as opposed to
+// the canonical data it carries. The markers stay, so a prompt that lost them
+// still fails `payloadIn`.
+function proseOf(prompt) {
+  return prompt.replace(/(<<'KILN_PAYLOAD'\n)[\s\S]*?(\nKILN_PAYLOAD)/, '$1$2');
+}
+
 // The hands, for real: the payload goes through the real facade against a real
 // tree, and what comes back is what the command would have printed.
 function runHands(prompt) {
@@ -505,6 +512,109 @@ test('every agent step binds a plugin seat and a schema, and none of them runs o
   }
   const source = fs.readFileSync(SCRIPT_PATH, 'utf8');
   assert.equal(/haiku/i.test(source), false);
+});
+
+// ---------- the machine command has one home ----------
+
+// BURN-1 F6, the blocker that stopped the relight. This prompt used to write
+// the machine command out itself — `node "${CLAUDE_PLUGIN_ROOT}/machine/src/
+// workflow.js"` — and order it run verbatim. A dispatch prompt is composed at
+// RUNTIME and nothing substitutes it, so that variable reached the seat's shell
+// as the empty string it is: the lawful seats ran `node /machine/src/
+// workflow.js`, got MODULE_NOT_FOUND, reported the refusal exactly as their own
+// never-adjust law requires, and the script threw. The transport worked only
+// for the seats that broke that law and substituted a literal path. The seat's
+// BODY is a different case and is where the command belongs: `${CLAUDE_PLUGIN_
+// ROOT}` is text-substituted into agent bodies at load, which is why
+// `charter.md` records that it does NOT substitute inside `product/**/*.md`.
+// Two homes for one command, and the broken one won because the prompt ordered
+// it verbatim. So this asserts the prompt prescribes NO command at all.
+test('the hands dispatch prescribes no command of its own, and sends the seat to the one its body carries', async () => {
+  const project = makeProject();
+  const calls = [];
+  await invokeWorkflow(project.treeRoot, { seat: makeSeat(project), calls });
+
+  const prompts = calls.filter((c) => c.opts.agentType === 'kiln:workflow-hands').map((c) => c.prompt);
+  assert.ok(prompts.length > 3, `the invocation barely called the machine: ${prompts.length}`);
+
+  for (const prompt of prompts) {
+    // Asked of the prompt's own PROSE, never of the payload: the payload is
+    // canonical data and may lawfully carry anything, including this fixture's
+    // `node-cli` toolchain profile. A prescription assertion that read the
+    // payload too would be asserting about the project, not about the prompt.
+    const prose = proseOf(prompt);
+
+    // The exact byte-shape that died live.
+    assert.doesNotMatch(
+      prose,
+      /CLAUDE_PLUGIN_ROOT/,
+      'the hands prompt names a variable that is empty in the seat\'s shell, and it orders the command run verbatim'
+    );
+    // Nor any other spelling of the command: a literal path written here would
+    // be right on exactly one install, and the duplicate would be back.
+    assert.doesNotMatch(prose, /workflow\.js/, 'the hands prompt prescribes the machine script itself');
+    assert.doesNotMatch(prose, /\bnode\b/, 'the hands prompt prescribes a command of its own');
+    // Where the command DOES come from, said in the prompt rather than left to
+    // the seat to work out.
+    assert.match(
+      prose,
+      /command is [^.]*\byour own seat definition\b/i,
+      'the hands prompt never sends the seat to its own body for the command'
+    );
+    assert.match(
+      prose,
+      /take nothing about the command from this brief/i,
+      'the hands prompt does not forbid taking the command from the brief, which is what the seat did when the two disagreed'
+    );
+    // The payload laws are payload laws and survive the deletion: what the
+    // brief still supplies, and the properties that make it survivable.
+    assert.match(
+      prose,
+      /payload line[^.]*\bVERBATIM\b/,
+      'the hands prompt no longer demands the payload line verbatim'
+    );
+    assert.match(prose, /\bon one line\b/, 'the hands prompt no longer demands the payload on one line');
+    // Bound inside its own sentence: `quoted heredoc` occurs twice in this
+    // prompt, so a bare match would be satisfied from the other clause and
+    // would bind neither. The scope stops at a colon as well as a period —
+    // this sentence ends in one, and `[^.]*` alone walked straight past it
+    // into the next paragraph's `quoted heredoc marker` and reported bound.
+    assert.match(
+      prose,
+      /payload line[^.:]*\bquoted heredoc\b/i,
+      'the hands prompt no longer says the payload goes into the command\'s quoted heredoc'
+    );
+    // And the payload is really there, in the markers the seat is told to copy
+    // it between — the extraction the whole harness runs on.
+    assert.equal(typeof payloadIn(prompt).op, 'string');
+
+    // The rest of this prompt, bound the same way, because every clause of it
+    // was independently deletable with the whole suite green before this test
+    // existed. Each is asserted as the literal phrase it is, so a sub-clause
+    // reworded out of it — "never reformat it", "never adjust an argument" —
+    // breaks the match rather than hiding behind a surviving keyword.
+    assert.match(prose, /Run exactly one Kiln machine operation/, 'the hands prompt no longer asks for exactly one operation');
+    assert.match(
+      prose,
+      /Never rebuild that line, never reformat it, and never lift its values out into shell quotes/,
+      'the hands prompt no longer forbids rebuilding, reformatting or unquoting the payload line'
+    );
+    assert.match(
+      prose,
+      /The command has no argument form; the block is the only way in/,
+      'the hands prompt no longer says the block is the only way in, which is why there is no quoting decision to make'
+    );
+    assert.match(
+      prose,
+      /Report those two fields as they came out/,
+      'the hands prompt no longer asks for `ok` and `result` as they came out'
+    );
+    assert.match(
+      prose,
+      /never retry, never adjust an argument, never summarise/,
+      'the hands prompt no longer holds the seat to the never-adjust law — the law the live seats that made the transport work were breaking'
+    );
+  }
 });
 
 // ---------- the whole ladder, executed ----------
