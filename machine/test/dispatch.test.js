@@ -400,7 +400,7 @@ test('completeNative writes an ok terminal only with a model identity AND a real
   const resultFile = path.join(treeRoot, 'results', 'C1.md');
   fs.writeFileSync(resultFile, '# the work\n');
 
-  const done = completeNative(treeRoot, {
+  completeNative(treeRoot, {
     dispatch_id: 'D1',
     model_id: 'opus-5',
     result_ref: 'results/C1.md',
@@ -414,16 +414,13 @@ test('completeNative writes an ok terminal only with a model identity AND a real
   // later rewrite of the artifact has something to conflict with.
   assert.equal(terminal.model_id, 'opus-5');
   assert.equal(terminal.result_digest, sha256Of(resultFile));
-  assert.equal(done.evidence.result_digest, sha256Of(resultFile));
-  assert.equal(done.evidence.model_id, 'opus-5');
-  assert.equal(done.evidence.builder, 'claude-fallback');
 });
 
 test('a native build with no result artifact is failed, never ok', () => {
   const treeRoot = makeTree();
   dispatchNative(treeRoot, nativeSpec());
 
-  const done = completeNative(treeRoot, {
+  completeNative(treeRoot, {
     dispatch_id: 'D1',
     model_id: 'opus-5',
     result_ref: 'results/never-written.md',
@@ -437,7 +434,6 @@ test('a native build with no result artifact is failed, never ok', () => {
   // A failure attests nothing, because it produced nothing to attest.
   assert.equal(terminal.model_id, undefined);
   assert.equal(terminal.result_digest, undefined);
-  assert.equal(done.evidence.result_digest, null);
 });
 
 test('an EMPTY result artifact is no result artifact', () => {
@@ -564,8 +560,50 @@ test('completeNative replays: the terminal on disk is the receipt, and no second
   const first = completeNative(treeRoot, evidence);
   const replayed = replayInFreshProcess('completeNative', [treeRoot, evidence]);
 
-  assert.deepEqual(replayed.record, first.record);
+  // The receipt a replay hands back is the receipt of the terminal already on
+  // the ledger — same record, cited the same way, and no second one written.
+  // This is also what makes the retry at the workflow's hands boundary safe:
+  // asking the same operation again is answered by what is already durable.
+  assert.equal(replayed.ref, first.ref);
   assert.equal(recordsOfKind(treeRoot, 'dispatch-terminal').length, 1);
+  const { terminal } = assertLawfulPair(treeRoot, 'D1');
+  assert.equal(first.ref, `ledger:${terminal.seq}`);
+});
+
+// WHAT COMES BACK TRAVELS THROUGH A MODEL, AND EVERY BYTE OF IT IS EXPOSURE.
+// The only caller of this operation is a workflow whose runtime cannot read
+// disk: the return crosses back to it inside a seat's reply, retyped by hand.
+// BURN-1 corrupted six of eight of those replies by one character, and this was
+// the largest and most deeply nested payload any op in the table returned — ref
+// plus the whole terminal record plus the whole evidence object, three closing
+// braces in a row for a seat to miscount.
+//
+// The script reads `.ref` and nothing else, and the record it would otherwise
+// be handed is already on the ledger, where a reader who needs it goes. So the
+// return is the receipt: one field, and the whole truth left where it is
+// durable.
+test('completeNative answers with its receipt alone — the record stays on the ledger', () => {
+  const treeRoot = makeTree();
+  dispatchNative(treeRoot, nativeSpec());
+  fs.mkdirSync(path.join(treeRoot, 'results'));
+  const resultFile = path.join(treeRoot, 'results', 'C1.md');
+  fs.writeFileSync(resultFile, '# the work\n');
+
+  const done = completeNative(treeRoot, {
+    dispatch_id: 'D1',
+    model_id: 'opus-5',
+    result_ref: 'results/C1.md',
+  });
+
+  assert.deepEqual(Object.keys(done), ['ref']);
+  // And nothing was lost by leaving: the ref resolves to the terminal that
+  // carries every field the return used to restate.
+  const { terminal } = assertLawfulPair(treeRoot, 'D1');
+  assert.equal(done.ref, `ledger:${terminal.seq}`);
+  assert.equal(terminal.status, 'ok');
+  assert.equal(terminal.builder, 'claude-fallback');
+  assert.equal(terminal.model_id, 'opus-5');
+  assert.equal(terminal.result_digest, sha256Of(resultFile));
 });
 
 // ---------- the process transport ----------
@@ -1699,19 +1737,20 @@ test('a native step that hosted a Sol run attests sol-hosted, and its family is 
   fs.mkdirSync(path.join(treeRoot, 'results'), { recursive: true });
   fs.writeFileSync(path.join(treeRoot, 'results', 'H1.md'), '# the work\n');
 
-  const terminal = completeNative(treeRoot, {
+  completeNative(treeRoot, {
     dispatch_id: 'H1',
     model_id: 'gpt-5.6-sol',
     result_ref: 'results/H1.md',
     hosted_session: '019fc563-021f-7f10-a8c4-99f7d44f25e0',
   });
 
-  assert.equal(terminal.record.status, 'ok');
-  assert.equal(terminal.record.builder, 'sol-hosted');
-  assert.equal(FAMILY_OF_BUILDER[terminal.record.builder], 'gpt');
+  const { terminal } = assertLawfulPair(treeRoot, 'H1');
+  assert.equal(terminal.status, 'ok');
+  assert.equal(terminal.builder, 'sol-hosted');
+  assert.equal(FAMILY_OF_BUILDER[terminal.builder], 'gpt');
   // The lawful transport for it is native, so the record is not an internally
   // impossible one — that check stays exactly as it was.
-  assert.equal(TRANSPORT_OF_BUILDER[terminal.record.builder], 'native');
+  assert.equal(TRANSPORT_OF_BUILDER[terminal.builder], 'native');
 });
 
 test('a native step with no hosted session is still claude-fallback', () => {
@@ -1720,13 +1759,13 @@ test('a native step with no hosted session is still claude-fallback', () => {
   fs.mkdirSync(path.join(treeRoot, 'results'), { recursive: true });
   fs.writeFileSync(path.join(treeRoot, 'results', 'H2.md'), '# the work\n');
 
-  const terminal = completeNative(treeRoot, {
+  completeNative(treeRoot, {
     dispatch_id: 'H2',
     model_id: 'opus-5',
     result_ref: 'results/H2.md',
   });
 
-  assert.equal(terminal.record.builder, 'claude-fallback');
+  assert.equal(assertLawfulPair(treeRoot, 'H2').terminal.builder, 'claude-fallback');
 });
 
 // A seat cannot claim a hosted Sol run by handing over something that is not a
@@ -1829,14 +1868,15 @@ test('a dual-mode seat dispatched natively completes without a hosted session', 
   fs.mkdirSync(path.join(treeRoot, 'results'), { recursive: true });
   fs.writeFileSync(path.join(treeRoot, 'results', 'M1.md'), '# the review\n');
 
-  const terminal = completeNative(treeRoot, {
+  completeNative(treeRoot, {
     dispatch_id: 'M1',
     model_id: 'sonnet-5',
     result_ref: 'results/M1.md',
   });
 
-  assert.equal(terminal.record.status, 'ok');
-  assert.equal(terminal.record.builder, 'claude-fallback');
+  const { terminal } = assertLawfulPair(treeRoot, 'M1');
+  assert.equal(terminal.status, 'ok');
+  assert.equal(terminal.builder, 'claude-fallback');
 });
 
 test('the same seat dispatched hosted attests gpt from the session it declares', () => {
@@ -1845,14 +1885,14 @@ test('the same seat dispatched hosted attests gpt from the session it declares',
   fs.mkdirSync(path.join(treeRoot, 'results'), { recursive: true });
   fs.writeFileSync(path.join(treeRoot, 'results', 'M2.md'), '# the review\n');
 
-  const terminal = completeNative(treeRoot, {
+  completeNative(treeRoot, {
     dispatch_id: 'M2',
     model_id: 'gpt-5.6-sol',
     result_ref: 'results/M2.md',
     hosted_session: '019fc563-021f-7f10-a8c4-99f7d44f25e0',
   });
 
-  assert.equal(terminal.record.builder, 'sol-hosted');
+  assert.equal(assertLawfulPair(treeRoot, 'M2').terminal.builder, 'sol-hosted');
 });
 
 // A run that DECLARED hosted owes the session. Silence is not a downgrade to
@@ -1905,14 +1945,15 @@ test('a hosted dispatch that failed closes with its reason, not a demand for a s
   const treeRoot = makeTree();
   dispatchNative(treeRoot, nativeSpec({ dispatch_id: 'F1', seat: 'implementer-sol', execution_mode: 'hosted' }));
 
-  const terminal = completeNative(treeRoot, {
+  completeNative(treeRoot, {
     dispatch_id: 'F1',
     reason: 'the hosted run threw before it produced anything',
   });
 
-  assert.equal(terminal.record.status, 'failed');
-  assert.equal(terminal.record.builder, null);
-  assert.equal(terminal.record.reason, 'the hosted run threw before it produced anything');
+  const { terminal } = assertLawfulPair(treeRoot, 'F1');
+  assert.equal(terminal.status, 'failed');
+  assert.equal(terminal.builder, null);
+  assert.equal(terminal.reason, 'the hosted run threw before it produced anything');
 });
 
 // And the terminal it wrote is a REAL terminal, so recovery has nothing left to

@@ -751,7 +751,19 @@ function completeNative(treeRoot, evidence) {
           reason: outcome.reason,
         });
 
-  return { ref: written.ref, record: written.record, evidence: evidenceOfTerminal(treeRoot, written.record) };
+  // THE RECEIPT, AND NOTHING THE LEDGER ALREADY HOLDS. This operation's only
+  // caller is a workflow whose runtime cannot read disk, so its return crosses
+  // back through a seat that retypes it by hand — and the first live fire
+  // corrupted six of eight of those transcriptions by a single character, on
+  // this op and no other, because this was the largest and most deeply nested
+  // payload in the table: ref, plus the whole terminal record, plus the whole
+  // evidence object, three closing braces in a row for a model to miscount.
+  //
+  // The caller reads `.ref`. The record it was also handed is the record just
+  // written to the ledger, where every later reader goes for it anyway, so
+  // restating it bought nothing and carried the exposure. What a reply costs is
+  // proportional to how much text a seat must carry.
+  return { ref: written.ref };
 }
 
 // The evidence behind a terminal, READ OFF THE RECORD. Nothing here is

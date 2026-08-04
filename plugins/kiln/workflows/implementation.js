@@ -102,10 +102,69 @@ Nothing outside your turn can observe that run, so this is the only evidence it 
 
 // ---------- the hands ----------
 
+// WHAT ONE REPLY MEANT. Three answers and no fourth: the operation refused, in
+// which case the refusal is the answer and this throws; the operation succeeded
+// and its return arrived, parsed or as the text the command printed; or the
+// operation succeeded and what came back is not its return at all.
+//
+// THE SEAT IS A MODEL, AND A MODEL ANSWERS IN TEXT. `result` is schema-typed as
+// anything at all — it has to be, since every op returns its own shape — so the
+// operation's return arrives as the JSON TEXT the command printed just as
+// lawfully as it arrives parsed, and the live seat's first fire reported text.
+// Every field this script reads off a machine return — `.transition`, `.ref`,
+// `.seq`, `.staged_path`, `.capsuleDir`, `.patch_digest` — is `undefined`
+// against a string, which is how a perfectly correct resolution died two lines
+// later as `the resolver named "undefined"`. So the shape is settled HERE, at
+// the one boundary every machine call passes through, and no caller downstream
+// has to know what the seat did with it. The same defence the script already
+// gives its own stringified `args`, on the larger surface.
+function readReply(op, reply) {
+  // A REFUSAL IS A RESULT. The machine saying no is this operation's answer,
+  // and it leaves by the only route an answer has.
+  if (!reply || reply.ok !== true) {
+    throw new Error(`implementation: ${op} refused — ${reply ? reply.result : 'the hands returned nothing'}`)
+  }
+  if (typeof reply.result !== 'string') return { read: true, value: reply.result }
+  try {
+    return { read: true, value: JSON.parse(reply.result) }
+  } catch {
+    // Text that is not the operation's result is not a result. Passed on, it
+    // becomes a silent `undefined` at whichever field is read next, and the
+    // failure surfaces blaming something that was correct.
+    return { read: false, text: reply.result }
+  }
+}
+
+// WHICH OPERATIONS HAVE EARNED A SECOND ASK. Re-asking is only ever safe when
+// the second call re-derives the same outcome and is answered by the record
+// already on disk, and that is a property of one OPERATION, never of this
+// boundary: the boundary has no idea what is on the other side of it.
+//
+// `dispatch.completeNative` has earned it, and the proof is a test rather than
+// a claim — after a retry the ledger holds exactly ONE `dispatch-terminal` and
+// the invocation cites that terminal's own seq, so the replay was answered by
+// the record the first call wrote. It is also the operation that needs it: of
+// the eight replies BURN-1's relight carried for it, six came back as the
+// machine's own JSON with one extra brace, and each of those refusals killed an
+// invocation AFTER its transition had done all of its work.
+//
+// `dispatch.dispatchNative` is the counterexample that sets the rule, and the
+// machine says it out loud: a second call on a dispatch that is already open
+// closes it as abandoned and answers `recovered`, which this script reads as
+// `launched: false` and skips the seat over. A retry there would let ONE
+// mistyped reply spend the dispatch and drop the work, reporting an ordinary
+// beat on the way out. `phases.advance`, the non-replayable `milestones`
+// record kinds and any gate that re-runs a command are the same shape. They are
+// the reason this list is a list — not an invitation to lengthen it. An
+// operation joins only when a test in this suite proves its replay, and that
+// proof is the entry.
+const REPLAY_SAFE_OPS = ['dispatch.completeNative']
+
 async function hands(op, opArgs, label) {
   const payload = JSON.stringify({ treeRoot, op, args: opArgs })
-  const reply = await agent(
-    `Run exactly one Kiln machine operation and report what it returned.
+  const ask = () =>
+    agent(
+      `Run exactly one Kiln machine operation and report what it returned.
 
 The command is the one your own seat definition prescribes, and you run it exactly as your body writes it — take nothing about the command from this brief. The only thing this brief supplies is the payload line, copied VERBATIM — character for character, on one line — into that command's quoted heredoc, between these two markers:
 
@@ -116,41 +175,46 @@ KILN_PAYLOAD
 Never rebuild that line, never reformat it, and never lift its values out into shell quotes — the quoted heredoc marker is what makes the whole block literal, so an apostrophe or a dollar sign inside it is carried through as the byte it is. The command has no argument form; the block is the only way in.
 
 The command prints a single JSON object with \`ok\` and \`result\`. Report those two fields as they came out: \`result\` is the operation's return value when it succeeded, and the refusal's message verbatim when it did not. A refusal is a true answer, not a problem to work around — never retry, never adjust an argument, never summarise.`,
-    {
-      agentType: 'kiln:workflow-hands',
-      model: 'sonnet',
-      effort: 'low',
-      label: label || op,
-      schema: HANDS,
-    }
+      {
+        agentType: 'kiln:workflow-hands',
+        model: 'sonnet',
+        effort: 'low',
+        label: label || op,
+        schema: HANDS,
+      }
+    )
+
+  const first = readReply(op, await ask())
+  if (first.read) return first.value
+
+  // THE TRANSPORT IS ALLOWED TO BE NOISY EXACTLY ONCE, AND ONLY WHERE THE
+  // OPERATION HAS EARNED IT. The seat is a model retyping the machine's stdout
+  // into its reply, and the first live fire showed what that costs: six of
+  // eight `dispatch.completeNative` replies came back as the machine's own JSON
+  // with one extra closing brace — not the longest ones, not a different shape,
+  // just a transcription that is right about a quarter of the time. Every
+  // refusal was correct and every one of them killed an invocation AFTER its
+  // transition had done all of its work and written both of its ledger records.
+  //
+  // So a SUCCEEDED operation whose words came back unreadable is noise on the
+  // wire, and the answer to noise is to ask again — once, with a fresh seat,
+  // for the same operation. No loop, no backoff, and no second retry: a seat
+  // that cannot carry this payload twice is not going to carry it on the third
+  // ask, and the refusal is what the caller needs.
+  //
+  // Everywhere else the noise is indistinguishable from the answer, and the
+  // refusal stands as it did before any of this: re-asking an operation that
+  // does something different the second time is not recovering the reply, it is
+  // performing the operation twice.
+  if (!REPLAY_SAFE_OPS.includes(op)) {
+    throw new Error(`implementation: ${op} came back as text that is not the operation's result — ${first.text}`)
+  }
+
+  const second = readReply(op, await ask())
+  if (second.read) return second.value
+  throw new Error(
+    `implementation: ${op} came back as text that is not the operation's result, twice — a fresh seat was sent for the same operation and answered no better. First: ${first.text} — second: ${second.text}`
   )
-  if (!reply || reply.ok !== true) {
-    throw new Error(`implementation: ${op} refused — ${reply ? reply.result : 'the hands returned nothing'}`)
-  }
-  // THE SEAT IS A MODEL, AND A MODEL ANSWERS IN TEXT. `result` is schema-typed
-  // as anything at all — it has to be, since every op returns its own shape —
-  // so the operation's return arrives as the JSON TEXT the command printed just
-  // as lawfully as it arrives parsed, and the live seat's first fire reported
-  // text. Every field this script reads off a machine return — `.transition`,
-  // `.ref`, `.seq`, `.staged_path`, `.capsuleDir`, `.patch_digest` — is
-  // `undefined` against a string, which is how a perfectly correct resolution
-  // died two lines later as `the resolver named "undefined"`. So the shape is
-  // settled HERE, at the one boundary every machine call passes through, and no
-  // caller downstream has to know what the seat did with it. The same defence
-  // the script already gives its own stringified `args`, on the larger surface.
-  if (typeof reply.result === 'string') {
-    try {
-      return JSON.parse(reply.result)
-    } catch {
-      // Text that is not the operation's result is not a result. Passed on, it
-      // becomes a silent `undefined` at whichever field is read next, and the
-      // failure surfaces blaming something that was correct.
-      throw new Error(
-        `implementation: ${op} came back as text that is not the operation's result — ${reply.result}`
-      )
-    }
-  }
-  return reply.result
 }
 
 // ---------- a seat, dispatched ----------

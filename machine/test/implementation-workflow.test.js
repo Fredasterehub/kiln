@@ -189,9 +189,38 @@ function stringifiedHands() {
   return (reply) => (reply.ok === true ? { ok: true, result: JSON.stringify(reply.result) } : reply);
 }
 
+// THE SAME TRANSPORT, FAILING THE WAY IT FAILED. BURN-1's relight called
+// `dispatch.completeNative` eight times and got parseable text back twice: the
+// other six replies were the machine's own JSON with ONE extra closing brace
+// on the end. Not length — the two that parsed were longer than the first that
+// did not — and not shape, since all eight closed the same nesting. A model
+// retyping 600-odd bytes, right a quarter of the time.
+//
+// Everything else stringifies exactly as `stringifiedHands` does, because the
+// live seat carried every reply as text; the only variable here is how many
+// CONSECUTIVE replies for one op arrive corrupt. One is what the wire did; two
+// is the wire failing twice in a row, which is a different question.
+function corruptingHands(op, corruptions) {
+  let corrupted = 0;
+  return (reply, replyOp) => {
+    if (reply.ok !== true) return reply;
+    const text = JSON.stringify(reply.result);
+    if (replyOp !== op || corrupted >= corruptions) return { ok: true, result: text };
+    corrupted += 1;
+    return { ok: true, result: `${text}}` };
+  };
+}
+
 // Every hands reply the script was actually handed, in order.
 function handsRepliesIn(calls) {
   return calls.filter((c) => c.opts.agentType === 'kiln:workflow-hands').map((c) => c.reply);
+}
+
+// Every hands call the script made for one operation, in order. The op comes
+// out of the prompt the script itself wrote, so this counts the subject's own
+// traffic rather than a tally the stub kept for itself.
+function handsCallsFor(calls, op) {
+  return calls.filter((c) => c.opts.agentType === 'kiln:workflow-hands' && payloadIn(c.prompt).op === op);
 }
 
 // The paths a seat prompt names, in the order it names them. The script writes
@@ -745,6 +774,210 @@ test("a hands reply that is text but not the operation's result is refused, nami
       assert.doesNotMatch(err.message, /resolver named/);
       return true;
     }
+  );
+});
+
+// ---------- the transport's own noise, which is not the machine's answer ----------
+
+// BURN-1's relight paid a 2x invocation toll on six of its seven dispatch
+// rungs, and this is the rung. The boundary above refused each corrupted reply
+// — correctly — but every refusal killed the invocation AFTER its transition
+// had done all of its work and written both ledger records: the chunk was
+// built, staged, patched, and the terminal was on the ledger when the script
+// threw over the receipt of it.
+//
+// So the two cases are told apart. A machine REFUSAL is the operation's answer
+// and is reported, never re-asked. Text that is not the operation's result on
+// an operation that SUCCEEDED is noise on the wire — and for the ops that have
+// PROVEN their replay safe (the REPLAY_SAFE_OPS list; entry is a replay-proof
+// test in this suite), the wire gets exactly one more try before the refusal
+// stands. Every other op is refused on the first unreadable reply.
+test('a reply corrupted in transit costs one more seat, not the whole invocation', async () => {
+  const project = makeProject();
+  await driveTo(project, ['spec'], { stopBefore: true });
+
+  const calls = [];
+  const { result } = await invokeWorkflow(project.treeRoot, {
+    seat: makeSeat(project),
+    calls,
+    handsShape: corruptingHands('dispatch.completeNative', 1),
+  });
+
+  // ONE pass: the transition the corruption landed on completed and cited its
+  // terminal, which is what the six dead invocations did not get to do.
+  assert.equal(result.transition, 'spec');
+  assert.match(result.record_ref, /^ledger:\d+$/);
+
+  // VERIFY THE VERIFIER, at the value the script received rather than at a
+  // count the shaper kept: the first reply for this op really was unparseable,
+  // and the retry really did carry the operation's result.
+  const attempts = handsCallsFor(calls, 'dispatch.completeNative');
+  assert.equal(attempts.length, 2, `the corrupted reply was not retried exactly once: ${attempts.length} attempts`);
+  assert.throws(
+    () => JSON.parse(attempts[0].reply.result),
+    'the corruption never reached the script, so this walk asks nothing'
+  );
+  assert.equal(JSON.parse(attempts[1].reply.result).ref, result.record_ref);
+
+  // And the work is durable exactly once. The retry re-ran the op against the
+  // same disk with the same evidence, which is what a replay is: the terminal
+  // already written comes back as the receipt, and no second one appears.
+  const terminals = readRecords(path.join(project.treeRoot, 'ledger.jsonl')).records.filter(
+    (r) => r.kind === 'dispatch-terminal'
+  );
+  assert.equal(terminals.length, 1, 'the retry wrote a second terminal instead of replaying the first');
+  assert.equal(`ledger:${terminals[0].seq}`, result.record_ref);
+  assert.ok(fs.existsSync(path.join(project.treeRoot, 'milestones', 'M1', 'spec.md')));
+
+  // ONE extra seat in the whole invocation, and it is the one the noise landed
+  // on. Every call site of this transition carries its own label, so a boundary
+  // that asked twice as a HABIT — rather than as an answer to text it could not
+  // read — doubles some other label, and a comparison against a clean baseline
+  // walk would never see it because the habit doubles the baseline too.
+  const doubled = [];
+  const timesSeen = new Map();
+  for (const c of calls.filter((x) => x.opts.agentType === 'kiln:workflow-hands')) {
+    const n = (timesSeen.get(c.opts.label) || 0) + 1;
+    timesSeen.set(c.opts.label, n);
+    if (n === 2) doubled.push(c.opts.label);
+  }
+  assert.deepEqual(doubled, ['close:spec'], 'a seat was asked twice at a call site the noise never reached');
+});
+
+// One retry, and there is no second one. A boundary that kept asking would
+// turn a seat that cannot transcribe this payload into an unbounded spend on a
+// reply the script barely reads — and the refusal it is meant to reach would
+// never arrive.
+test('a second consecutive corruption is refused, naming the op and both attempts', async () => {
+  const project = makeProject();
+  await driveTo(project, ['spec'], { stopBefore: true });
+
+  const calls = [];
+  let thrown = null;
+  await assert.rejects(
+    invokeWorkflow(project.treeRoot, {
+      seat: makeSeat(project),
+      calls,
+      handsShape: corruptingHands('dispatch.completeNative', 2),
+    }),
+    (err) => {
+      thrown = err;
+      return true;
+    }
+  );
+
+  const attempts = handsCallsFor(calls, 'dispatch.completeNative');
+  assert.equal(attempts.length, 2, `the boundary is looping rather than retrying once: ${attempts.length} attempts`);
+  assert.match(thrown.message, /dispatch\.completeNative/, 'the refusal must name the op whose reply it could not read');
+  assert.match(thrown.message, /twice/, 'the refusal must say that a fresh seat was already tried');
+  // BOTH attempts, not only the one it gave up on. A seat that fails twice
+  // need not fail the same way, and this message is the only record of what
+  // the wire actually said — so it carries each attempt's words. Here the two
+  // corruptions are byte-identical, which is exactly the live shape (a replay
+  // of a replay-safe op returns the same bytes to be miscopied the same way),
+  // so "both are named" is two occurrences of the one text.
+  const corrupt = attempts[1].reply.result;
+  assert.equal(attempts[0].reply.result, corrupt, 'the two corruptions differ, so counting them proves nothing');
+  assert.equal(
+    thrown.message.split(corrupt).length - 1,
+    2,
+    'the refusal names one attempt and there were two'
+  );
+});
+
+// A REFUSAL IS A RESULT. The machine saying no is the operation's answer, and
+// re-asking it puts the same question to the same disk — the never-retry law
+// the seat itself is held to, one level up. This is the distinction the retry
+// above must not blur: it is reached only when the op SUCCEEDED and the words
+// coming back are not what it returned.
+test('a machine refusal is reported, never retried', async () => {
+  const project = makeProject();
+  await driveTo(project, ['spec'], { stopBefore: true });
+
+  const calls = [];
+  let thrown = null;
+  await assert.rejects(
+    invokeWorkflow(project.treeRoot, {
+      seat: makeSeat(project),
+      calls,
+      handsShape: (reply, op) =>
+        op === 'dispatch.completeNative'
+          ? { ok: false, result: 'Error: the terminal names a dispatch this tree never sent' }
+          : { ok: true, result: JSON.stringify(reply.result) },
+    }),
+    (err) => {
+      thrown = err;
+      return true;
+    }
+  );
+
+  assert.equal(
+    handsCallsFor(calls, 'dispatch.completeNative').length,
+    1,
+    'a refusal was re-asked, and a refusal is an answer'
+  );
+  assert.match(thrown.message, /dispatch\.completeNative refused/);
+  assert.match(thrown.message, /this tree never sent/, 'the refusal must carry the machine’s own words');
+});
+
+// AND THE RETRY IS EARNED PER OPERATION, NOT BY THE BOUNDARY. Re-asking is
+// safe only where the second ask re-derives the same outcome, and
+// `dispatchNative` is the counterexample the machine states out loud: a second
+// call on a dispatch that is already open closes it as abandoned and answers
+// `recovered`, which this script reads as `launched: false` and skips the seat
+// over. So a boundary that retried everything would let ONE mistyped reply
+// consume the dispatch and silently drop the work the invocation existed to
+// do — no refusal, no terminal for the step, and a normal-looking return.
+test('an operation that has not earned a retry is refused on the first unreadable reply', async () => {
+  const project = makeProject();
+  await driveTo(project, ['spec'], { stopBefore: true });
+  const ledger = path.join(project.treeRoot, 'ledger.jsonl');
+  const terminalsBefore = readRecords(ledger).records.filter((r) => r.kind === 'dispatch-terminal').length;
+
+  const calls = [];
+  let thrown = null;
+  let returned = null;
+  try {
+    const walked = await invokeWorkflow(project.treeRoot, {
+      seat: makeSeat(project),
+      calls,
+      handsShape: corruptingHands('dispatch.dispatchNative', 1),
+    });
+    returned = walked.result;
+  } catch (err) {
+    thrown = err;
+  }
+
+  // THE THREE FACTS IN ONE ASSERTION, because `assert` stops at the first
+  // failure and three separate clauses would let two of them hide behind the
+  // one that happens to be checked first — the damage would go unreported by
+  // the very test that exists to name it. So: exactly one ask; no dispatch
+  // consumed (a second ask recovers the open dispatch, closing it as abandoned
+  // and spending the id, and that abandonment is a terminal on the ledger); and
+  // no ordinary-looking return, because a seat skipped over a dispatch its own
+  // retry spent, reported as a beat, is the silent drop all of this prevents.
+  const attempts = handsCallsFor(calls, 'dispatch.dispatchNative');
+  const terminals = readRecords(ledger).records.filter((r) => r.kind === 'dispatch-terminal');
+  assert.deepEqual(
+    { asks: attempts.length, terminalsWritten: terminals.length - terminalsBefore, returned },
+    { asks: 1, terminalsWritten: 0, returned: null },
+    'an operation with no replay-safety proof was re-asked, and the second ask spent the dispatch it was re-asking'
+  );
+  // VERIFY THE VERIFIER at the value the script received: the one reply it got
+  // really was unparseable, and its words are in the refusal.
+  assert.throws(
+    () => JSON.parse(attempts[0].reply.result),
+    'the corruption never reached the script, so this walk asks nothing'
+  );
+  assert.match(thrown.message, /dispatch\.dispatchNative/, 'the refusal must name the op whose reply it could not read');
+  assert.ok(
+    thrown.message.includes(attempts[0].reply.result),
+    'the refusal must carry the text it could not read'
+  );
+  assert.doesNotMatch(
+    thrown.message,
+    /twice/,
+    'nothing was re-asked, so the refusal must not claim a fresh seat was already sent'
   );
 });
 
