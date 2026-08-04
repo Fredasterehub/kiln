@@ -217,6 +217,44 @@ function chunkGateId(milestoneId, chunkId) {
   return `chunk:${milestoneId}:${chunkId}`;
 }
 
+// ---------- the revise cap's operator door ----------
+
+// REACHING THE CAP IS A QUESTION, NOT A VERDICT — and until this rung could
+// read an answer there was none to read: the resolver returned
+// `operator-needed` for as long as the tree stood there, whatever the operator
+// decided, and every rung behind a capped chunk was unreachable. The answer
+// lives where every other operator answer in this phase lives — on the ledger,
+// as the ONE exit of the hold this stop's own `block_id` opens. `resolved`
+// authorizes exactly one more build/review round; `delivered` records the
+// answer and leaves the cap terminal. Nothing else is read: not the tablet the
+// resolution cites, not a steer's instruction, not a field invented for the
+// occasion. A resolver that interpreted prose would be making the decision it
+// just handed to the operator.
+//
+// ONE AUTHORIZATION BUYS ONE ROUND, BY THE IDENTITY RATHER THAN BY A COUNTER.
+// The first cap keeps the unsuffixed id; every cap after it carries the review
+// count that raised it, so a fourth revise raises a `:r4` hold no existing
+// record resolves. That is the scoped-identity law applied to an authorization
+// — an exit that could answer for two different rounds answers the wrong one —
+// and it makes single-use a property of the id rather than something a spent
+// flag would have to remember.
+function capHoldId(milestoneId, chunkId, reviews) {
+  const base = `implementation:revise-cap:${milestoneId}:${chunkId}`;
+  return reviews === REVISE_CAP ? base : `${base}:r${reviews}`;
+}
+
+// The hold's exit, matched EXACTLY. `receipts.js` refuses a resolve whose hold
+// was never opened and refuses a second resolve that disagrees with the first,
+// so at most one of these exists and its presence already proves the hold-open
+// behind it. Equality and never a prefix: the unsuffixed id is a prefix of
+// every `:r<n>` id built from it, so a prefix match would let round three's
+// answer resolve round four's question.
+function capResolution(records, holdId) {
+  return (
+    records.find((record) => record.kind === 'hold-resolve' && record.hold_id === holdId) || null
+  );
+}
+
 // ---------- dispatch attempts ----------
 
 // WHY ATTEMPTS ARE COUNTED FROM DISPATCH RECEIPTS AND NOT FROM THE LIFECYCLE.
@@ -795,13 +833,37 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
           });
         }
         if (reviews >= REVISE_CAP) {
-          return Object.assign(
-            at(TRANSITIONS.OPERATOR_NEEDED, {
-              block_id: `implementation:revise-cap:${milestoneId}:${chunkId}`,
-              reason: `chunk ${chunkId} has come back from review ${reviews} times, which is the cap — the loop is not converging and the operator decides what happens next`,
-            }),
-            { return: RETURNS.OPERATOR_NEEDED }
-          );
+          const holdId = capHoldId(milestoneId, chunkId, reviews);
+          const resolution = capResolution(ledger, holdId);
+          if (resolution === null) {
+            return Object.assign(
+              at(TRANSITIONS.OPERATOR_NEEDED, {
+                block_id: holdId,
+                reason: `chunk ${chunkId} has come back from review ${reviews} times, which is the cap — the loop is not converging and the operator decides what happens next`,
+              }),
+              { return: RETURNS.OPERATOR_NEEDED }
+            );
+          }
+          // Any exit that is not `resolved` leaves the cap standing, and the
+          // stop CITES the answer rather than raising the question again — a
+          // second hold-open here would ask the operator something they have
+          // already answered. Written as "not resolved" rather than "is
+          // delivered" so an exit this rung has never heard of stops the loop
+          // instead of continuing it.
+          if (resolution.exit !== 'resolved') {
+            return Object.assign(
+              at(TRANSITIONS.OPERATOR_NEEDED, {
+                record_ref: `ledger:${resolution.seq}`,
+                reason: `chunk ${chunkId} reached the revise cap and the operator's answer to it was recorded as "${resolution.exit}" — the cap stands, and no rung here reopens it`,
+              }),
+              { return: RETURNS.OPERATOR_NEEDED }
+            );
+          }
+          // `resolved` bypasses THIS cap instance and nothing else: the ladder
+          // falls through to the ordinary attempt-versus-review logic below,
+          // which yields one revise and then one review. The seal law is
+          // untouched — a fourth approval still walks the chunk gate and the
+          // seal that every other chunk walks.
         }
         if (attempts.length < owed) return build(TRANSITIONS.REVISE, false);
         return at(TRANSITIONS.REVIEW, {

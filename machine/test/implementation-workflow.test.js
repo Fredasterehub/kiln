@@ -76,7 +76,7 @@ const { nextTransition } = require('../src/spine.js');
 const { assembleSuite } = require('../src/verification.js');
 const { writeAtomic, readJson } = require('../src/atomic-json.js');
 const { readRecords } = require('../src/stream.js');
-const { writeSteerRaise, resolveRef } = require('../src/receipts.js');
+const { writeSteerRaise, writeHoldResolve, resolveRef } = require('../src/receipts.js');
 
 const SCRIPT_PATH = path.join(__dirname, '..', '..', 'workflows', 'implementation.js');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -1411,6 +1411,78 @@ test('a revise descriptor carries the review to answer and not the session that 
       `the revise descriptor still carries Codex session ${session}, which built the work under review`
     );
   }
+});
+
+// ---------- the revise cap's operator door, executed ----------
+
+// The cap was a door with nothing behind it: the resolver returned
+// `operator_needed` for as long as the tree stood there, whatever the operator
+// decided, and every close rung behind a capped chunk was unreachable. The
+// answer is a hold exit, and this is the whole path through the RUNTIME — the
+// stop raising its hold, Kiln recording the operator's word against that hold
+// id, and the authorized round walking the ORDINARY ladder: one revise, one
+// review, and on approval the gate and the seal every other chunk passes.
+// Nothing about the review requirement is relaxed by the operator's answer,
+// which is the property this test exists to hold down.
+test('a capped chunk the operator resolves gets one more round, and its approval walks the ordinary gate and seal', async () => {
+  const project = makeProject();
+  // ONE options object across both drives: the reviewing stub counts rounds in
+  // it, so the fourth review is genuinely the fourth.
+  const seatOpts = { verdicts: { C1: ['revise', 'revise', 'revise', 'approve'] }, reviewsSeen: {} };
+
+  const { seen: toCap, result: capped } = await driveTo(project, ['operator-needed'], {
+    budget: 40,
+    seatOpts,
+  });
+
+  assert.equal(capped.return, 'operator_needed');
+  assert.deepEqual(toCap.slice(-6), [
+    'review',
+    'revise',
+    'review',
+    'revise',
+    'review',
+    'operator-needed',
+  ]);
+  const holds = readRecords(path.join(project.treeRoot, 'ledger.jsonl')).records.filter(
+    (r) => r.kind === 'hold-open'
+  );
+  assert.deepEqual(
+    holds.map((r) => r.hold_id),
+    ['implementation:revise-cap:M1:C1'],
+    'the cap did not raise exactly its own hold'
+  );
+  assert.equal(capped.record_ref, `ledger:${holds[0].seq}`);
+
+  // Kiln's side of the door, which no workflow step performs: the operator
+  // answered, the ruling is on the tablet, and the hold takes its one exit.
+  writeHoldResolve(project.treeRoot, {
+    hold_id: holds[0].hold_id,
+    exit: 'resolved',
+    resolution_ref: 'tablet:T-1',
+  });
+
+  const { seen } = await driveTo(project, ['close'], { budget: 40, seatOpts });
+
+  assert.deepEqual(seen.slice(0, 4), ['revise', 'review', 'chunk-gate', 'seal']);
+  assert.equal(seen[seen.length - 1], 'close');
+
+  const chunkRecords = readRecords(
+    path.join(project.treeRoot, 'milestones', 'M1', 'chunks.jsonl')
+  ).records.filter((r) => r.chunk_id === 'C1');
+  // Four real reviews, the fourth of them approving, and exactly one green:
+  // the authorized round bought a review, never a bypass of one.
+  assert.equal(chunkRecords.filter((r) => r.kind === 'chunk-review').length, 4);
+  assert.equal(chunkRecords.filter((r) => r.kind === 'chunk-green').length, 1);
+  assert.equal(chunkRecords.filter((r) => r.kind === 'chunk-review').pop().review.verdict, 'approve');
+  // And exactly one authorization was spent: the second cap never came, so no
+  // second hold was ever opened.
+  assert.equal(
+    readRecords(path.join(project.treeRoot, 'ledger.jsonl')).records.filter(
+      (r) => r.kind === 'hold-open'
+    ).length,
+    1
+  );
 });
 
 // ---------- more than one chunk ----------

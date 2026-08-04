@@ -13,6 +13,8 @@ const { recordBuilt } = require('../src/family-evidence.js');
 const {
   writeDispatch,
   writeDispatchTerminal,
+  writeHoldOpen,
+  writeHoldResolve,
   writeSteerRaise,
   writeSteerApply,
 } = require('../src/receipts.js');
@@ -521,23 +523,161 @@ test('an approving review resolves to sealing; a revising one resolves to anothe
   assert.equal(nextTransition(treeRoot).transition, TRANSITIONS.SEAL);
 });
 
-test('the revise loop is capped by code, and the cap routes to the operator rather than looping', () => {
+// ---------- the revise cap, and the operator door behind it ----------
+
+// One revise round's own durable evidence: the attempt the resolver dispatched.
+// A revise writes no lifecycle record of its own — the lifecycle allows exactly
+// one `chunk-start` — so a fixture that recorded reviews alone would stand the
+// chunk at the cap with a single attempt behind it, which is a tree production
+// reaches only by losing two dispatches, and a tree whose "what comes next"
+// answer is a DIFFERENT one (attempt two, not attempt four).
+function reviseAttempt(treeRoot, dispatchId, chunkId = 'C1') {
+  const transportRef = { pid: 4242, pgid: 4242, session: dispatchId };
+  writeDispatch(treeRoot, {
+    dispatch_id: dispatchId,
+    seat: 'implementer',
+    transport: 'codex',
+    intended_family: 'gpt',
+    task_class: 'chunk_implementation',
+    prompt_ref: `implementation/build/M1/${chunkId}`,
+    transport_ref: transportRef,
+  });
+  writeDispatchTerminal(treeRoot, {
+    dispatch_id: dispatchId,
+    status: 'ok',
+    builder: 'sol',
+    transport_ref: transportRef,
+    result_ref: `results/${dispatchId}.md`,
+    model_id: 'gpt-5.6-sol',
+    result_digest: A_DIGEST,
+  });
+}
+
+function reviseReview(treeRoot, round, chunkId = 'C1') {
+  recordChunk(treeRoot, 'M1', {
+    kind: 'chunk-review',
+    chunk_id: chunkId,
+    review: { family: 'claude', verdict: 'revise', ref: `reviews/${chunkId}-r${round}.json` },
+  });
+}
+
+// A chunk carried to the cap the way it actually gets there: build, review,
+// revise, review, revise, review — so the cap is reached with one landed
+// attempt behind every review it answered.
+function capC1(treeRoot) {
+  buildC1(treeRoot);
+  for (let round = 1; round <= REVISE_CAP; round++) {
+    reviseReview(treeRoot, round);
+    if (round < REVISE_CAP) reviseAttempt(treeRoot, `D${round + 1}`);
+  }
+}
+
+const CAP_HOLD = 'implementation:revise-cap:M1:C1';
+
+// The stop's hold, opened exactly as the workflow opens one — the descriptor's
+// `block_id` as the hold id, the resolver's own reason as the summary — and
+// then given its one exit exactly as Kiln records an operator's answer. Both
+// go through `receipts.js`, which refuses an exit on a hold nobody opened: the
+// pairing is production's demand, not the fixture's convenience.
+function answerCap(treeRoot, holdId, exit) {
+  writeHoldOpen(treeRoot, {
+    hold_id: holdId,
+    severity: 'S2',
+    summary: 'the revise loop reached its cap',
+    origin_ref: 'milestones/M1',
+  });
+  return writeHoldResolve(treeRoot, { hold_id: holdId, exit, resolution_ref: 'tablet:T-7' }).record;
+}
+
+test('the revise loop is capped by code, and the cap names the hold an answer would resolve', () => {
   const { treeRoot } = makeTree();
   openM1(treeRoot);
-  buildC1(treeRoot);
-  for (let attempt = 1; attempt <= REVISE_CAP; attempt++) {
-    recordChunk(treeRoot, 'M1', {
-      kind: 'chunk-review',
-      chunk_id: 'C1',
-      review: { family: 'claude', verdict: 'revise', ref: `reviews/C1-r${attempt}.md` },
-    });
-  }
+  capC1(treeRoot);
 
   const next = nextTransition(treeRoot);
 
   assert.equal(next.transition, TRANSITIONS.OPERATOR_NEEDED);
   assert.equal(next.return, 'operator_needed');
   assert.match(next.reason, /cap/i);
+  // No record of its own yet, so the stop hands its caller the hold id to open
+  // — which is the id the operator's answer will have to carry back.
+  assert.equal(next.block_id, CAP_HOLD);
+  assert.equal(next.record_ref, undefined);
+});
+
+test('a cap answered "delivered" stays terminal, citing that answer instead of asking again', () => {
+  const { treeRoot } = makeTree();
+  openM1(treeRoot);
+  capC1(treeRoot);
+  const resolution = answerCap(treeRoot, CAP_HOLD, 'delivered');
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.OPERATOR_NEEDED);
+  assert.equal(next.return, 'operator_needed');
+  assert.equal(next.record_ref, `ledger:${resolution.seq}`);
+  // A second hold-open here would ask the operator a question they have
+  // already answered, so the stop offers no id to open.
+  assert.equal(next.block_id, undefined);
+});
+
+test('a cap answered "resolved" authorizes exactly one more round — the fourth attempt, then its review', () => {
+  const { treeRoot } = makeTree();
+  openM1(treeRoot);
+  capC1(treeRoot);
+  answerCap(treeRoot, CAP_HOLD, 'resolved');
+
+  const revise = nextTransition(treeRoot);
+  assert.equal(revise.transition, TRANSITIONS.REVISE);
+  assert.equal(revise.attempt, 4);
+  // The authorized round is a REMEDIATION of the review that capped the loop,
+  // not a fresh roll: it carries the review it answers, like every other one.
+  assert.equal(revise.review_ref, 'reviews/C1-r3.json');
+
+  reviseAttempt(treeRoot, 'D4');
+  const review = nextTransition(treeRoot);
+  assert.equal(review.transition, TRANSITIONS.REVIEW);
+  assert.equal(review.review_round, 'r4');
+});
+
+test('the answer that authorized round four does not authorize round five — the next cap is a hold of its own', () => {
+  const { treeRoot } = makeTree();
+  openM1(treeRoot);
+  capC1(treeRoot);
+  answerCap(treeRoot, CAP_HOLD, 'resolved');
+  reviseAttempt(treeRoot, 'D4');
+  reviseReview(treeRoot, 4);
+
+  const capped = nextTransition(treeRoot);
+  assert.equal(capped.transition, TRANSITIONS.OPERATOR_NEEDED);
+  assert.equal(capped.return, 'operator_needed');
+  // A different id from the one already resolved: round three's answer cannot
+  // reach round four's question, so the operator is asked again.
+  assert.equal(capped.block_id, `${CAP_HOLD}:r4`);
+  assert.equal(capped.record_ref, undefined);
+
+  // And the new id is the one that unlocks it — the wrong answer here is a
+  // DIFFERENT answer, which is the only way this identity can be tested.
+  answerCap(treeRoot, `${CAP_HOLD}:r4`, 'resolved');
+  const revise = nextTransition(treeRoot);
+  assert.equal(revise.transition, TRANSITIONS.REVISE);
+  assert.equal(revise.attempt, 5);
+});
+
+test("a cap answer scoped to another milestone or another chunk does not answer this chunk's", () => {
+  const { treeRoot } = makeTree();
+  openM1(treeRoot);
+  capC1(treeRoot);
+  // Same chunk id under a different milestone, and a different chunk under
+  // this one — both dimensions of the joined key, each resolved `resolved`.
+  answerCap(treeRoot, 'implementation:revise-cap:M2:C1', 'resolved');
+  answerCap(treeRoot, 'implementation:revise-cap:M1:C2', 'resolved');
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.OPERATOR_NEEDED);
+  assert.equal(next.block_id, CAP_HOLD);
+  assert.equal(next.record_ref, undefined);
 });
 
 test('a green chunk moves to the next chunk in the plan', () => {
