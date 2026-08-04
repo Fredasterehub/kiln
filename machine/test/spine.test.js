@@ -316,6 +316,13 @@ function settlePostSeal(treeRoot, chunkId = 'C1', milestoneId = 'M1') {
   settleEnvelope(treeRoot, `postseal.${milestoneId}.${chunkId}`);
 }
 
+// A green chunk owes TWO settlements, not one: what it affected (its own
+// chunk-green rung) and the seal's repair (post-seal). Each has its own
+// envelope, so a crash between them leaves the missing one owed.
+function settleChunkAffected(treeRoot, chunkId = 'C1', milestoneId = 'M1') {
+  settleEnvelope(treeRoot, `chunkaffected.${milestoneId}.${chunkId}`);
+}
+
 function greenC1(treeRoot, chunkId = 'C1', dispatchId = 'D1') {
   buildC1(treeRoot, chunkId, dispatchId);
   recordChunk(treeRoot, 'M1', {
@@ -330,6 +337,7 @@ function greenC1(treeRoot, chunkId = 'C1', dispatchId = 'D1') {
     commit: 'abc1234',
     verification: { gate_id: `chunk:${chunkId}`, cmd: 'npm test', exit_code: 0 },
   });
+  settleChunkAffected(treeRoot, chunkId);
   settlePostSeal(treeRoot, chunkId);
 }
 
@@ -906,6 +914,8 @@ test('each rung advances on its own evidence alone, walked end to end', () => {
     commit: 'abc1234',
     verification: { gate_id: seal.gate_id, cmd: 'node --test', exit_code: 0 },
   });
+  step(); // chunk-affected
+  settleChunkAffected(treeRoot, 'C1');
   step(); // post-seal
   settlePostSeal(treeRoot, 'C1');
   step(); // milestone-review
@@ -930,6 +940,7 @@ test('each rung advances on its own evidence alone, walked end to end', () => {
     TRANSITIONS.REVIEW,
     TRANSITIONS.CHUNK_GATE,
     TRANSITIONS.SEAL,
+    TRANSITIONS.CHUNK_AFFECTED,
     TRANSITIONS.POST_SEAL,
     TRANSITIONS.MILESTONE_REVIEW,
     TRANSITIONS.REGRESSION_FLOOR,
@@ -977,6 +988,7 @@ test('every rung of the ladder is re-entrant: asked again, and asked by a new pr
         commit: 'abc1234',
         verification: { gate_id: 'chunk:M1:C1', cmd: 'node --test', exit_code: 0 },
       }),
+    () => settleChunkAffected(treeRoot, 'C1'),
     () => settlePostSeal(treeRoot, 'C1'),
     () => writeMilestoneReview(treeRoot, 'M1'),
     () => writeGate(treeRoot, 'regression-floor:M1', 0, 'node --test'),

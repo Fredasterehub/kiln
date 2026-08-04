@@ -78,6 +78,7 @@ const TRANSITIONS = Object.freeze({
   REVISE: 'revise',
   CHUNK_GATE: 'chunk-gate',
   SEAL: 'seal',
+  CHUNK_AFFECTED: 'chunk-affected',
   POST_SEAL: 'post-seal',
   MILESTONE_REVIEW: 'milestone-review',
   REGRESSION_FLOOR: 'regression-floor',
@@ -211,6 +212,10 @@ function closeEnvelopeId(milestoneId) {
 
 function postSealEnvelopeId(milestoneId, chunkId) {
   return `postseal.${milestoneId}.${chunkId}`;
+}
+
+function chunkAffectedEnvelopeId(milestoneId, chunkId) {
+  return `chunkaffected.${milestoneId}.${chunkId}`;
 }
 
 function chunkGateId(milestoneId, chunkId) {
@@ -875,19 +880,37 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
         });
       }
       case 'chunk-green': {
+        // The journey this chunk's plan nominated, read once and carried to
+        // both rungs below. The catalog entry waits for the seal deliberately:
+        // the script is authored inside the capsule and reviewed with the
+        // chunk, so until the seal commits it there is nothing trustworthy to
+        // catalogue — and a catalogued journey whose chunk was later revised
+        // away would be a suite entry nobody approved.
+        const journey = nominatedJourney(treeRoot, milestoneId, chunkId);
+        // WHAT THIS CHUNK AFFECTED IS RECORDED THE MOMENT IT IS GREEN, and it
+        // is its own rung rather than trailing work on a neighbour's: a
+        // distinct lifecycle point from the catalog write below (what a chunk
+        // ADDED, at the seal's own repair), with its own envelope, so a crash
+        // between the green record and this write leaves the write OWED rather
+        // than skipped forever. The commit comes from the green record itself,
+        // which already names it, so nothing is asked of anyone — and the
+        // nomination travels because this rung runs BEFORE the catalog write,
+        // which is the only reason a journey the chunk itself authored is
+        // knowable here at all.
+        if (!fs.existsSync(envelopePath(treeRoot, chunkAffectedEnvelopeId(milestoneId, chunkId)))) {
+          return at(TRANSITIONS.CHUNK_AFFECTED, {
+            envelope_id: chunkAffectedEnvelopeId(milestoneId, chunkId),
+            ...(journey === null ? {} : { journey }),
+            sealed_commit: latest.commit,
+            reason: `chunk ${chunkId} is green and the journeys its own sealed commit affected have not been recorded`,
+          });
+        }
         // The seal commits from the index, which leaves the working tree one
         // revision behind HEAD and the capsule still open. Both are repaired
         // by their own rung, and whether that rung is owed is derived from the
         // pair — the green record, and the envelope the repair writes — so a
         // crash between them is visible rather than skipped forever.
         if (!fs.existsSync(envelopePath(treeRoot, postSealEnvelopeId(milestoneId, chunkId)))) {
-          // The journey this chunk's plan nominated, carried to the rung that
-          // records it. The catalog entry waits for the seal deliberately: the
-          // script is authored inside the capsule and reviewed with the chunk,
-          // so until the seal commits it there is nothing trustworthy to
-          // catalogue — and a catalogued journey whose chunk was later revised
-          // away would be a suite entry nobody approved.
-          const journey = nominatedJourney(treeRoot, milestoneId, chunkId);
           return at(TRANSITIONS.POST_SEAL, {
             envelope_id: postSealEnvelopeId(milestoneId, chunkId),
             ...(journey === null ? {} : { journey }),

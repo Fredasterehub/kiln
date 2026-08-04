@@ -73,7 +73,8 @@ const { createHash } = require('node:crypto');
 
 const workflow = require('../src/workflow.js');
 const { nextTransition } = require('../src/spine.js');
-const { assembleSuite } = require('../src/verification.js');
+const { assembleSuite, orderRun } = require('../src/verification.js');
+const { validateAffectedMap } = require('../src/validators.js');
 const { writeAtomic, readJson } = require('../src/atomic-json.js');
 const { readRecords } = require('../src/stream.js');
 const { writeSteerRaise, writeHoldResolve, resolveRef } = require('../src/receipts.js');
@@ -274,7 +275,25 @@ const CRITERION = 'ACR-1';
 const JOURNEY = 'J-ACR-1';
 const JOURNEY_SCRIPT = 'test/journeys/acr-1.test.js';
 
-function makeProject({ chunks = ['C1'], nominate = { C1: { journey_id: JOURNEY, script_path: JOURNEY_SCRIPT, harness: 'node-test' } } } = {}) {
+// A journey an EARLIER milestone catalogued and this one never touches — the
+// only thing that makes an ordering assertion discriminating, since a suite of
+// one journey is in the same order whatever the affected map says. The entry is
+// seeded in the exact shape `journeys.js` writes (an earlier milestone's own
+// write, which this fixture stands in for), and its criterion is seeded with
+// it because `assembleSuite` refuses a register criterion no journey answers.
+const INHERITED = {
+  journey_id: 'J-ACR-0',
+  criterion_id: 'ACR-0',
+  script_path: 'test/journeys/acr-0.test.js',
+  harness: 'node-test',
+  added_in_milestone: 'M0',
+};
+
+function makeProject({
+  chunks = ['C1'],
+  nominate = { C1: { journey_id: JOURNEY, script_path: JOURNEY_SCRIPT, harness: 'node-test' } },
+  inherited = null,
+} = {}) {
   const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-runtime-'));
   const git = (...a) => execFileSync('git', a, { cwd: repoRoot, encoding: 'utf8' });
   git('init', '-q', '-b', 'main');
@@ -287,6 +306,17 @@ function makeProject({ chunks = ['C1'], nominate = { C1: { journey_id: JOURNEY, 
     path.join(repoRoot, 'test', 'smoke.test.js'),
     "const test = require('node:test');\nconst assert = require('node:assert');\ntest('smoke', () => assert.ok(true));\n"
   );
+  // The inherited journey's script belongs to the history this milestone
+  // starts from, so it goes into the initial commit — a script only this
+  // milestone's own commits carry would be a journey this milestone touched.
+  if (inherited !== null) {
+    const script = path.join(repoRoot, inherited.script_path);
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(
+      script,
+      "const test = require('node:test');\nconst assert = require('node:assert');\ntest('an earlier milestone proved this', () => assert.ok(true));\n"
+    );
+  }
   git('add', '-A');
   git('commit', '-q', '-m', 'initial');
 
@@ -344,9 +374,25 @@ function makeProject({ chunks = ['C1'], nominate = { C1: { journey_id: JOURNEY, 
   writeAtomic(path.join(treeRoot, 'architecture', 'criteria-register.json'), {
     schema_version: 1,
     criteria: [
+      ...(inherited === null
+        ? []
+        : [
+            {
+              id: inherited.criterion_id,
+              text: 'An earlier milestone already proved this.',
+              source_ref: 'vision/vision.md#2',
+              journey_id: inherited.journey_id,
+            },
+          ]),
       { id: CRITERION, text: 'The operator can run the thing.', source_ref: 'vision/vision.md#1', journey_id: JOURNEY },
     ],
   });
+  if (inherited !== null) {
+    writeAtomic(path.join(treeRoot, 'verification', 'journeys.json'), {
+      schema_version: 1,
+      journeys: [inherited],
+    });
+  }
   return { repoRoot, treeRoot, chunks, nominate };
 }
 
@@ -662,6 +708,7 @@ test('the workflow walks the ladder from an unopened milestone through to the cl
     'review',
     'chunk-gate',
     'seal',
+    'chunk-affected',
     'post-seal',
     'milestone-review',
     'regression-floor',
@@ -731,6 +778,7 @@ test('the ladder walks the same when the hands report their result as JSON text'
     'review',
     'chunk-gate',
     'seal',
+    'chunk-affected',
     'post-seal',
     'milestone-review',
     'regression-floor',
@@ -1594,6 +1642,205 @@ test('a chunk that nominates no journey leaves the catalog alone', async () => {
   const statLast = fs.statSync(catalogPath);
   assert.equal(statLast.ino, statFirst.ino);
   assert.equal(statLast.mtimeMs, statFirst.mtimeMs);
+});
+
+// ---------- the affected map ----------
+
+// THE CONSUMER IS THE JUDGE HERE TOO. What makes an affected map worth writing
+// is that `orderRun` re-prioritizes over it, so the acceptance runs the REAL
+// orderRun over the REAL assembled suite and asserts the ORDER it produced. The
+// fixture is discriminating on purpose: the journey this milestone never
+// touched is catalogued FIRST, so a map that re-prioritizes nothing (the
+// tolerated null map this rung replaces) leaves it first, and a map that
+// re-prioritizes everything is just as wrong.
+const AFFECTED_MAP = (treeRoot) => path.join(treeRoot, 'verification', 'affected-map.json');
+
+const POST_SEAL_ENVELOPE = (treeRoot) => path.join(treeRoot, 'envelopes', 'implementation', 'postseal.M1.C1.json');
+const CHUNK_AFFECTED_ENVELOPE = (treeRoot) =>
+  path.join(treeRoot, 'envelopes', 'implementation', 'chunkaffected.M1.C1.json');
+
+// A DISTINCT LIFECYCLE POINT IS A DISTINCT TRANSITION, or the word means
+// nothing on disk. What a chunk AFFECTED is recorded the moment the chunk is
+// green; what a chunk ADDED is catalogued by the post-seal repair that follows.
+// Folded onto one rung they share a crash window and an ordering, and the
+// sealed chunk spec says they are two points.
+test('the affected map is written at its own chunk-green rung, ahead of the post-seal repair', async () => {
+  const project = makeProject({ inherited: INHERITED });
+  await driveTo(project, ['seal']);
+
+  const beat = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+
+  assert.equal(beat.result.transition, 'chunk-affected', 'the affected write is not its own rung');
+  assert.deepEqual(readJson(AFFECTED_MAP(project.treeRoot), null).entries, [
+    { journey_id: JOURNEY, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+  // The journey this chunk itself authored is in the map BEFORE its catalog
+  // entry exists — the timing this rung has to solve from the chunk plan's own
+  // nomination rather than by waiting for the catalog write.
+  assert.deepEqual(
+    readJson(path.join(project.treeRoot, 'verification', 'journeys.json'), null).journeys.map((e) => e.journey_id),
+    [INHERITED.journey_id],
+    'the catalog write happened on this rung after all, which is the fold'
+  );
+  assert.equal(fs.existsSync(POST_SEAL_ENVELOPE(project.treeRoot)), false, 'the post-seal repair ran on this rung too');
+  assert.ok(fs.existsSync(CHUNK_AFFECTED_ENVELOPE(project.treeRoot)), 'the rung settled no envelope of its own');
+});
+
+// THE ENVELOPE IS WHY THIS IS A RUNG AND NOT TRAILING WORK. A crash after the
+// seal and before the affected write must leave the write OWED — the same D4
+// law that moved the worktree sync and the capsule close off the seal rung.
+test('a chunk-green whose affected write never happened is still owed it', async () => {
+  const project = makeProject({ inherited: INHERITED });
+  await driveTo(project, ['seal']);
+
+  assert.equal(nextTransition(project.treeRoot).transition, 'chunk-affected');
+  assert.equal(fs.existsSync(AFFECTED_MAP(project.treeRoot)), false);
+});
+
+test('the ladder walks chunk-affected between the seal and the post-seal repair', async () => {
+  const project = makeProject();
+  const { seen } = await driveTo(project, ['close']);
+
+  assert.deepEqual(seen.slice(seen.indexOf('seal')), [
+    'seal',
+    'chunk-affected',
+    'post-seal',
+    'milestone-review',
+    'regression-floor',
+    'close',
+  ]);
+});
+
+test('a sealed build leaves an affected map the real orderRun re-prioritizes', async () => {
+  const project = makeProject({ inherited: INHERITED });
+  await driveTo(project, ['close']);
+
+  const register = readJson(path.join(project.treeRoot, 'architecture', 'criteria-register.json'), null);
+  const catalog = readJson(path.join(project.treeRoot, 'verification', 'journeys.json'), null);
+  const assembled = assembleSuite(project.treeRoot, register, catalog);
+  assert.deepEqual(assembled.errors, []);
+  assert.deepEqual(
+    assembled.journeys.map((entry) => entry.journey_id),
+    [INHERITED.journey_id, JOURNEY],
+    'the fixture must offer the untouched journey first, or the ordering assertion proves nothing'
+  );
+
+  const map = readJson(AFFECTED_MAP(project.treeRoot), null);
+  assert.notEqual(map, null, 'the chunk-green rung left no affected map at all');
+  assert.deepEqual(validateAffectedMap(map).errors, [], 'the map a real build produced does not validate');
+  // The chunk id carries the milestone that scopes it: two milestones both
+  // holding a C1 are two different affecters of the same journey.
+  assert.deepEqual(map.entries, [{ journey_id: JOURNEY, affected_by: ['M1/C1'], status: 'pending' }]);
+
+  assert.deepEqual(
+    orderRun([], map, assembled.journeys).map((entry) => entry.journey_id),
+    [JOURNEY, INHERITED.journey_id],
+    'the map did not re-prioritize the journey this milestone actually touched'
+  );
+});
+
+test('the affected map is byte-stable when the same chunk-green is driven again', async () => {
+  const project = makeProject({ inherited: INHERITED });
+  await driveTo(project, ['close']);
+  const before = fs.readFileSync(AFFECTED_MAP(project.treeRoot));
+  const stat = fs.statSync(AFFECTED_MAP(project.treeRoot));
+
+  // The same re-entry the catalog's own replay test drives: this rung is owed
+  // again whenever its own envelope is absent, which is exactly the state a
+  // crash between the write and the envelope leaves.
+  fs.rmSync(CHUNK_AFFECTED_ENVELOPE(project.treeRoot));
+  await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+
+  assert.deepEqual(fs.readFileSync(AFFECTED_MAP(project.treeRoot)), before, 'the replay rewrote the affected map');
+  const after = fs.statSync(AFFECTED_MAP(project.treeRoot));
+  assert.equal(after.ino, stat.ino, 'the replay replaced the affected map file');
+  assert.equal(after.mtimeMs, stat.mtimeMs, 'the replay rewrote the affected map with identical bytes');
+});
+
+test('a chunk whose diff touches no catalogued journey leaves the affected map alone', async () => {
+  // Two chunks, one nomination: the map must be untouched by the second, and a
+  // fixture with no journey at all could not tell "left alone" from "never
+  // written".
+  const project = makeProject({ chunks: ['C1', 'C2'] });
+  await driveTo(project, ['seal'], { budget: 40 });
+  await driveTo(project, ['post-seal'], { budget: 40 });
+  const afterFirst = fs.readFileSync(AFFECTED_MAP(project.treeRoot));
+  const statFirst = fs.statSync(AFFECTED_MAP(project.treeRoot));
+  assert.deepEqual(JSON.parse(afterFirst).entries, [
+    { journey_id: JOURNEY, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+
+  await driveTo(project, ['close'], { budget: 40 });
+
+  assert.deepEqual(fs.readFileSync(AFFECTED_MAP(project.treeRoot)), afterFirst, 'the untouching chunk wrote to the map');
+  const statLast = fs.statSync(AFFECTED_MAP(project.treeRoot));
+  assert.equal(statLast.ino, statFirst.ino);
+  assert.equal(statLast.mtimeMs, statFirst.mtimeMs);
+});
+
+// THE AFFECTED SET IS BOUND TO THE RECORD, NOT TO WHEREVER THE REPOSITORY
+// HAPPENS TO BE. Post-seal ordinarily runs with HEAD still standing on the
+// commit the seal just made, so "this chunk's commit" and "HEAD" are the same
+// value and a derivation reading either looks correct. They come apart exactly
+// once: a crash between the seal and its repair, with something else committed
+// before the re-entry. The green record still names the commit this chunk's
+// work is in, and that is the one the write is derived from.
+test('the affected write reads the commit the green record names, not wherever HEAD has moved', async () => {
+  const project = makeProject({ inherited: INHERITED });
+  await driveTo(project, ['seal']);
+  // Staged by path, never `-A`: the seal commits from the INDEX and leaves the
+  // working tree one revision behind until post-seal repairs it, so a blanket
+  // add here would commit the chunk's own work away and the fixture would be
+  // testing the deletion instead.
+  fs.writeFileSync(path.join(project.repoRoot, 'NOTES.md'), 'later\n');
+  execFileSync('git', ['add', 'NOTES.md'], { cwd: project.repoRoot });
+  execFileSync('git', ['commit', '-q', '-m', 'something else lands before the repair'], { cwd: project.repoRoot });
+
+  await driveTo(project, ['post-seal']);
+
+  assert.deepEqual(readJson(AFFECTED_MAP(project.treeRoot), null).entries, [
+    { journey_id: JOURNEY, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+});
+
+// THE RUNG MAKES TWO DURABLE WRITES — the affected entries, then its envelope —
+// and the first can refuse outright (a malformed map already on disk, a commit
+// git cannot show). That is safe only because the envelope goes LAST, so a
+// refusal leaves the rung owed and the re-entry converges. The post-seal repair
+// behind it must stay owed too, which is the whole reason these are two rungs.
+test('an affected write that refuses leaves the rung owed, and the re-entry converges', async () => {
+  const project = makeProject();
+  await driveTo(project, ['seal']);
+  fs.mkdirSync(path.join(project.treeRoot, 'verification'), { recursive: true });
+  fs.writeFileSync(AFFECTED_MAP(project.treeRoot), JSON.stringify({ schema_version: 1, entries: 'nope' }));
+
+  await assert.rejects(
+    invokeWorkflow(project.treeRoot, { seat: makeSeat(project) }),
+    /malformed affected-map/,
+    'the rung swallowed a refusal from the affected write'
+  );
+  assert.equal(
+    fs.existsSync(CHUNK_AFFECTED_ENVELOPE(project.treeRoot)),
+    false,
+    'a refused rung wrote its envelope anyway, and the write is owed forever'
+  );
+  assert.equal(
+    fs.existsSync(POST_SEAL_ENVELOPE(project.treeRoot)),
+    false,
+    'the post-seal repair ran past a refused rung'
+  );
+
+  fs.rmSync(AFFECTED_MAP(project.treeRoot));
+  await driveTo(project, ['close']);
+
+  assert.deepEqual(readJson(AFFECTED_MAP(project.treeRoot), null).entries, [
+    { journey_id: JOURNEY, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+  assert.deepEqual(
+    readJson(path.join(project.treeRoot, 'verification', 'journeys.json'), null).journeys.map((e) => e.journey_id),
+    [JOURNEY],
+    'the re-entry duplicated the catalog entry'
+  );
 });
 
 // ---------- the gate evidences the chunk ----------

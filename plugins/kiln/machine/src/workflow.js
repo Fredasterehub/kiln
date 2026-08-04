@@ -46,6 +46,7 @@ const familyEvidence = require('./family-evidence.js');
 const capsule = require('./capsule.js');
 const gateWorktree = require('./gate-worktree.js');
 const journeys = require('./journeys.js');
+const verification = require('./verification.js');
 const dispatch = require('./dispatch.js');
 const toolchain = require('./toolchain.js');
 const { runGate } = require('./check-honesty.js');
@@ -462,6 +463,17 @@ const OPS = Object.freeze({
   'journeys.recordAuthored': {
     call: (treeRoot, milestoneId, chunkId, nomination) =>
       journeys.recordAuthoredJourney(treeRoot, path.join(treeRoot, '..'), milestoneId, chunkId, nomination),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // The affected-map's per-chunk entries, from the chunk-affected rung, with
+  // the repo root DERIVED the same way every other op here derives it: the
+  // affected set is read off the sealed COMMIT, and a workflow free to name the
+  // repository could file another repository's diff against this tree's
+  // journeys.
+  'verification.recordChunkAffected': {
+    call: (treeRoot, milestoneId, chunkId, commit, journey) =>
+      verification.recordChunkAffected(treeRoot, path.join(treeRoot, '..'), milestoneId, chunkId, commit, journey),
     root: (args) => args[0],
     receipt: 'none',
   },

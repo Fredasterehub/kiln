@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const { execFileSync } = require('node:child_process');
+
 const {
   assembleSuite,
   orderRun,
@@ -13,10 +15,12 @@ const {
   recordRun,
   computeSuiteState,
   recordAffected,
+  recordChunkAffected,
   runJourney,
   digestSuite,
 } = require('../src/verification.js');
-const { readJson } = require('../src/atomic-json.js');
+const { validateAffectedMap } = require('../src/validators.js');
+const { readJson, writeAtomic } = require('../src/atomic-json.js');
 const { readRecords, appendRecord } = require('../src/stream.js');
 
 function mkTmpDir() {
@@ -731,6 +735,452 @@ test('recordAffected refuses (throws) an entry with an invalid status', () => {
 test('recordAffected refuses (throws) an entry missing journey_id', () => {
   const tmp = mkTmpDir();
   assert.throws(() => recordAffected(tmp, [{ affected_by: [], status: 'pending' }]), /malformed affected-map/);
+});
+
+// ---------- recordChunkAffected ----------
+
+// The per-chunk feeder: which catalogued journeys a sealed chunk's own commit
+// touched, merged into the map recordAffected owns. Every fixture here is a
+// REAL repository with a REAL commit, because the derivation reads the commit —
+// a fixture that only put files on disk would never reach it.
+const AFFECTED_MAP_PATH = (treeRoot) => path.join(treeRoot, 'verification', 'affected-map.json');
+
+const J0 = { journey_id: 'J-0', criterion_id: 'ACR-0', script_path: 'test/j0.test.js', harness: 'node-test', added_in_milestone: 'M0' };
+const J1 = { journey_id: 'J-1', criterion_id: 'ACR-1', script_path: 'test/j1.test.js', harness: 'node-test', added_in_milestone: 'M1' };
+
+// Bytes, inode and mtime together: identical content cannot tell a rewrite from
+// a read, and "left the map alone" is a claim about writes.
+function stampOf(file) {
+  if (!fs.existsSync(file)) return `${file} ABSENT`;
+  const stat = fs.statSync(file);
+  return `${file} ino=${stat.ino} mtime=${stat.mtimeMs} ${fs.readFileSync(file, 'utf8')}`;
+}
+
+function makeSealedProject({ catalog = [J0, J1] } = {}) {
+  const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-test-'));
+  const git = (...args) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  fs.writeFileSync(path.join(repoRoot, '.gitignore'), 'tree/\n');
+  fs.writeFileSync(path.join(repoRoot, 'README.md'), 'seed\n');
+  fs.mkdirSync(path.join(repoRoot, 'test'));
+  for (const entry of [J0, J1]) fs.writeFileSync(path.join(repoRoot, entry.script_path), 'seed\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'initial');
+
+  const treeRoot = path.join(repoRoot, 'tree');
+  if (catalog !== null) {
+    writeAtomic(path.join(treeRoot, 'verification', 'journeys.json'), { schema_version: 1, journeys: catalog });
+  }
+  // A chunk's commit: it touches the paths it was given, and README besides —
+  // the ordinary case is a diff that is mostly NOT journey scripts.
+  const seal = (paths, message) => {
+    fs.appendFileSync(path.join(repoRoot, 'README.md'), `${message}\n`);
+    for (const rel of paths) fs.appendFileSync(path.join(repoRoot, rel), `${message}\n`);
+    git('add', '-A');
+    git('commit', '-q', '-m', message);
+    return git('rev-parse', 'HEAD').trim();
+  };
+  return { repoRoot, treeRoot, seal, git };
+}
+
+test('recordChunkAffected records the catalogued journeys the sealed commit touched, and nothing else', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const commit = seal([J1.script_path], 'C1 changes the second journey');
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+
+  assert.equal(result.state, 'recorded');
+  assert.deepEqual(result.journey_ids, [J1.journey_id]);
+  const map = readJson(AFFECTED_MAP_PATH(treeRoot), null);
+  assert.deepEqual(validateAffectedMap(map).errors, []);
+  assert.deepEqual(map.entries, [{ journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'pending' }]);
+});
+
+test('a commit touching no catalogued journey script never creates the map', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const commit = seal([], 'C1 changes nothing a journey covers');
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+
+  assert.equal(result.state, 'unaffected');
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false, 'an unaffecting chunk wrote a map');
+});
+
+test('a chunk that affects nothing leaves an existing map byte-identical', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'));
+  const before = stampOf(AFFECTED_MAP_PATH(treeRoot));
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C2', seal([], 'C2'));
+
+  assert.equal(result.state, 'unaffected');
+  assert.equal(stampOf(AFFECTED_MAP_PATH(treeRoot)), before);
+});
+
+test('re-driving the same chunk-green leaves the map byte-identical, generated_at included', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const commit = seal([J1.script_path], 'C1');
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+  const before = stampOf(AFFECTED_MAP_PATH(treeRoot));
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+
+  assert.equal(result.state, 'already-recorded');
+  assert.equal(stampOf(AFFECTED_MAP_PATH(treeRoot)), before, 'the replay rewrote the map');
+});
+
+// THE WRONG ANSWER IS A DIFFERENT ANSWER: a chunk id is unique only inside its
+// milestone, so two milestones both holding a C1 are two affecters. Recorded
+// unscoped, the second collapses into the first and the map loses it silently.
+test('two milestones holding the same chunk id are two different affecters', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'M1 C1'));
+  recordChunkAffected(treeRoot, repoRoot, 'M2', 'C1', seal([J1.script_path], 'M2 C1'));
+
+  const map = readJson(AFFECTED_MAP_PATH(treeRoot), null);
+  assert.deepEqual(map.entries, [{ journey_id: J1.journey_id, affected_by: ['M1/C1', 'M2/C1'], status: 'pending' }]);
+});
+
+test('a journey the map already marks resolved goes back to pending when a new chunk touches it', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  // The shape a completed verification pass leaves behind, written by the one
+  // sanctioned writer rather than assembled by hand.
+  recordAffected(treeRoot, [{ journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'green' }]);
+
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C2', seal([J1.script_path], 'C2'));
+
+  const map = readJson(AFFECTED_MAP_PATH(treeRoot), null);
+  assert.deepEqual(map.entries, [
+    { journey_id: J1.journey_id, affected_by: ['M1/C1', 'M1/C2'], status: 'pending' },
+  ]);
+});
+
+test('a journey the commit did not touch keeps its own entry untouched', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  recordAffected(treeRoot, [{ journey_id: J0.journey_id, affected_by: ['M0/C9'], status: 'green' }]);
+
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'));
+
+  const map = readJson(AFFECTED_MAP_PATH(treeRoot), null);
+  assert.deepEqual(map.entries, [
+    { journey_id: J0.journey_id, affected_by: ['M0/C9'], status: 'green' },
+    { journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+});
+
+test('a build with no catalog yet records nothing rather than refusing', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject({ catalog: null });
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'));
+
+  assert.equal(result.state, 'no-catalog');
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false);
+});
+
+test('recordChunkAffected refuses a catalog it cannot read, and writes nothing', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  writeAtomic(path.join(treeRoot, 'verification', 'journeys.json'), { schema_version: 2, journeys: [] });
+
+  assert.throws(
+    () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1')),
+    /not a journey catalog/
+  );
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false);
+});
+
+test('recordChunkAffected refuses a malformed existing map rather than overwriting it', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  fs.mkdirSync(path.join(treeRoot, 'verification'), { recursive: true });
+  fs.writeFileSync(AFFECTED_MAP_PATH(treeRoot), JSON.stringify({ schema_version: 1, entries: 'nope' }));
+  const before = stampOf(AFFECTED_MAP_PATH(treeRoot));
+
+  assert.throws(
+    () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1')),
+    /refuses a malformed affected-map/
+  );
+  assert.equal(stampOf(AFFECTED_MAP_PATH(treeRoot)), before);
+});
+
+// A `commit` that names something git can show but that is not a commit is the
+// silent-falsy case: `git diff-tree` on a blob prints nothing and exits 0, so an
+// unguarded derivation would report "this chunk affected nothing" about a chunk
+// whose diff it never read.
+test('recordChunkAffected refuses a commit id that is not a commit', () => {
+  const { repoRoot, treeRoot, seal, git } = makeSealedProject();
+  seal([J1.script_path], 'C1');
+  const blob = git('rev-parse', 'HEAD:README.md').trim();
+
+  assert.throws(() => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', blob), /is not a commit/);
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false);
+});
+
+test('recordChunkAffected refuses a commit the repository does not carry', () => {
+  const { repoRoot, treeRoot } = makeSealedProject();
+  assert.throws(() => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', 'deadbee'), /carries no object "deadbee"/);
+});
+
+// A chunk sealed as the repository's FIRST commit has no parent to diff
+// against, and `git diff-tree` prints nothing at all for one unless it is asked
+// to treat it as a root — silently, exit 0, which would read as "this chunk
+// affected nothing".
+test('a chunk sealed as the root commit still yields its affected journeys', () => {
+  const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-root-'));
+  const git = (...args) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  fs.mkdirSync(path.join(repoRoot, 'test'));
+  fs.writeFileSync(path.join(repoRoot, J1.script_path), 'seed\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'the first chunk');
+  const treeRoot = path.join(repoRoot, 'tree');
+  writeAtomic(path.join(treeRoot, 'verification', 'journeys.json'), { schema_version: 1, journeys: [J1] });
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', git('rev-parse', 'HEAD').trim());
+
+  assert.deepEqual(result.journey_ids, [J1.journey_id]);
+  assert.deepEqual(readJson(AFFECTED_MAP_PATH(treeRoot), null).entries, [
+    { journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+});
+
+test('recordChunkAffected refuses an empty milestone, chunk or commit', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const commit = seal([J1.script_path], 'C1');
+  assert.throws(() => recordChunkAffected(treeRoot, repoRoot, '', 'C1', commit), /milestoneId must be a non-empty string/);
+  assert.throws(() => recordChunkAffected(treeRoot, repoRoot, 'M1', '', commit), /chunkId must be a non-empty string/);
+  assert.throws(() => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', ''), /commit must be a non-empty string/);
+  assert.throws(() => recordChunkAffected('', repoRoot, 'M1', 'C1', commit), /treeRoot must be a non-empty string/);
+  assert.throws(() => recordChunkAffected(treeRoot, '', 'M1', 'C1', commit), /repoRoot must be a non-empty string/);
+});
+
+// ONLY A GENUINELY NEW AFFECTER REOPENS. A replay of a chunk-green whose
+// affecter the map already carries is bookkeeping that already happened, and
+// re-driving it must not undo a verdict some later verification pass reached:
+// resetting the status would rewrite the file, move `generated_at`, and put
+// resolved work back at the front of `orderRun`'s queue. The pair that makes
+// this discriminating is the test just above — a DIFFERENT chunk touching the
+// same resolved journey still reopens it.
+test('a replayed affecter never reopens a journey the map has since resolved', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const commit = seal([J1.script_path], 'C1');
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+  // The verdict a later verification pass reached, written by the one
+  // sanctioned writer rather than assembled by hand.
+  const resolved = readJson(AFFECTED_MAP_PATH(treeRoot), null).entries.map((entry) => ({ ...entry, status: 'green' }));
+  recordAffected(treeRoot, resolved);
+  const before = stampOf(AFFECTED_MAP_PATH(treeRoot));
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+
+  assert.equal(result.state, 'already-recorded');
+  assert.equal(stampOf(AFFECTED_MAP_PATH(treeRoot)), before, 'the replay reopened work that was already resolved');
+  assert.equal(readJson(AFFECTED_MAP_PATH(treeRoot), null).entries[0].status, 'green');
+});
+
+test('a replayed affecter never reopens a journey the map has quarantined', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const commit = seal([J1.script_path], 'C1');
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+  recordAffected(treeRoot, [{ journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'quarantined' }]);
+  const before = stampOf(AFFECTED_MAP_PATH(treeRoot));
+
+  recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit);
+
+  assert.equal(stampOf(AFFECTED_MAP_PATH(treeRoot)), before, 'the replay reopened a quarantined journey');
+});
+
+// A MALFORMED ENTRY FAILS CLOSED, which an absent catalog deliberately does
+// not. An entry whose `script_path` is missing or empty matches no changed path
+// and would otherwise read as "this journey was not affected" — the same
+// silent-falsy class the blob-commit guard exists for, one level further in.
+test('a catalog ENTRY this module cannot read is refused, never skipped as unaffected', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject({
+    catalog: [J1, { journey_id: 'J-2', criterion_id: 'ACR-2', harness: 'node-test', added_in_milestone: 'M1' }],
+  });
+
+  assert.throws(
+    () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1')),
+    /catalog entry/
+  );
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false, 'a refused catalog still wrote a map');
+});
+
+test('a catalog entry with no journey_id, or none at all, is refused the same way', () => {
+  const withoutId = makeSealedProject({
+    catalog: [{ script_path: J1.script_path, criterion_id: 'ACR-1', harness: 'node-test', added_in_milestone: 'M1' }],
+  });
+  assert.throws(
+    () => recordChunkAffected(withoutId.treeRoot, withoutId.repoRoot, 'M1', 'C1', withoutId.seal([J1.script_path], 'C1')),
+    /catalog entry/
+  );
+
+  const notAnObject = makeSealedProject({ catalog: [J1, 'J-2'] });
+  assert.throws(
+    () => recordChunkAffected(notAnObject.treeRoot, notAnObject.repoRoot, 'M1', 'C1', notAnObject.seal([J1.script_path], 'C1')),
+    /catalog entry/
+  );
+});
+
+// THE FLOOR IS THE CATALOG'S OWN FLOOR, FIELD FOR FIELD. "Readable" is not
+// "has two of its five fields": `assembleSuite` is what will later run this
+// catalog, and an entry it would refuse is an entry this rung must not settle
+// on. Every field class below is DISCRIMINATING — the entry names a script the
+// commit never changed, so a guard that lets it through reports the rung
+// "unaffected" and exits 0.
+test('a catalog entry whose script_path is unsafe or uncontained is refused, not read as unaffected', () => {
+  for (const scriptPath of ['../outside/j2.test.js', '/tmp/j2.test.js', 'test/j2.test.js; exit 0', 'test/jé.test.js']) {
+    const { repoRoot, treeRoot, seal } = makeSealedProject({
+      catalog: [J1, { journey_id: 'J-2', criterion_id: 'ACR-2', script_path: scriptPath, harness: 'node-test', added_in_milestone: 'M1' }],
+    });
+    assert.throws(
+      () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1')),
+      /catalog entry/,
+      `an entry with script_path ${JSON.stringify(scriptPath)} settled the rung`
+    );
+    assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false, 'a refused catalog still wrote a map');
+  }
+});
+
+test('a catalog entry whose harness is missing or outside the closed set is refused', () => {
+  for (const harness of [undefined, 'bash', '', 7]) {
+    const entry = { journey_id: 'J-2', criterion_id: 'ACR-2', script_path: 'test/j2.test.js', added_in_milestone: 'M1' };
+    if (harness !== undefined) entry.harness = harness;
+    const { repoRoot, treeRoot, seal } = makeSealedProject({ catalog: [J1, entry] });
+    assert.throws(
+      () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1')),
+      /catalog entry/,
+      `an entry with harness ${JSON.stringify(harness)} settled the rung`
+    );
+    assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false, 'a refused catalog still wrote a map');
+  }
+});
+
+test('a catalog entry with no criterion_id, or no added_in_milestone, is refused', () => {
+  const noCriterion = makeSealedProject({
+    catalog: [J1, { journey_id: 'J-2', script_path: 'test/j2.test.js', harness: 'node-test', added_in_milestone: 'M1' }],
+  });
+  assert.throws(
+    () => recordChunkAffected(noCriterion.treeRoot, noCriterion.repoRoot, 'M1', 'C1', noCriterion.seal([J1.script_path], 'C1')),
+    /catalog entry/
+  );
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(noCriterion.treeRoot)), false, 'a refused catalog still wrote a map');
+
+  const noMilestone = makeSealedProject({
+    catalog: [J1, { journey_id: 'J-2', criterion_id: 'ACR-2', script_path: 'test/j2.test.js', harness: 'node-test' }],
+  });
+  assert.throws(
+    () => recordChunkAffected(noMilestone.treeRoot, noMilestone.repoRoot, 'M1', 'C1', noMilestone.seal([J1.script_path], 'C1')),
+    /catalog entry/
+  );
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(noMilestone.treeRoot)), false, 'a refused catalog still wrote a map');
+});
+
+// THE SELF-AUTHORED JOURNEY, AND WHY IT CANNOT COME FROM THE CATALOG. This
+// write happens at chunk-green, and the catalog entry for a journey the chunk
+// itself authored is not written until the post-seal rung that follows. The
+// chunk plan's own nomination — the same durable record `journeys.js` later
+// catalogues from — is what makes it knowable here.
+test("a chunk's own nominated journey is affected before its catalog entry exists", () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject({ catalog: [J0] });
+  const nomination = { journey_id: J1.journey_id, script_path: J1.script_path, harness: 'node-test' };
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'), nomination);
+
+  assert.equal(result.state, 'recorded');
+  assert.deepEqual(result.journey_ids, [J1.journey_id]);
+  assert.deepEqual(readJson(AFFECTED_MAP_PATH(treeRoot), null).entries, [
+    { journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+});
+
+test('the very first journey in a build is affected by its own chunk, with no catalog on disk yet', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject({ catalog: null });
+  const nomination = { journey_id: J1.journey_id, script_path: J1.script_path, harness: 'node-test' };
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'), nomination);
+
+  assert.equal(result.state, 'recorded');
+  assert.deepEqual(readJson(AFFECTED_MAP_PATH(treeRoot), null).entries, [
+    { journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+});
+
+// The nomination is held to the SAME rule as a catalogued entry rather than
+// trusted: what a chunk affected is what its commit touched, and a nominated
+// script this commit never changed is not this chunk's doing.
+test('a nominated journey whose script this commit did not touch is not affected by it', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject({ catalog: [J0] });
+  const nomination = { journey_id: J1.journey_id, script_path: J1.script_path, harness: 'node-test' };
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([], 'C1 touched nothing'), nomination);
+
+  assert.equal(result.state, 'unaffected');
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false);
+});
+
+test('a nomination already carried by the catalog yields one entry, not two', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const nomination = { journey_id: J1.journey_id, script_path: J1.script_path, harness: 'node-test' };
+
+  const result = recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'), nomination);
+
+  assert.deepEqual(result.journey_ids, [J1.journey_id]);
+  assert.deepEqual(readJson(AFFECTED_MAP_PATH(treeRoot), null).entries, [
+    { journey_id: J1.journey_id, affected_by: ['M1/C1'], status: 'pending' },
+  ]);
+});
+
+test('a nomination this module cannot read is refused, like a catalog entry', () => {
+  const { repoRoot, treeRoot, seal } = makeSealedProject();
+  const commit = seal([J1.script_path], 'C1');
+
+  assert.throws(
+    () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit, { journey_id: 'J-1' }),
+    /journey nomination/
+  );
+  assert.throws(
+    () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', commit, { script_path: J1.script_path }),
+    /journey nomination/
+  );
+  assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false);
+});
+
+// THE NOMINATION IS HELD TO THE SHAPE ITS OWN WRITER ENFORCES. `journeys.js`
+// will refuse exactly these nominations one rung later, and `promotion.js`
+// refuses them at the plan gate — a nomination this rung waves through is one
+// that settles "unaffected" now and blocks the catalog write afterwards, with
+// the rung that decided it already sealed.
+test('a nomination whose script_path is unsafe or uncontained is refused, not read as unaffected', () => {
+  for (const scriptPath of ['../outside/j1.test.js', '/tmp/j1.test.js', 'test/j1.test.js; exit 0', 'test/j1é.test.js']) {
+    const { repoRoot, treeRoot, seal } = makeSealedProject({ catalog: [J0] });
+    assert.throws(
+      () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'), {
+        journey_id: J1.journey_id,
+        script_path: scriptPath,
+        harness: 'node-test',
+      }),
+      /journey nomination/,
+      `a nomination with script_path ${JSON.stringify(scriptPath)} settled the rung`
+    );
+    assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false, 'a refused nomination still wrote a map');
+  }
+});
+
+test('a nomination whose harness is missing or outside the closed set is refused', () => {
+  for (const harness of [undefined, 'bash', '', 7]) {
+    const { repoRoot, treeRoot, seal } = makeSealedProject({ catalog: [J0] });
+    const nomination = { journey_id: J1.journey_id, script_path: J1.script_path };
+    if (harness !== undefined) nomination.harness = harness;
+    assert.throws(
+      () => recordChunkAffected(treeRoot, repoRoot, 'M1', 'C1', seal([J1.script_path], 'C1'), nomination),
+      /journey nomination/,
+      `a nomination with harness ${JSON.stringify(harness)} settled the rung`
+    );
+    assert.equal(fs.existsSync(AFFECTED_MAP_PATH(treeRoot)), false, 'a refused nomination still wrote a map');
+  }
 });
 
 // ---------- runJourney ----------

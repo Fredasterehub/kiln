@@ -41,6 +41,16 @@
 //                    verification/affected-map.json; validates via
 //                    validators.validateAffectedMap before ever touching
 //                    disk.
+//   recordChunkAffected — the implementation ladder's per-chunk feeder for
+//                    that map, called from its own chunk-green rung: the
+//                    journeys one sealed commit touched, whether the catalog
+//                    already carries them or the chunk's own plan nominated
+//                    them, merged in and written THROUGH recordAffected,
+//                    which stays the file's only writer. The one function
+//                    here that reads a file of its own (the map it merges
+//                    into, and the catalog it derives from), because a
+//                    read-modify-write of the map belongs to nobody but the
+//                    map's owner.
 //   runJourney     — the sole per-journey execute-and-record shortcut,
 //                    joining check-honesty.js's runGate (the one sanctioned
 //                    command-execution-plus-ledger-evidence mechanism) to
@@ -55,6 +65,10 @@ const crypto = require('node:crypto');
 const { readRecords, appendRecord } = require('./stream.js');
 const { readJson, writeAtomic } = require('./atomic-json.js');
 const { runGate } = require('./check-honesty.js');
+// The read-only git primitives, from the module that owns them: what a chunk's
+// sealed commit changed is a question about the repository, and a second way of
+// asking git anything is how two answers to one question start.
+const { git, gitOrThrow } = require('./staged-diff.js');
 const validators = require('./validators.js');
 
 const SUITE_STATE_SCHEMA_VERSION = 1;
@@ -96,6 +110,44 @@ function isContainedScriptPath(value) {
   if (!SAFE_SCRIPT_PATH_RE.test(value)) return false;
   const segments = value.split('/');
   return segments.every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
+
+// journeyEntryProblems(entry, where) -> string[] — the per-entry floor a
+// catalogued journey is held to, in one place because more than one caller now
+// needs it and two hand-rolled copies of a validation floor drift apart on the
+// first field either one gains. `assembleSuite` holds the catalog to this
+// before a suite runs; `recordChunkAffected` holds it to the same floor before
+// deciding a chunk affected nothing — a WEAKER check there would settle a rung
+// "unaffected" on an entry the suite phase will later refuse outright, and
+// nothing replays a rung that already passed.
+//
+// Cross-entry facts (duplicate journey_id, the 1:1 criterion mapping) are NOT
+// here: they are properties of the SET, and only the caller holding the whole
+// set can decide them.
+function journeyEntryProblems(entry, where) {
+  if (!isPlainObject(entry)) return [`${where} must be an object`];
+
+  const problems = [];
+  if (!isNonEmptyString(entry.journey_id)) {
+    problems.push(`${where}.journey_id must be a non-empty string`);
+  }
+  if (!isNonEmptyString(entry.script_path)) {
+    problems.push(`${where}.script_path must be a non-empty string`);
+  } else if (!isContainedScriptPath(entry.script_path)) {
+    problems.push(
+      `${where}.script_path "${entry.script_path}" is not a safe, contained relative path (no absolute paths, no ".."/"." segments, and only letters, digits, ".", "_", "-", and "/" are allowed)`
+    );
+  }
+  if (!HARNESSES.has(entry.harness)) {
+    problems.push(`${where}.harness must be one of ${[...HARNESSES].join(', ')} (got ${JSON.stringify(entry.harness)})`);
+  }
+  if (!isNonEmptyString(entry.added_in_milestone)) {
+    problems.push(`${where}.added_in_milestone must be a non-empty string`);
+  }
+  if (!isNonEmptyString(entry.criterion_id)) {
+    problems.push(`${where}.criterion_id must be a non-empty string`);
+  }
+  return problems;
 }
 
 // assembleSuite(treeRoot, criteriaRegister, journeysIndex) — the fail-closed
@@ -149,34 +201,18 @@ function assembleSuite(treeRoot, criteriaRegister, journeysIndex) {
 
   journeysIndex.journeys.forEach((entry, index) => {
     const where = `journeysIndex.journeys[${index}]`;
-    if (!isPlainObject(entry)) {
-      errors.push(`${where} must be an object`);
-      return;
+    for (const problem of journeyEntryProblems(entry, where)) errors.push(problem);
+    if (!isPlainObject(entry)) return;
+    // Uniqueness is the one thing the per-entry floor cannot see, so it stays
+    // here, where the whole set is in hand.
+    if (isNonEmptyString(entry.journey_id)) {
+      if (seenJourneyIds.has(entry.journey_id)) {
+        errors.push(`${where}.journey_id "${entry.journey_id}" is a duplicate — journey_id must be unique`);
+      } else {
+        seenJourneyIds.add(entry.journey_id);
+      }
     }
-    if (!isNonEmptyString(entry.journey_id)) {
-      errors.push(`${where}.journey_id must be a non-empty string`);
-    } else if (seenJourneyIds.has(entry.journey_id)) {
-      errors.push(`${where}.journey_id "${entry.journey_id}" is a duplicate — journey_id must be unique`);
-    } else {
-      seenJourneyIds.add(entry.journey_id);
-    }
-    if (!isNonEmptyString(entry.script_path)) {
-      errors.push(`${where}.script_path must be a non-empty string`);
-    } else if (!isContainedScriptPath(entry.script_path)) {
-      errors.push(
-        `${where}.script_path "${entry.script_path}" is not a safe, contained relative path (no absolute paths, no ".."/"." segments, and only letters, digits, ".", "_", "-", and "/" are allowed)`
-      );
-    }
-    if (!HARNESSES.has(entry.harness)) {
-      errors.push(`${where}.harness must be one of ${[...HARNESSES].join(', ')} (got ${JSON.stringify(entry.harness)})`);
-    }
-    if (!isNonEmptyString(entry.added_in_milestone)) {
-      errors.push(`${where}.added_in_milestone must be a non-empty string`);
-    }
-    if (!isNonEmptyString(entry.criterion_id)) {
-      errors.push(`${where}.criterion_id must be a non-empty string`);
-      return;
-    }
+    if (!isNonEmptyString(entry.criterion_id)) return;
     const list = byCriterion.get(entry.criterion_id) || [];
     list.push(entry);
     byCriterion.set(entry.criterion_id, list);
@@ -650,6 +686,185 @@ function recordAffected(treeRoot, entries) {
   return affectedMap;
 }
 
+// recordChunkAffected(treeRoot, repoRoot, milestoneId, chunkId, commit,
+// nomination) — the per-chunk half of the TIA-lite queue: which journeys THIS
+// chunk's sealed commit touched, merged into the map and written through
+// `recordAffected`, which stays its sole writer.
+//
+// WHERE THE AFFECTED SET COMES FROM, AND WHY IT IS NOT A CLAIM. Nobody is asked
+// what a chunk affected. The catalog says which journeys exist and where each
+// one's script lives; the sealed commit says which paths this chunk changed;
+// the intersection is the answer, derived from records the machine already
+// owns. A seat's own account of what it touched would be exactly the authority
+// this build refuses everywhere else.
+//
+// THE CHUNK'S OWN JOURNEY IS THE ONE THE CATALOG CANNOT ANSWER FOR, because
+// this write happens at the chunk's GREEN moment and the catalog entry for a
+// journey the chunk itself authored is written by the post-seal rung that comes
+// after. So the chunk plan's own `nomination` — the same durable record
+// `journeys.js` later catalogues from — is passed in, and it is held to exactly
+// the rule a catalogued entry is held to: its script is affected only if this
+// commit actually changed it. Nothing is trusted that the diff does not confirm.
+//
+// AND WHAT IT HONESTLY DOES NOT COVER. `product/verification/flow.md` also
+// names "an existing journey whose underlying CODE the chunk modified", and
+// nothing on this tree maps a source file to the journeys that exercise it — no
+// coverage record, no per-journey source manifest. That mapping is a record
+// this build does not have, so the derivation stops at journey SCRIPTS rather
+// than inventing one, and the prose says so where it makes the claim.
+//
+// THE BYTE CONTRACT. `recordAffected` stamps `generated_at` itself, so any
+// write at all moves the file's bytes — which would make a replayed
+// `chunk-green` produce a different map every time. So the merge decides first:
+// when the map already carries this chunk against every journey it affected,
+// nothing is written at all, and the file's bytes, mtime and inode hold still.
+// Idempotent on content, exactly as `journeys.js` is with the catalog.
+//
+// ONLY A GENUINELY NEW AFFECTER REOPENS A RESOLVED ENTRY. A journey the map
+// marks `green` or `quarantined` goes back to `pending` when a chunk it has
+// never heard of touches it — a resolved verdict about the code as it WAS is
+// not a verdict about the code as that chunk left it. But a REPLAY of an
+// affecter the entry already carries decides nothing new, so it must not
+// rewrite the file, move `generated_at`, or push work `orderRun` already
+// settled back to the front of the queue.
+function recordChunkAffected(treeRoot, repoRoot, milestoneId, chunkId, commit, nomination = null) {
+  if (!isNonEmptyString(treeRoot)) {
+    throw new TypeError('verification: treeRoot must be a non-empty string');
+  }
+  if (!isNonEmptyString(repoRoot)) {
+    throw new TypeError('verification: repoRoot must be a non-empty string');
+  }
+  if (!isNonEmptyString(milestoneId)) {
+    throw new TypeError('verification: milestoneId must be a non-empty string');
+  }
+  if (!isNonEmptyString(chunkId)) {
+    throw new TypeError('verification: chunkId must be a non-empty string');
+  }
+  if (!isNonEmptyString(commit)) {
+    throw new TypeError('verification: commit must be a non-empty string');
+  }
+  if (nomination !== null && nomination !== undefined) {
+    // The nomination is held to the shape its OWN writer enforces, not to a
+    // looser local reading of it: `journeys.js#nominationProblem` is what
+    // `promotion.js` refuses a plan by and what the catalog write one rung
+    // later refuses by, so a nomination this rung waves through is one that
+    // settles "unaffected" now and blocks the catalog afterwards. Required
+    // lazily because `journeys.js` requires this module for HARNESSES and
+    // isContainedScriptPath — at call time the cycle is long resolved.
+    const problem = require('./journeys.js').nominationProblem(nomination);
+    if (problem !== null) {
+      throw new TypeError(
+        `verification: recordChunkAffected refuses a journey nomination it cannot read — ${problem} (got ${JSON.stringify(nomination)})`
+      );
+    }
+  }
+
+  const catalogPath = path.join(treeRoot, 'verification', 'journeys.json');
+  const catalog = readJson(catalogPath, null);
+  // An ABSENT catalog is a legitimate state, and a MALFORMED one is not: the
+  // very first journey of a build is affected by the chunk that authors it,
+  // whose own nomination is the only record of it that exists yet.
+  if (catalog !== null && (!isPlainObject(catalog) || catalog.schema_version !== 1 || !Array.isArray(catalog.journeys))) {
+    throw new Error(
+      `verification: ${catalogPath} is not a journey catalog {schema_version: 1, journeys: [...]} — refusing to derive an affected set from a file this module cannot read`
+    );
+  }
+
+  // A catalogued journey whose own entry this module cannot read FAILS CLOSED,
+  // and does not quietly drop out of the derivation. Skipping it would settle
+  // the chunk-green rung reporting "unaffected" about a journey whose entry was
+  // simply unreadable — the silent-falsy class, one level in from the outer
+  // envelope, and no later catalog repair replays the rung that already passed.
+  const nominated = [];
+  if (catalog !== null) {
+    catalog.journeys.forEach((entry, index) => {
+      const problems = journeyEntryProblems(entry, 'entry');
+      if (problems.length > 0) {
+        throw new Error(
+          `verification: catalog entry ${index} of ${catalogPath} is not a readable journey entry — ${problems.join('; ')} (${JSON.stringify(entry)}) — refusing to report a chunk unaffected on the strength of an entry this module cannot read`
+        );
+      }
+      nominated.push(entry);
+    });
+  }
+  if (nomination !== null && nomination !== undefined) nominated.push(nomination);
+
+  const changed = commitPaths(repoRoot, commit);
+  const journeyIds = [];
+  for (const entry of nominated) {
+    if (!changed.has(entry.script_path)) continue;
+    if (!journeyIds.includes(entry.journey_id)) journeyIds.push(entry.journey_id);
+  }
+  if (journeyIds.length === 0) {
+    return { state: catalog === null ? 'no-catalog' : 'unaffected', journey_ids: [] };
+  }
+
+  // The chunk id carries the milestone that scopes it: chunk ids are
+  // milestone-local, so two milestones both holding a C1 would otherwise be one
+  // affecter and the second would vanish into the first's entry. Neither part
+  // can contain the separator — spine.js and milestones.js both refuse an id
+  // outside `[A-Za-z0-9][A-Za-z0-9._-]*` — so the join is injective.
+  const affecter = `${milestoneId}/${chunkId}`;
+
+  const existing = readJson(affectedMapPathOf(treeRoot), null);
+  if (existing !== null) {
+    const { ok, errors } = validators.validateAffectedMap(existing);
+    if (!ok) {
+      throw new TypeError(
+        `verification: recordChunkAffected refuses a malformed affected-map already on disk (${errors.join('; ')}) — refusing to overwrite a file it cannot read`
+      );
+    }
+  }
+
+  const entries = existing === null ? [] : existing.entries.map((entry) => ({ ...entry, affected_by: [...entry.affected_by] }));
+  let changedMap = false;
+  for (const journeyId of journeyIds) {
+    const entry = entries.find((candidate) => candidate.journey_id === journeyId);
+    if (entry === undefined) {
+      entries.push({ journey_id: journeyId, affected_by: [affecter], status: 'pending' });
+      changedMap = true;
+      continue;
+    }
+    // The reopen rides INSIDE the new-affecter branch on purpose: an affecter
+    // the entry already carries is a replay, and a replay decides nothing.
+    if (!entry.affected_by.includes(affecter)) {
+      entry.affected_by.push(affecter);
+      if (entry.status !== 'pending') entry.status = 'pending';
+      changedMap = true;
+    }
+  }
+  if (!changedMap) return { state: 'already-recorded', journey_ids: journeyIds };
+
+  recordAffected(treeRoot, entries);
+  return { state: 'recorded', journey_ids: journeyIds };
+}
+
+// The paths one commit changed, as a set. `-z` because it is the machine-facing
+// form: NUL-delimited, and unquoted where the default output would quote a
+// non-ASCII path. The suite binds the delimiter half of that (this code splits
+// on NUL and nothing else); the quoting half is structural — a catalogued
+// `script_path` is held to `assembleSuite`'s ASCII charset floor, so no
+// catalogued path can reach the case where quoting would differ.
+//
+// The object is TYPE-CHECKED FIRST because `git diff-tree` on a blob prints
+// nothing and exits 0: an unguarded derivation would report "this chunk
+// affected nothing" about a chunk whose diff it never read.
+function commitPaths(repoRoot, commit) {
+  const typed = git(repoRoot, ['cat-file', '-t', commit]);
+  if (typed.status !== 0) {
+    throw new Error(
+      `verification: ${repoRoot} carries no object ${JSON.stringify(commit)} — the affected set is derived from the sealed commit, and a commit git cannot show is not one`
+    );
+  }
+  if (typed.stdout.trim() !== 'commit') {
+    throw new Error(
+      `verification: ${JSON.stringify(commit)} is not a commit in ${repoRoot} (git calls it a ${typed.stdout.trim()}) — refusing to derive an affected set from it`
+    );
+  }
+  const out = gitOrThrow(repoRoot, ['diff-tree', '--no-commit-id', '--name-only', '-r', '--root', '-z', commit]);
+  return new Set(out.split('\0').filter((entry) => entry !== ''));
+}
+
 // runJourney(treeRoot, runId, journeyId, cmd, ledgerPath) — product/
 // verification/flow.md's own "(b) failing-first dance" names this exact
 // shape: "run ... via runGate, per-journey gate evidence, reporter flags
@@ -807,6 +1022,7 @@ module.exports = {
   recordRun,
   computeSuiteState,
   recordAffected,
+  recordChunkAffected,
   runJourney,
   digestSuite,
   SUITE_STATE_SCHEMA_VERSION,

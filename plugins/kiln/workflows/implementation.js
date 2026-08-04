@@ -676,6 +676,31 @@ Answer it as a verdict plus a VERBATIM ANCHOR — the exact quote and its file:l
       return `ledger:${advanced.seq}`
     }
 
+    // The TIA-lite queue's own entries, at the chunk's own green moment and on
+    // their own rung — the lifecycle point where what a chunk AFFECTED is
+    // recorded, distinct from the post-seal repair below where what a chunk
+    // ADDED is catalogued. Nobody is asked what the chunk affected: the
+    // catalog says where every journey's script lives, the green record names
+    // the commit, and this chunk's own nomination covers the journey whose
+    // catalog entry does not exist yet because that write is the NEXT rung. A
+    // chunk whose diff touches no journey script leaves the map untouched, and
+    // a replay writes nothing at all, so the envelope going last is the whole
+    // recovery story.
+    case 'chunk-affected': {
+      await hands('verification.recordChunkAffected', [
+        treeRoot,
+        next.milestone_id,
+        next.chunk_id,
+        next.sealed_commit,
+        next.journey || null,
+      ])
+      return await recordEnvelope(
+        next,
+        `the journeys chunk ${next.chunk_id} of milestone ${next.milestone_id} affected are recorded`,
+        'verification/affected-map.json'
+      )
+    }
+
     // D4: the post-seal repair is its own resumable rung, not trailing work
     // inside the seal. A crash between the commit and the cleanup used to make
     // the resolver skip seal forever, leaving the inverse-dirty worktree that

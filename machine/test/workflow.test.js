@@ -526,6 +526,7 @@ test('the op table is exactly the operations workflows may reach, and nothing el
     'checkHonesty.runGate',
     'checkHonesty.runStagedGate',
     'journeys.recordAuthored',
+    'verification.recordChunkAffected',
     'promotion.promoteArtifact',
     'implementation.openMilestoneTxn',
     'implementation.sealChunk',
