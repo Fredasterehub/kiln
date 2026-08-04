@@ -1,0 +1,104 @@
+{
+  "name": "spine-flow",
+  "note": "The resolver, walked as a scenario rather than as unit tests: each step changes one durable fact and asks what happens next. spine.nextTransition is wired into the replay table because it is a pure reader — it writes nothing and spawns nothing, so the worst a scenario can do with it is ask a question. promotion.promoteArtifact is wired for the same reason its own tests exist: the staged path is derived from the class and the scope, so a scenario cannot point it at a file it names.",
+  "steps": [
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/architecture/milestones.json",
+        {
+          "schema_version": 1,
+          "milestones": [
+            { "id": "M1", "order": 1, "title": "First", "designer_family": "gpt", "toolchain_profile": "node-cli", "slice_goal": "Ship it.", "chunk_count_estimate": 1, "criteria_ids": ["ACR-1"] }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "spine.nextTransition",
+      "args": ["$TMP"],
+      "expect": { "transition": "open-milestone", "return": "beat", "milestone_id": "M1", "envelope_id": "open.M1", "title": "First", "designer_family": "gpt", "toolchain_profile": "node-cli" },
+      "ignore": ["reason"]
+    },
+    {
+      "op": "milestones.createMilestone",
+      "args": ["$TMP", { "id": "M1", "title": "First", "designer_family": "gpt", "toolchain_profile": "node-cli" }],
+      "ignore": ["created", "milestoneId"],
+      "expect": {}
+    },
+    {
+      "op": "spine.nextTransition",
+      "args": ["$TMP"],
+      "expect": { "transition": "toolchain-preflight", "return": "beat", "milestone_id": "M1", "profile_id": "node-cli", "gate_id": "toolchain-preflight:M1" },
+      "ignore": ["reason"]
+    },
+    {
+      "op": "checkHonesty.runGate",
+      "args": [{ "gateId": "toolchain-preflight:M1", "cmd": "true", "ledgerPath": "$TMP/ledger.jsonl" }],
+      "ignore": ["stdout", "stderr", "seq"],
+      "expect": { "gateId": "toolchain-preflight:M1", "cmd": "true", "exitCode": 0 }
+    },
+    {
+      "op": "spine.nextTransition",
+      "args": ["$TMP"],
+      "expect": { "transition": "spec", "return": "beat", "milestone_id": "M1" },
+      "ignore": ["reason", "dispatch_id", "scope_ref", "task_class"]
+    },
+    {
+      "op": "atomicText.writeAtomicText",
+      "args": ["$TMP/staging/chunk-plan/M1/chunk-plan.json", "{\n  \"schema_version\": 1,\n  \"chunks\": [{ \"id\": \"C1\", \"title\": \"Chunk C1\" }]\n}\n"]
+    },
+    {
+      "op": "promotion.promoteArtifact",
+      "args": ["$TMP", "chunk-plan", { "milestone_id": "M1" }],
+      "expect": { "ref": "milestones/M1/chunk-plan.json" },
+      "ignore": ["path", "digest", "content"]
+    },
+    {
+      "op": "spine.nextTransition",
+      "args": ["$TMP"],
+      "expect": { "transition": "next-chunk-brief", "return": "beat", "milestone_id": "M1", "chunk_id": "C1" },
+      "ignore": ["reason", "dispatch_id", "scope_ref", "task_class"]
+    },
+    {
+      "op": "receipts.writeSteerRaise",
+      "args": [
+        "$TMP",
+        { "steer_id": "S1", "scope": "milestones/M1", "instruction": "smaller first", "origin": "operator" }
+      ],
+      "ignore": ["ref", "record"],
+      "expect": {}
+    },
+    {
+      "op": "spine.nextTransition",
+      "args": ["$TMP"],
+      "expect": {
+        "transition": "apply-steer",
+        "return": "beat",
+        "steer_id": "S1",
+        "scope": "milestones/M1",
+        "instruction": "smaller first",
+        "exit": "applied",
+        "record_ref": "ledger:1"
+      },
+      "ignore": ["reason"]
+    },
+    {
+      "op": "receipts.writeSteerApply",
+      "args": ["$TMP", { "steer_id": "S1", "exit": "applied", "resolution_ref": "ledger:1" }],
+      "ignore": ["ref", "record"],
+      "expect": {}
+    },
+    {
+      "op": "spine.nextTransition",
+      "args": ["$TMP"],
+      "expect": { "transition": "next-chunk-brief", "return": "beat", "milestone_id": "M1", "chunk_id": "C1" },
+      "ignore": ["reason", "dispatch_id", "scope_ref", "task_class"]
+    },
+    {
+      "op": "promotion.promoteArtifact",
+      "args": ["$TMP", "spec", { "milestone_id": "M1" }],
+      "expectError": "wrote nowhere this module reads"
+    }
+  ]
+}

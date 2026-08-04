@@ -1,0 +1,492 @@
+{
+  "name": "smoke-core",
+  "steps": [
+    {
+      "op": "jsonl.appendLine",
+      "args": [
+        "$TMP/events.jsonl",
+        {
+          "kind": "note",
+          "seq": 0,
+          "msg": "hello"
+        }
+      ]
+    },
+    {
+      "op": "jsonl.appendEvent",
+      "args": [
+        "$TMP/events.jsonl",
+        {
+          "kind": "note",
+          "msg": "second"
+        }
+      ],
+      "expect": 1
+    },
+    {
+      "op": "jsonl.readAll",
+      "args": [
+        "$TMP/events.jsonl"
+      ],
+      "expect": {
+        "records": [
+          {
+            "kind": "note",
+            "seq": 0,
+            "msg": "hello"
+          },
+          {
+            "kind": "note",
+            "msg": "second",
+            "seq": 1
+          }
+        ],
+        "errors": []
+      }
+    },
+    {
+      "op": "jsonl.appendLine",
+      "args": [
+        "$TMP/events.jsonl",
+        {
+          "big": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ],
+      "expectError": "LINE_CEILING"
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/state.json",
+        {
+          "gates": [
+            {
+              "name": "unit-tests",
+              "last_result": "pass",
+              "cmd": "true"
+            }
+          ],
+          "checklist": [
+            {
+              "status": "done",
+              "verified": true,
+              "gate": "unit-tests"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.readJson",
+      "args": [
+        "$TMP/state.json",
+        null
+      ],
+      "expect": {
+        "gates": [
+          {
+            "name": "unit-tests",
+            "last_result": "pass",
+            "cmd": "true"
+          }
+        ],
+        "checklist": [
+          {
+            "status": "done",
+            "verified": true,
+            "gate": "unit-tests"
+          }
+        ]
+      }
+    },
+    {
+      "op": "checkHonesty.runGate",
+      "args": [
+        {
+          "gateId": "unit-tests",
+          "cmd": "true",
+          "ledgerPath": "$TMP/ledger.jsonl"
+        }
+      ],
+      "ignore": [
+        "stdout",
+        "stderr"
+      ],
+      "expect": {
+        "gateId": "unit-tests",
+        "cmd": "true",
+        "exitCode": 0,
+        "seq": 0
+      }
+    },
+    {
+      "op": "checkHonesty",
+      "args": [
+        {
+          "statePath": "$TMP/state.json",
+          "ledgerPath": "$TMP/ledger.jsonl"
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "violations": []
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/bad-state.json",
+        {
+          "gates": [
+            {
+              "name": "lint",
+              "last_result": "pass",
+              "cmd": "true"
+            }
+          ],
+          "checklist": []
+        }
+      ]
+    },
+    {
+      "op": "checkHonesty",
+      "args": [
+        {
+          "statePath": "$TMP/bad-state.json",
+          "ledgerPath": "$TMP/ledger.jsonl"
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "violations": [
+          "gate \"lint\" reports last_result=pass without a matching ledger record (kind=gate, gate_id=lint, cmd=\"true\", exit_code=0)"
+        ]
+      }
+    },
+    {
+      "op": "projection.project",
+      "args": [
+        [
+          {
+            "kind": "note",
+            "seq": 0
+          },
+          {
+            "kind": "other",
+            "seq": 1
+          },
+          {
+            "kind": "note",
+            "seq": 2
+          }
+        ],
+        {
+          "kinds": [
+            "note"
+          ]
+        }
+      ],
+      "expect": {
+        "view": [
+          {
+            "kind": "note",
+            "seq": 0
+          },
+          {
+            "kind": "note",
+            "seq": 2
+          }
+        ],
+        "total": 3,
+        "kept": 2,
+        "dropped": 1
+      }
+    },
+    {
+      "op": "projection.projectFile",
+      "args": [
+        "$TMP/events.jsonl",
+        {
+          "kinds": [
+            "note"
+          ]
+        }
+      ],
+      "expect": {
+        "view": [
+          {
+            "kind": "note",
+            "seq": 0,
+            "msg": "hello"
+          },
+          {
+            "kind": "note",
+            "msg": "second",
+            "seq": 1
+          }
+        ],
+        "total": 2,
+        "kept": 2,
+        "dropped": 0
+      }
+    },
+    {
+      "op": "settings.applySchema",
+      "args": [
+        {
+          "reviewMultiplier": 0
+        },
+        {
+          "reviewMultiplier": {
+            "default": 1,
+            "floor": 1,
+            "ceiling": 5
+          }
+        }
+      ],
+      "expect": {
+        "settings": {
+          "reviewMultiplier": 1
+        },
+        "clamps": [
+          {
+            "key": "reviewMultiplier",
+            "from": 0,
+            "to": 1,
+            "rule": "floor"
+          }
+        ]
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/settings.json",
+        {
+          "reviewMultiplier": 3
+        }
+      ]
+    },
+    {
+      "op": "settings.loadSettings",
+      "args": [
+        "$TMP/settings.json",
+        {
+          "reviewMultiplier": {
+            "default": 1,
+            "floor": 1,
+            "ceiling": 5
+          }
+        }
+      ],
+      "expect": {
+        "settings": {
+          "reviewMultiplier": 3
+        },
+        "clamps": [],
+        "source": "file"
+      }
+    },
+    {
+      "op": "validators.validateEnvelope",
+      "args": [
+        {
+          "state": "done",
+          "result": "ok",
+          "evidence": "tests pass",
+          "risks": "none",
+          "artifact": "machine/src/x.js",
+          "question": ""
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "errors": []
+      }
+    },
+    {
+      "op": "validators.validateBrief",
+      "args": [
+        {
+          "outcome": "ship module",
+          "scope": "machine layer",
+          "anchors": [
+            "a"
+          ],
+          "acceptance": "tests green",
+          "freshness": "none needed",
+          "tier": "p1",
+          "return_format": "envelope",
+          "stop_condition": "gate passes"
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "errors": []
+      }
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/stream.jsonl",
+        {
+          "kind": "genesis",
+          "payload": {},
+          "correlation_id": null
+        }
+      ],
+      "expect": 0
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/stream.jsonl",
+        {
+          "kind": "note",
+          "payload": {
+            "msg": "hi"
+          }
+        }
+      ],
+      "expect": 1
+    },
+    {
+      "op": "stream.validateRecordHeader",
+      "args": [
+        {
+          "schema_version": 1,
+          "seq": 0,
+          "kind": "genesis",
+          "ts": "2026-07-27T00:00:00.000Z",
+          "correlation_id": null
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "errors": []
+      }
+    },
+    {
+      "op": "stream.validateRecordHeader",
+      "args": [
+        {
+          "seq": 0,
+          "kind": "genesis"
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "errors": [
+          "missing schema_version",
+          "missing ts",
+          "missing correlation_id"
+        ]
+      }
+    },
+    {
+      "op": "stream.readRecords",
+      "args": [
+        "$TMP/stream.jsonl"
+      ]
+    },
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/proj",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ]
+    },
+    {
+      "op": "routing.loadRouting",
+      "args": [
+        "$TMP/proj/.thelastskill/routing"
+      ],
+      "ignore": [
+        "config"
+      ],
+      "expect": {
+        "activeFile": "routing-2026-07-27-4.json"
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/arch/plan.json",
+        {
+          "note": "plan"
+        }
+      ]
+    },
+    {
+      "op": "manifest.buildManifest",
+      "args": [
+        "$TMP/arch",
+        [
+          "plan.json"
+        ]
+      ]
+    },
+    {
+      "op": "manifest.writeManifest",
+      "args": [
+        "$TMP/arch",
+        [
+          "plan.json"
+        ],
+        "$TMP/arch/manifest.json"
+      ]
+    },
+    {
+      "op": "manifest.verifyManifest",
+      "args": [
+        "$TMP/arch",
+        {
+          "schema_version": 1,
+          "revision": 1,
+          "artifacts": [
+            {
+              "path": "plan.json",
+              "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "drift": [
+          {
+            "file": "plan.json",
+            "reason": "changed"
+          }
+        ]
+      }
+    },
+    {
+      "op": "manifest.verifyManifest",
+      "args": [
+        "$TMP/arch",
+        {
+          "schema_version": 1,
+          "revision": 1,
+          "artifacts": [
+            {
+              "path": "ghost.json",
+              "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "drift": [
+          {
+            "file": "ghost.json",
+            "reason": "missing"
+          }
+        ]
+      }
+    }
+  ]
+}

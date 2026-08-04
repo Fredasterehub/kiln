@@ -1,0 +1,2129 @@
+{
+  "name": "brainstorm-flow",
+  "steps": [
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/proj",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ]
+    },
+    {
+      "op": "phases.loadRegistry",
+      "args": [
+        "/DEV/thelastskill/machine/phases-registry.json"
+      ],
+      "ignore": [
+        "phases"
+      ],
+      "expect": {
+        "schema_version": 1
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "onboarding",
+        "to": "brainstorm"
+      }
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "idea",
+          "payload": {
+            "text": "let people photograph a handwritten recipe card instead of typing it in"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "finding",
+          "payload": {
+            "text": "freshness check: OCR-from-photo APIs are commodity now, not a differentiator to build in-house"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "idea",
+          "payload": {
+            "text": "tag recipes by \"who gave it to you\" instead of by cuisine"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "pivot",
+          "payload": {
+            "from": "generic recipe-app framing",
+            "to": "family-provenance framing"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "ship family-provenance tagging as the v1 differentiator"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "sealed",
+          "payload": {}
+        }
+      ]
+    },
+    {
+      "op": "catalog.categories",
+      "args": [
+        {
+          "schema_version": 1,
+          "categories": [
+            {
+              "id": "framing-reframing",
+              "title": "Framing & Reframing",
+              "description": "Techniques that change the sentence describing the problem before any solution gets generated."
+            },
+            {
+              "id": "narrowing",
+              "title": "Narrowing",
+              "description": "Convergent techniques that reduce a generated idea set down to a committed short list."
+            }
+          ],
+          "techniques": [
+            {
+              "id": "question-ladder",
+              "name": "Question Ladder",
+              "category": "framing-reframing",
+              "mechanics": "Restate the problem as five different questions in a row, each climbing to a broader or narrower altitude than the last, then ideate against whichever rewrite feels least like the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "planning"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "verb-swap",
+              "name": "Verb Swap",
+              "category": "framing-reframing",
+              "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next.",
+              "goal_tags": [
+                "feature",
+                "novelty"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "frame-flip",
+              "name": "Frame Flip",
+              "category": "framing-reframing",
+              "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "unstuck"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "cluster-and-name",
+              "name": "Cluster & Name",
+              "category": "narrowing",
+              "mechanics": "Group the raw idea list into affinity clusters by underlying theme, name each cluster in three words, then pick the strongest representative from each cluster.",
+              "goal_tags": [
+                "planning",
+                "strategy"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "convergent"
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "id": "framing-reframing",
+          "title": "Framing & Reframing",
+          "count": 3
+        },
+        {
+          "id": "narrowing",
+          "title": "Narrowing",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "op": "catalog.list",
+      "args": [
+        {
+          "schema_version": 1,
+          "categories": [
+            {
+              "id": "framing-reframing",
+              "title": "Framing & Reframing",
+              "description": "Techniques that change the sentence describing the problem before any solution gets generated."
+            },
+            {
+              "id": "narrowing",
+              "title": "Narrowing",
+              "description": "Convergent techniques that reduce a generated idea set down to a committed short list."
+            }
+          ],
+          "techniques": [
+            {
+              "id": "question-ladder",
+              "name": "Question Ladder",
+              "category": "framing-reframing",
+              "mechanics": "Restate the problem as five different questions in a row, each climbing to a broader or narrower altitude than the last, then ideate against whichever rewrite feels least like the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "planning"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "verb-swap",
+              "name": "Verb Swap",
+              "category": "framing-reframing",
+              "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next.",
+              "goal_tags": [
+                "feature",
+                "novelty"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "frame-flip",
+              "name": "Frame Flip",
+              "category": "framing-reframing",
+              "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "unstuck"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "cluster-and-name",
+              "name": "Cluster & Name",
+              "category": "narrowing",
+              "mechanics": "Group the raw idea list into affinity clusters by underlying theme, name each cluster in three words, then pick the strongest representative from each cluster.",
+              "goal_tags": [
+                "planning",
+                "strategy"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "convergent"
+            }
+          ]
+        },
+        {
+          "category": "framing-reframing"
+        }
+      ],
+      "expect": [
+        {
+          "id": "question-ladder",
+          "name": "Question Ladder",
+          "mechanics": "Restate the problem as five different questions in a row, each climbing to a broader or narrower altitude than the last, then ideate against whichever rewrite feels least like the original."
+        },
+        {
+          "id": "verb-swap",
+          "name": "Verb Swap",
+          "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next."
+        },
+        {
+          "id": "frame-flip",
+          "name": "Frame Flip",
+          "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original."
+        }
+      ]
+    },
+    {
+      "op": "catalog.list",
+      "args": [
+        {
+          "schema_version": 1,
+          "categories": [
+            {
+              "id": "framing-reframing",
+              "title": "Framing & Reframing",
+              "description": "Techniques that change the sentence describing the problem before any solution gets generated."
+            },
+            {
+              "id": "narrowing",
+              "title": "Narrowing",
+              "description": "Convergent techniques that reduce a generated idea set down to a committed short list."
+            }
+          ],
+          "techniques": [
+            {
+              "id": "question-ladder",
+              "name": "Question Ladder",
+              "category": "framing-reframing",
+              "mechanics": "Restate the problem as five different questions in a row, each climbing to a broader or narrower altitude than the last, then ideate against whichever rewrite feels least like the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "planning"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "verb-swap",
+              "name": "Verb Swap",
+              "category": "framing-reframing",
+              "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next.",
+              "goal_tags": [
+                "feature",
+                "novelty"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "frame-flip",
+              "name": "Frame Flip",
+              "category": "framing-reframing",
+              "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "unstuck"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "cluster-and-name",
+              "name": "Cluster & Name",
+              "category": "narrowing",
+              "mechanics": "Group the raw idea list into affinity clusters by underlying theme, name each cluster in three words, then pick the strongest representative from each cluster.",
+              "goal_tags": [
+                "planning",
+                "strategy"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "convergent"
+            }
+          ]
+        },
+        {
+          "phase": "convergent"
+        }
+      ],
+      "expect": [
+        {
+          "id": "cluster-and-name",
+          "name": "Cluster & Name",
+          "mechanics": "Group the raw idea list into affinity clusters by underlying theme, name each cluster in three words, then pick the strongest representative from each cluster."
+        }
+      ]
+    },
+    {
+      "op": "catalog.sample",
+      "args": [
+        {
+          "schema_version": 1,
+          "categories": [
+            {
+              "id": "framing-reframing",
+              "title": "Framing & Reframing",
+              "description": "Techniques that change the sentence describing the problem before any solution gets generated."
+            },
+            {
+              "id": "narrowing",
+              "title": "Narrowing",
+              "description": "Convergent techniques that reduce a generated idea set down to a committed short list."
+            }
+          ],
+          "techniques": [
+            {
+              "id": "question-ladder",
+              "name": "Question Ladder",
+              "category": "framing-reframing",
+              "mechanics": "Restate the problem as five different questions in a row, each climbing to a broader or narrower altitude than the last, then ideate against whichever rewrite feels least like the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "planning"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "verb-swap",
+              "name": "Verb Swap",
+              "category": "framing-reframing",
+              "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next.",
+              "goal_tags": [
+                "feature",
+                "novelty"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "frame-flip",
+              "name": "Frame Flip",
+              "category": "framing-reframing",
+              "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "unstuck"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "cluster-and-name",
+              "name": "Cluster & Name",
+              "category": "narrowing",
+              "mechanics": "Group the raw idea list into affinity clusters by underlying theme, name each cluster in three words, then pick the strongest representative from each cluster.",
+              "goal_tags": [
+                "planning",
+                "strategy"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "convergent"
+            }
+          ]
+        },
+        {
+          "phase": "divergent",
+          "n": 2,
+          "seed": "brainstorm-flow-replay"
+        }
+      ],
+      "expect": [
+        {
+          "id": "frame-flip",
+          "name": "Frame Flip",
+          "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original."
+        },
+        {
+          "id": "verb-swap",
+          "name": "Verb Swap",
+          "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next."
+        }
+      ]
+    },
+    {
+      "op": "catalog.sample",
+      "args": [
+        {
+          "schema_version": 1,
+          "categories": [
+            {
+              "id": "framing-reframing",
+              "title": "Framing & Reframing",
+              "description": "Techniques that change the sentence describing the problem before any solution gets generated."
+            },
+            {
+              "id": "narrowing",
+              "title": "Narrowing",
+              "description": "Convergent techniques that reduce a generated idea set down to a committed short list."
+            }
+          ],
+          "techniques": [
+            {
+              "id": "question-ladder",
+              "name": "Question Ladder",
+              "category": "framing-reframing",
+              "mechanics": "Restate the problem as five different questions in a row, each climbing to a broader or narrower altitude than the last, then ideate against whichever rewrite feels least like the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "planning"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "verb-swap",
+              "name": "Verb Swap",
+              "category": "framing-reframing",
+              "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next.",
+              "goal_tags": [
+                "feature",
+                "novelty"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "frame-flip",
+              "name": "Frame Flip",
+              "category": "framing-reframing",
+              "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original.",
+              "goal_tags": [
+                "strategy",
+                "diagnosis",
+                "unstuck"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "divergent"
+            },
+            {
+              "id": "cluster-and-name",
+              "name": "Cluster & Name",
+              "category": "narrowing",
+              "mechanics": "Group the raw idea list into affinity clusters by underlying theme, name each cluster in three words, then pick the strongest representative from each cluster.",
+              "goal_tags": [
+                "planning",
+                "strategy"
+              ],
+              "audience_tags": [
+                "solo",
+                "group"
+              ],
+              "phase": "convergent"
+            }
+          ]
+        },
+        {
+          "phase": "divergent",
+          "n": 2,
+          "seed": "brainstorm-flow-replay"
+        }
+      ],
+      "expect": [
+        {
+          "id": "frame-flip",
+          "name": "Frame Flip",
+          "mechanics": "Restate the goal as its exact opposite (a 'prevent X' goal becomes 'cause X'), generate freely inside that inverted frame, then translate every result back to the original."
+        },
+        {
+          "id": "verb-swap",
+          "name": "Verb Swap",
+          "mechanics": "Swap the single core verb in your goal statement for ten unrelated verbs in a row, generating exactly one idea for each swap before moving to the next."
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/vision.md",
+        {
+          "stub": "brainstorm:vision/vision.md",
+          "crystallized": true,
+          "source": "vision/transcript.jsonl"
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/decisions.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "ship family-provenance recipe tagging as the core differentiator"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/decisions.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "defer OCR-from-photo to a stretch milestone, not v1"
+          }
+        }
+      ]
+    },
+    {
+      "op": "projection.projectFile",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/decisions.jsonl",
+        {
+          "kinds": [
+            "decision"
+          ],
+          "fields": [
+            "kind"
+          ]
+        }
+      ],
+      "expect": {
+        "view": [
+          {
+            "kind": "decision"
+          },
+          {
+            "kind": "decision"
+          }
+        ],
+        "total": 3,
+        "kept": 2,
+        "dropped": 1
+      }
+    },
+    {
+      "op": "projection.projectFile",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kinds": [
+            "sealed"
+          ],
+          "fields": [
+            "kind"
+          ]
+        }
+      ],
+      "expect": {
+        "view": [
+          {
+            "kind": "sealed"
+          }
+        ],
+        "total": 7,
+        "kept": 1,
+        "dropped": 6
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "brainstorm",
+        "to": "research"
+      }
+    },
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/refusal",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal/.thelastskill/state.json",
+        "$TMP/refusal/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "onboarding",
+        "to": "brainstorm"
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal/.thelastskill/state.json",
+        "$TMP/refusal/.thelastskill/ledger.jsonl"
+      ],
+      "expectError": "exit_emits missing"
+    },
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/refusal-unsealed",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal-unsealed/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal-unsealed/.thelastskill/state.json",
+        "$TMP/refusal-unsealed/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "onboarding",
+        "to": "brainstorm"
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal-unsealed/.thelastskill/vision/vision.md",
+        {
+          "stub": "brainstorm:vision/vision.md",
+          "crystallized": true
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal-unsealed/.thelastskill/vision/decisions.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "a real decision landed"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal-unsealed/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "idea",
+          "payload": {
+            "text": "still brainstorming, never sealed"
+          }
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal-unsealed/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal-unsealed/.thelastskill/state.json",
+        "$TMP/refusal-unsealed/.thelastskill/ledger.jsonl"
+      ],
+      "expectError": "jsonl-sealed"
+    }
+  ]
+}

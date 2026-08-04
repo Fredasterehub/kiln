@@ -1,0 +1,753 @@
+{
+  "name": "onboarding-flow",
+  "notes": [
+    "Builder C walk scenario (P3): detect(greenfield) -> scaffoldTree -> detect(resume) -> preflight.run (full mode, stubbed codex) -> gates present in state.json -> loadSettings defaults land -> floor test (reviews below floor clamps UP to the enum floor value, never below it) -> telemetry.status is disabled for reason 'consent' -> settings.write lands the interview's resolved settings for real -> a second preflight.run demonstrates degraded-claude-only mode -> phases.advance lands onboarding's exit_emits and transitions to brainstorm.",
+    "Both loadSettings steps 'ignore' the clamps array in the equality check (still real, computed values -- just not re-asserted here): the exhaustive clamp-list shape is already proven by machine/test/settings-schema.test.js; this scenario's job is proving the disk-wired behavior (the resolved *values*), not re-deriving that proof.",
+    "DO_NOT_TRACK refusal is deliberately NOT a step here: telemetry.js's enabled()/status() read process.env.DO_NOT_TRACK directly (ambient), and the OPS registry calls telemetry functions with explicit args only -- there is no per-step env-injection mechanism in mock-replay's op model, and this scenario does not add one (telemetry.js/mock-replay.js are Builder A's owned files). The DO_NOT_TRACK path is proven for real by machine/test/telemetry.test.js's withEnv()-wrapped unit tests (see 'enabled is false with reason \"do_not_track\"...'); this scenario cites that as its evidence rather than duplicating it under a different harness.",
+    "Both preflight.run steps 'ignore' the 'repo' field of the return value (and the whole 'preflight' block when reading state.json back): check-honesty.js's runGate takes no cwd parameter by design (preflight.js's own header comment), so preflight's git checks run against THIS REPLAY PROCESS's own ambient cwd, not $TMP/proj -- running mock-replay.js from anywhere inside the thelastskill working tree (the only supported invocation; scaffoldTree's own routingConfigPath arg above is already an absolute path specific to this checkout) makes 'preflight-git' pass deterministically, but the captured branch NAME is whatever branch happens to be checked out, which this scenario must not pin to a literal value.",
+    "The second preflight.run's 'gates' array carries SIX entries, not three: preflight.md's own State field says 'append' for every one of the five checks, so a second run's node/codex/git evidence is appended alongside the first run's, never deduplicated or overwritten by gate name -- this is also why codex-preflight's own two entries in that array legitimately carry two different 'cmd' strings ('exit 0' then 'exit 1'), one per run.",
+    "settings.write is called with an empty candidate ('{}') to demonstrate the exact same real function the onboarding interview calls once at its own end (Maestro's Bash-law onboarding-engine point) -- an empty candidate resolves to every knob's own schema default, the identical object machine/test/settings-schema.test.js already proves for an empty applySchema input, so this step doubles as an end-to-end confirmation that settings.write's clamping path is the same one, not a second one.",
+    "settings.write's args now carry a third element, {source: 'interview'} -- the floor-lock doctrine's provenance marker (operator ruling 2026-07-28 [seq 48]) that product/onboarding/flow.md's own pinned CLI invocation passes as '--source interview'; this step models that real call shape, not only its candidate/treeRoot arguments. The expect object gains floor_lock: true, the schema default -- unaffected by the source marker here since an absent floor_lock in the candidate never reaches the interview_only gate at all (that gate only fires on an actual non-default value attempt).",
+    "The settings.applySchema step immediately after demonstrates the locked-install clamp directly (rule: 'locked'), the mechanism write() itself delegates to but does not surface in its own return value (write() returns settings only, never clamps, to stay backward compatible with every existing caller) -- calling applySchema straight, on the real product schema, with override_verification_floor: true in an otherwise fully-explicit, already-at-default candidate keeps the resulting clamps array to exactly one entry (every other key is supplied at its own valid default, which never generates a clamp) rather than needing to also enumerate the full default-fill noise a {} candidate would produce; the exhaustive floor-lock clamp/message shapes are proven exactly this way by machine/test/settings-schema.test.js, this step's job is proving the exact same mechanism is reachable end-to-end via the OPS dispatcher, not re-deriving the proof."
+  ],
+  "steps": [
+    {
+      "op": "detect.detect",
+      "args": [
+        "$TMP"
+      ],
+      "expect": {
+        "mode": "greenfield",
+        "evidence": {
+          "has_tree": false,
+          "has_state": false,
+          "has_git": false,
+          "has_code": false,
+          "legacy_tier": null,
+          "legacy_markers": [],
+          "intake_txn": null
+        }
+      }
+    },
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/proj",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ]
+    },
+    {
+      "op": "detect.detect",
+      "args": [
+        "$TMP/proj"
+      ],
+      "expect": {
+        "mode": "resume",
+        "evidence": {
+          "has_tree": true,
+          "has_state": true,
+          "has_git": null,
+          "has_code": null,
+          "legacy_tier": null,
+          "legacy_markers": [],
+          "intake_txn": null
+        }
+      }
+    },
+    {
+      "op": "preflight.run",
+      "args": [
+        "$TMP/proj",
+        {
+          "workflowTool": true,
+          "agentTeams": true,
+          "codexCmd": "exit 0"
+        }
+      ],
+      "ignore": [
+        "repo"
+      ],
+      "expect": {
+        "mode": "full-cross-family",
+        "gates": [
+          { "name": "preflight-node", "cmd": "node --version", "last_result": "pass" },
+          { "name": "codex-preflight", "cmd": "exit 0", "last_result": "pass" },
+          { "name": "preflight-git", "cmd": "git rev-parse --is-inside-work-tree", "last_result": "pass" }
+        ],
+        "capabilities": {
+          "workflow_tool": { "present": true, "source": "session-tool-list", "observed": "present" },
+          "agent_teams": { "present": true, "source": "session-tool-list", "observed": "present" }
+        }
+      }
+    },
+    {
+      "op": "atomicJson.readJson",
+      "args": [
+        "$TMP/proj/.thelastskill/state.json"
+      ],
+      "ignore": [
+        "created_ts",
+        "updated_utc",
+        "preflight"
+      ],
+      "expect": {
+        "schema_version": 1,
+        "phase": "onboarding",
+        "phase_status": {},
+        "current_milestone": null,
+        "current_chunk": null,
+        "next_action": "onboarding",
+        "gates": [
+          { "name": "preflight-node", "cmd": "node --version", "last_result": "pass" },
+          { "name": "codex-preflight", "cmd": "exit 0", "last_result": "pass" },
+          { "name": "preflight-git", "cmd": "git rev-parse --is-inside-work-tree", "last_result": "pass" }
+        ]
+      }
+    },
+    {
+      "op": "settings.loadSettings",
+      "args": [
+        "$TMP/proj/.thelastskill/settings.json",
+        {
+          "facilitator": {
+            "default": "opus-5",
+            "enum": [
+              "opus-5",
+              "fable-5"
+            ],
+            "description": "Who runs your brainstorm sessions: Opus 5 is the default collaborative thinking partner; Fable 5 is the heavyweight essayist for decisions that are expensive to redo.",
+            "cost_note": "Opus 5 \u2014 the lighter seat per session, no measured figure yet; Fable 5 \u2014 roughly 2x Opus 5 per session, no measured figure yet."
+          },
+          "research_width": {
+            "default": 3,
+            "enum": [
+              2,
+              3,
+              5
+            ],
+            "description": "How many parallel researchers work under the research chief: 2 for a focused question, 3 for standard breadth-first research, 5 for the widest fan-out that still pays off.",
+            "cost_note": "2 workers \u2014 the narrowest fan-out and the cheapest of the three, no measured figure yet; 3 workers \u2014 the middle of the three, no measured figure yet; 5 workers \u2014 the widest fan-out and the most expensive, no measured figure yet (the chief seat is a fixed cost, additional under every option)."
+          },
+          "planning": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "deep_scrutiny",
+              "maximal_confrontation"
+            ],
+            "description": "How hard the plan is interrogated before building: Standard is one accountable draft plus a cross-family coverage check; Deep scrutiny escalates the draft and adds two adversarial cross-family passes; Maximal confrontation is the most adversarial tier available.",
+            "cost_note": "Standard \u2014 the baseline, no measured figure yet; Deep scrutiny \u2014 roughly 2x standard, no measured figure yet; Maximal confrontation \u2014 two full independent drafts instead of one, no measured figure yet."
+          },
+          "reviews": {
+            "default": "floor",
+            "enum": [
+              "floor",
+              "x3",
+              "x5"
+            ],
+            "description": "Verification never scales down. Floor is the minimum \u2014 every chunk gets one cross-family review, every milestone a dual-model review, the journey suite always runs. x3/x5 only add aggregated reinforcement passes on top of that floor; there is no lower option.",
+            "cost_note": "Floor \u2014 fixed, not shaveable, no measured figure yet; Reinforced x3 \u2014 adds independent check-again passes per chunk on top of the floor, no measured figure yet; Maximum x5 \u2014 adds more of the same per chunk, no measured figure yet."
+          },
+          "checkpoints": {
+            "default": "milestone_pauses",
+            "enum": [
+              "milestone_pauses",
+              "autonomous"
+            ],
+            "description": "When the pipeline stops and shows you its work: Milestone pauses stop at each milestone review with a summary and spend-so-far; Autonomous runs the whole slice end-to-end and only reviews at the finish line. Verification gates still block bad work internally either way.",
+            "cost_note": "No direct cost difference between the two options; both run the same verification floor."
+          },
+          "budget": {
+            "type": "object",
+            "description": "Hard ceiling per feature slice for each model family, plus an opt-in rough-cost report from logged token usage x current API prices.",
+            "cost_note": "Ceiling values are operator-set dollar amounts, left at no-ceiling (null) by default pending dogfood calibration of real per-slice costs (settings-menu-design.md \u00a76 item 7).",
+            "properties": {
+              "claude_ceiling_usd": {
+                "default": null,
+                "nullable": true,
+                "floor": 0,
+                "description": "Hard spend ceiling in USD for Claude-family seats on this slice. null means no ceiling.",
+                "cost_note": "Operator-set; no evidence-backed default dollar figure exists yet \u2014 defaults to no-ceiling (null)."
+              },
+              "codex_ceiling_usd": {
+                "default": null,
+                "nullable": true,
+                "floor": 0,
+                "description": "Hard spend ceiling in USD for Codex/Sol-family seats on this slice. null means no ceiling.",
+                "cost_note": "Operator-set; no evidence-backed default dollar figure exists yet \u2014 defaults to no-ceiling (null)."
+              },
+              "budget_report": {
+                "default": false,
+                "enum": [
+                  true,
+                  false
+                ],
+                "description": "Opt in to a rough cost report (logged token usage x current API prices) even when there is no ceiling \u2014 for the no-ceiling-but-curious.",
+                "cost_note": "The report itself costs nothing extra to produce; it reads the usage stream that already exists."
+              }
+            }
+          },
+          "telemetry_consent": {
+            "default": false,
+            "enum": [
+              true,
+              false
+            ],
+            "description": "Record anonymous, content-free build statistics (phase timings, review pass counts, model routing outcomes, costs) locally under .thelastskill/usage/ to improve defaults over time. Never your code, never your prompts, never leaves your machine.",
+            "cost_note": "No direct cost impact; writes a local JSONL stream only."
+          },
+          "blocking_preference": {
+            "default": "auto_remedy",
+            "enum": [
+              "auto_remedy",
+              "advise_me"
+            ],
+            "description": "When the pipeline hits a blocker: auto_remedy lets it attempt a remedy on its own (e.g. via the Agreement Pass) before asking you; advise_me always stops and asks first.",
+            "cost_note": "No direct cost impact; changes only who decides at a blocker."
+          },
+          "plan_review": {
+            "default": "auto_proceed",
+            "enum": [
+              "auto_proceed",
+              "review"
+            ],
+            "description": "After planning completes: auto_proceed moves straight into building; review pauses so you can read the plan first.",
+            "cost_note": "No direct cost impact; changes only whether the pipeline pauses after planning."
+          }
+        }
+      ],
+      "ignore": [
+        "clamps"
+      ],
+      "expect": {
+        "settings": {
+          "facilitator": "opus-5",
+          "research_width": 3,
+          "planning": "standard",
+          "reviews": "floor",
+          "checkpoints": "milestone_pauses",
+          "budget": {
+            "claude_ceiling_usd": null,
+            "codex_ceiling_usd": null,
+            "budget_report": false
+          },
+          "telemetry_consent": false,
+          "blocking_preference": "auto_remedy",
+          "plan_review": "auto_proceed"
+        },
+        "source": "file"
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/settings.json",
+        {
+          "reviews": 0
+        }
+      ]
+    },
+    {
+      "op": "settings.loadSettings",
+      "args": [
+        "$TMP/proj/.thelastskill/settings.json",
+        {
+          "facilitator": {
+            "default": "opus-5",
+            "enum": [
+              "opus-5",
+              "fable-5"
+            ],
+            "description": "Who runs your brainstorm sessions: Opus 5 is the default collaborative thinking partner; Fable 5 is the heavyweight essayist for decisions that are expensive to redo.",
+            "cost_note": "Opus 5 \u2014 the lighter seat per session, no measured figure yet; Fable 5 \u2014 roughly 2x Opus 5 per session, no measured figure yet."
+          },
+          "research_width": {
+            "default": 3,
+            "enum": [
+              2,
+              3,
+              5
+            ],
+            "description": "How many parallel researchers work under the research chief: 2 for a focused question, 3 for standard breadth-first research, 5 for the widest fan-out that still pays off.",
+            "cost_note": "2 workers \u2014 the narrowest fan-out and the cheapest of the three, no measured figure yet; 3 workers \u2014 the middle of the three, no measured figure yet; 5 workers \u2014 the widest fan-out and the most expensive, no measured figure yet (the chief seat is a fixed cost, additional under every option)."
+          },
+          "planning": {
+            "default": "standard",
+            "enum": [
+              "standard",
+              "deep_scrutiny",
+              "maximal_confrontation"
+            ],
+            "description": "How hard the plan is interrogated before building: Standard is one accountable draft plus a cross-family coverage check; Deep scrutiny escalates the draft and adds two adversarial cross-family passes; Maximal confrontation is the most adversarial tier available.",
+            "cost_note": "Standard \u2014 the baseline, no measured figure yet; Deep scrutiny \u2014 roughly 2x standard, no measured figure yet; Maximal confrontation \u2014 two full independent drafts instead of one, no measured figure yet."
+          },
+          "reviews": {
+            "default": "floor",
+            "enum": [
+              "floor",
+              "x3",
+              "x5"
+            ],
+            "description": "Verification never scales down. Floor is the minimum \u2014 every chunk gets one cross-family review, every milestone a dual-model review, the journey suite always runs. x3/x5 only add aggregated reinforcement passes on top of that floor; there is no lower option.",
+            "cost_note": "Floor \u2014 fixed, not shaveable, no measured figure yet; Reinforced x3 \u2014 adds independent check-again passes per chunk on top of the floor, no measured figure yet; Maximum x5 \u2014 adds more of the same per chunk, no measured figure yet."
+          },
+          "checkpoints": {
+            "default": "milestone_pauses",
+            "enum": [
+              "milestone_pauses",
+              "autonomous"
+            ],
+            "description": "When the pipeline stops and shows you its work: Milestone pauses stop at each milestone review with a summary and spend-so-far; Autonomous runs the whole slice end-to-end and only reviews at the finish line. Verification gates still block bad work internally either way.",
+            "cost_note": "No direct cost difference between the two options; both run the same verification floor."
+          },
+          "budget": {
+            "type": "object",
+            "description": "Hard ceiling per feature slice for each model family, plus an opt-in rough-cost report from logged token usage x current API prices.",
+            "cost_note": "Ceiling values are operator-set dollar amounts, left at no-ceiling (null) by default pending dogfood calibration of real per-slice costs (settings-menu-design.md \u00a76 item 7).",
+            "properties": {
+              "claude_ceiling_usd": {
+                "default": null,
+                "nullable": true,
+                "floor": 0,
+                "description": "Hard spend ceiling in USD for Claude-family seats on this slice. null means no ceiling.",
+                "cost_note": "Operator-set; no evidence-backed default dollar figure exists yet \u2014 defaults to no-ceiling (null)."
+              },
+              "codex_ceiling_usd": {
+                "default": null,
+                "nullable": true,
+                "floor": 0,
+                "description": "Hard spend ceiling in USD for Codex/Sol-family seats on this slice. null means no ceiling.",
+                "cost_note": "Operator-set; no evidence-backed default dollar figure exists yet \u2014 defaults to no-ceiling (null)."
+              },
+              "budget_report": {
+                "default": false,
+                "enum": [
+                  true,
+                  false
+                ],
+                "description": "Opt in to a rough cost report (logged token usage x current API prices) even when there is no ceiling \u2014 for the no-ceiling-but-curious.",
+                "cost_note": "The report itself costs nothing extra to produce; it reads the usage stream that already exists."
+              }
+            }
+          },
+          "telemetry_consent": {
+            "default": false,
+            "enum": [
+              true,
+              false
+            ],
+            "description": "Record anonymous, content-free build statistics (phase timings, review pass counts, model routing outcomes, costs) locally under .thelastskill/usage/ to improve defaults over time. Never your code, never your prompts, never leaves your machine.",
+            "cost_note": "No direct cost impact; writes a local JSONL stream only."
+          },
+          "blocking_preference": {
+            "default": "auto_remedy",
+            "enum": [
+              "auto_remedy",
+              "advise_me"
+            ],
+            "description": "When the pipeline hits a blocker: auto_remedy lets it attempt a remedy on its own (e.g. via the Agreement Pass) before asking you; advise_me always stops and asks first.",
+            "cost_note": "No direct cost impact; changes only who decides at a blocker."
+          },
+          "plan_review": {
+            "default": "auto_proceed",
+            "enum": [
+              "auto_proceed",
+              "review"
+            ],
+            "description": "After planning completes: auto_proceed moves straight into building; review pauses so you can read the plan first.",
+            "cost_note": "No direct cost impact; changes only whether the pipeline pauses after planning."
+          }
+        }
+      ],
+      "ignore": [
+        "clamps"
+      ],
+      "expect": {
+        "settings": {
+          "facilitator": "opus-5",
+          "research_width": 3,
+          "planning": "standard",
+          "reviews": "floor",
+          "checkpoints": "milestone_pauses",
+          "budget": {
+            "claude_ceiling_usd": null,
+            "codex_ceiling_usd": null,
+            "budget_report": false
+          },
+          "telemetry_consent": false,
+          "blocking_preference": "auto_remedy",
+          "plan_review": "auto_proceed"
+        },
+        "source": "file"
+      }
+    },
+    {
+      "op": "telemetry.status",
+      "args": [
+        "$TMP/proj/.thelastskill/usage",
+        {
+          "telemetry_consent": false
+        }
+      ],
+      "expect": {
+        "enabled": false,
+        "reason": "consent",
+        "files": [],
+        "totalBytes": 0
+      }
+    },
+    {
+      "op": "settings.write",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {},
+        { "source": "interview" }
+      ],
+      "expect": {
+        "facilitator": "opus-5",
+        "research_width": 3,
+        "planning": "standard",
+        "reviews": "floor",
+        "checkpoints": "milestone_pauses",
+        "narration": "full_cast",
+        "budget": {
+          "claude_ceiling_usd": null,
+          "codex_ceiling_usd": null,
+          "budget_report": false
+        },
+        "telemetry_consent": false,
+        "blocking_preference": "auto_remedy",
+        "plan_review": "auto_proceed",
+        "floor_lock": true
+      }
+    },
+    {
+      "op": "settings.applySchema",
+      "args": [
+        {
+          "facilitator": "opus-5",
+          "research_width": 3,
+          "planning": "standard",
+          "reviews": "floor",
+          "checkpoints": "milestone_pauses",
+          "budget": {
+            "claude_ceiling_usd": null,
+            "codex_ceiling_usd": null,
+            "budget_report": false
+          },
+          "telemetry_consent": false,
+          "blocking_preference": "auto_remedy",
+          "plan_review": "auto_proceed",
+          "floor_lock": true,
+          "override_verification_floor": true
+        },
+        {
+          "facilitator": { "default": "opus-5", "enum": ["opus-5", "fable-5"] },
+          "research_width": { "default": 3, "enum": [2, 3, 5] },
+          "planning": { "default": "standard", "enum": ["standard", "deep_scrutiny", "maximal_confrontation"] },
+          "reviews": { "default": "floor", "enum": ["floor", "x3", "x5"] },
+          "checkpoints": { "default": "milestone_pauses", "enum": ["milestone_pauses", "autonomous"] },
+          "budget": {
+            "type": "object",
+            "properties": {
+              "claude_ceiling_usd": { "default": null, "nullable": true, "floor": 0 },
+              "codex_ceiling_usd": { "default": null, "nullable": true, "floor": 0 },
+              "budget_report": { "default": false, "enum": [true, false] }
+            }
+          },
+          "telemetry_consent": { "default": false, "enum": [true, false] },
+          "blocking_preference": { "default": "auto_remedy", "enum": ["auto_remedy", "advise_me"] },
+          "plan_review": { "default": "auto_proceed", "enum": ["auto_proceed", "review"] },
+          "floor_lock": { "default": true, "enum": [true, false], "interview_only": true, "source_locked_message": "floor_lock cannot be hand-unlocked; only the settings interview can set it to false, and the interview asks once — a completed install is not re-asked, and a hand-edit of this key is clamped back to true." },
+          "override_verification_floor": {
+            "default": false,
+            "enum": [true, false],
+            "locked_by": "floor_lock",
+            "locked_message": "floor is locked in this install; override_verification_floor is inert",
+            "warn_when": true,
+            "warn_message": "override_verification_floor is active in this install — the verification floor clamp is disabled for this run."
+          }
+        }
+      ],
+      "expect": {
+        "settings": {
+          "facilitator": "opus-5",
+          "research_width": 3,
+          "planning": "standard",
+          "reviews": "floor",
+          "checkpoints": "milestone_pauses",
+          "budget": {
+            "claude_ceiling_usd": null,
+            "codex_ceiling_usd": null,
+            "budget_report": false
+          },
+          "telemetry_consent": false,
+          "blocking_preference": "auto_remedy",
+          "plan_review": "auto_proceed",
+          "floor_lock": true
+        },
+        "clamps": [
+          {
+            "key": "override_verification_floor",
+            "from": true,
+            "to": null,
+            "rule": "locked",
+            "message": "floor is locked in this install; override_verification_floor is inert"
+          }
+        ]
+      }
+    },
+    {
+      "op": "preflight.run",
+      "args": [
+        "$TMP/proj",
+        {
+          "workflowTool": true,
+          "agentTeams": false,
+          "codexCmd": "exit 1"
+        }
+      ],
+      "ignore": [
+        "repo"
+      ],
+      "expect": {
+        "mode": "degraded-claude-only",
+        "gates": [
+          { "name": "preflight-node", "cmd": "node --version", "last_result": "pass" },
+          { "name": "codex-preflight", "cmd": "exit 0", "last_result": "pass" },
+          { "name": "preflight-git", "cmd": "git rev-parse --is-inside-work-tree", "last_result": "pass" },
+          { "name": "preflight-node", "cmd": "node --version", "last_result": "pass" },
+          { "name": "codex-preflight", "cmd": "exit 1", "last_result": "fail" },
+          { "name": "preflight-git", "cmd": "git rev-parse --is-inside-work-tree", "last_result": "pass" }
+        ],
+        "capabilities": {
+          "workflow_tool": { "present": true, "source": "session-tool-list", "observed": "present" },
+          "agent_teams": { "present": false, "source": "session-tool-list", "observed": "absent" }
+        }
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "onboarding",
+        "to": "brainstorm"
+      }
+    }
+  ]
+}

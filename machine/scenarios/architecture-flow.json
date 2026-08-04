@@ -1,0 +1,4182 @@
+{
+  "name": "architecture-flow",
+  "steps": [
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/proj",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ]
+    },
+    {
+      "op": "phases.loadRegistry",
+      "args": [
+        "/DEV/thelastskill/machine/phases-registry.json"
+      ],
+      "ignore": [
+        "phases"
+      ],
+      "expect": {
+        "schema_version": 1
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "onboarding",
+        "to": "brainstorm"
+      }
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "idea",
+          "payload": {
+            "text": "architecture phase seals manifest+gate before implementation may begin"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "finding",
+          "payload": {
+            "text": "plan-merging by a third mind is evidence-negative — selection with named steals only"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "planning protocol is a settings knob: standard, deep_scrutiny, or maximal_confrontation"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "sealed",
+          "payload": {}
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/vision.md",
+        {
+          "stub": "architecture-flow:vision/vision.md",
+          "crystallized": true,
+          "source": "vision/transcript.jsonl"
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/decisions.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "architecture phase emits the criteria register; phase 7 assembles journeys, never writes them"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/vision/decisions.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "implementation refuses to start without an approved, digest-matched architecture gate"
+          }
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "brainstorm",
+        "to": "research"
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/research/index.json",
+        {
+          "schema_version": 1,
+          "entries": [
+            {
+              "topic": "plan-gate-digest-binding",
+              "path": "research/plan-gate-digest-binding-2026-07-27.md",
+              "date": "2026-07-27",
+              "sources": [
+                {
+                  "url": "https://docs.claude.com/en/docs/claude-code",
+                  "fetched_ts": "2026-07-27T09:00:00Z"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/research/scratchpad.jsonl",
+        {
+          "kind": "steer",
+          "payload": {
+            "text": "width=2: dispatching researcher-1 on plan-gate digest binding, researcher-2 idle-held"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/research/scratchpad.jsonl",
+        {
+          "kind": "freshness_gate",
+          "payload": {
+            "topic": "plan-gate-digest-binding",
+            "fresh": true,
+            "reason": "cache entry 0d old — cache-first, do not re-research",
+            "load_bearing": true
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/proj/.thelastskill/research/scratchpad.jsonl",
+        {
+          "kind": "finding",
+          "payload": {
+            "text": "gate.json binds to manifest.json via sha256 digest, never the reverse (avoids the circular-hash trap)"
+          }
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/research/summary.md",
+        {
+          "stub": "architecture-flow:research/summary.md",
+          "topics": [
+            "plan-gate-digest-binding"
+          ]
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "research",
+        "to": "architecture"
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture/criteria-register.json",
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Operator can resume the build at any phase boundary without losing state.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            },
+            {
+              "id": "ACR-2",
+              "text": "Implementation structurally refuses to start without an approved, digest-matched architecture gate.",
+              "source_ref": "vision.md#10",
+              "journey_id": "J2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture/milestones.json",
+        {
+          "schema_version": 1,
+          "milestones": [
+            {
+              "id": "M1",
+              "order": 1,
+              "title": "Restart-anytime skeleton",
+              "designer_family": "gpt",
+              "slice_goal": "Stand up state.json/ledger.jsonl resume machinery.",
+              "chunk_count_estimate": 3,
+              "criteria_ids": [
+                "ACR-1"
+              ]
+            },
+            {
+              "id": "M2",
+              "order": 2,
+              "title": "Plan gate enforcement",
+              "designer_family": "gpt",
+              "slice_goal": "Wire manifest+gate digest checks into phase advance.",
+              "chunk_count_estimate": 2,
+              "criteria_ids": [
+                "ACR-2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture/plan.md",
+        {
+          "title": "Architecture plan",
+          "protocol": "standard",
+          "milestone_ordering_rationale": "M1 (restart-anytime skeleton) precedes M2 (plan gate enforcement) — the gate has nothing to bind a digest to before the skeleton exists.",
+          "summary": "Two milestones deliver the P6 architecture-phase machinery: resumable state plus a digest-bound plan gate."
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture/artifact-map.json",
+        {
+          "artifacts": [
+            {
+              "path": "milestones/index.json",
+              "format": "json",
+              "writer": "implementation",
+              "created_by_phase": "implementation",
+              "restart_role": "milestone progress index"
+            },
+            {
+              "path": "verification/suite-state.json",
+              "format": "json",
+              "writer": "verification",
+              "created_by_phase": "verification",
+              "restart_role": "ACR completion map"
+            },
+            {
+              "path": "delivery/last-mile-report.md",
+              "format": "md",
+              "writer": "delivery",
+              "created_by_phase": "delivery",
+              "restart_role": "honest remainder report"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture/protocol-record.md",
+        {
+          "protocol": "standard",
+          "draft_pass": "plan-author drafted once from vision/vision.md + decisions.jsonl + research/summary.md",
+          "coverage_check": "plan-coverage-checker: zero findings, no repair needed",
+          "closure": "standard protocol closed after one clean coverage pass"
+        }
+      ]
+    },
+    {
+      "op": "validators.validateCriteriaRegister",
+      "args": [
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Operator can resume the build at any phase boundary without losing state.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            },
+            {
+              "id": "ACR-2",
+              "text": "Implementation structurally refuses to start without an approved, digest-matched architecture gate.",
+              "source_ref": "vision.md#10",
+              "journey_id": "J2"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "errors": []
+      }
+    },
+    {
+      "op": "validators.validateCriteriaRegister",
+      "args": [
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Operator can resume the build at any phase boundary without losing state.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            },
+            {
+              "id": "ACR-2",
+              "text": "Implementation structurally refuses to start without an approved, digest-matched architecture gate.",
+              "source_ref": "vision.md#10",
+              "journey_id": "J1"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "errors": [
+          "criteria[1].journey_id \"J1\" is a duplicate — every criterion must map to exactly one journey"
+        ]
+      }
+    },
+    {
+      "op": "validators.validateMilestones",
+      "args": [
+        {
+          "schema_version": 1,
+          "milestones": [
+            {
+              "id": "M1",
+              "order": 1,
+              "title": "Restart-anytime skeleton",
+              "designer_family": "gpt",
+              "slice_goal": "Stand up state.json/ledger.jsonl resume machinery.",
+              "chunk_count_estimate": 3,
+              "criteria_ids": [
+                "ACR-1"
+              ]
+            },
+            {
+              "id": "M2",
+              "order": 2,
+              "title": "Plan gate enforcement",
+              "designer_family": "gpt",
+              "slice_goal": "Wire manifest+gate digest checks into phase advance.",
+              "chunk_count_estimate": 2,
+              "criteria_ids": [
+                "ACR-2"
+              ]
+            }
+          ]
+        },
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Operator can resume the build at any phase boundary without losing state.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            },
+            {
+              "id": "ACR-2",
+              "text": "Implementation structurally refuses to start without an approved, digest-matched architecture gate.",
+              "source_ref": "vision.md#10",
+              "journey_id": "J2"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "ok": true,
+        "errors": []
+      }
+    },
+    {
+      "op": "validators.validateMilestones",
+      "args": [
+        {
+          "schema_version": 1,
+          "milestones": [
+            {
+              "id": "M1",
+              "order": 1,
+              "title": "Restart-anytime skeleton",
+              "designer_family": "gpt",
+              "slice_goal": "Stand up state.json/ledger.jsonl resume machinery.",
+              "chunk_count_estimate": 3,
+              "criteria_ids": [
+                "ACR-GHOST"
+              ]
+            },
+            {
+              "id": "M2",
+              "order": 2,
+              "title": "Plan gate enforcement",
+              "designer_family": "gpt",
+              "slice_goal": "Wire manifest+gate digest checks into phase advance.",
+              "chunk_count_estimate": 2,
+              "criteria_ids": [
+                "ACR-2"
+              ]
+            }
+          ]
+        },
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Operator can resume the build at any phase boundary without losing state.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            },
+            {
+              "id": "ACR-2",
+              "text": "Implementation structurally refuses to start without an approved, digest-matched architecture gate.",
+              "source_ref": "vision.md#10",
+              "journey_id": "J2"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "ok": false,
+        "errors": [
+          "milestones[0].criteria_ids[0] references unknown criterion \"ACR-GHOST\" — not present in the criteria register",
+          "criteria register criterion \"ACR-1\" is not claimed by any milestone — every criterion must appear in at least one milestone"
+        ]
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/semantic-reject/architecture/plan.md",
+        {
+          "title": "Architecture plan",
+          "protocol": "standard",
+          "milestone_ordering_rationale": "M1 (restart-anytime skeleton) precedes M2 (plan gate enforcement) — the gate has nothing to bind a digest to before the skeleton exists.",
+          "summary": "Two milestones deliver the P6 architecture-phase machinery: resumable state plus a digest-bound plan gate."
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/semantic-reject/architecture/criteria-register.json",
+        {
+          "schema_version": 1,
+          "criteria": []
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/semantic-reject/architecture/milestones.json",
+        {
+          "schema_version": 1,
+          "milestones": [
+            {
+              "id": "M1",
+              "order": 1,
+              "title": "Restart-anytime skeleton",
+              "designer_family": "gpt",
+              "slice_goal": "Stand up state.json/ledger.jsonl resume machinery.",
+              "chunk_count_estimate": 3,
+              "criteria_ids": [
+                "ACR-1"
+              ]
+            },
+            {
+              "id": "M2",
+              "order": 2,
+              "title": "Plan gate enforcement",
+              "designer_family": "gpt",
+              "slice_goal": "Wire manifest+gate digest checks into phase advance.",
+              "chunk_count_estimate": 2,
+              "criteria_ids": [
+                "ACR-2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/semantic-reject/architecture/artifact-map.json",
+        {
+          "artifacts": [
+            {
+              "path": "milestones/index.json",
+              "format": "json",
+              "writer": "implementation",
+              "created_by_phase": "implementation",
+              "restart_role": "milestone progress index"
+            },
+            {
+              "path": "verification/suite-state.json",
+              "format": "json",
+              "writer": "verification",
+              "created_by_phase": "verification",
+              "restart_role": "ACR completion map"
+            },
+            {
+              "path": "delivery/last-mile-report.md",
+              "format": "md",
+              "writer": "delivery",
+              "created_by_phase": "delivery",
+              "restart_role": "honest remainder report"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/semantic-reject/architecture/protocol-record.md",
+        {
+          "protocol": "standard",
+          "draft_pass": "plan-author drafted once from vision/vision.md + decisions.jsonl + research/summary.md",
+          "coverage_check": "plan-coverage-checker: zero findings, no repair needed",
+          "closure": "standard protocol closed after one clean coverage pass"
+        }
+      ]
+    },
+    {
+      "op": "planGate.approveGate",
+      "args": [
+        "$TMP/semantic-reject/architecture"
+      ],
+      "expectError": "criteria-register.json failed validation"
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/protected-path/architecture/plan.md",
+        {
+          "title": "Architecture plan",
+          "protocol": "standard",
+          "milestone_ordering_rationale": "One milestone, touching the inherited legacy auth module scout flagged as protected.",
+          "summary": "Brownfield plan exercising the protected-path block law (vision.md §5 [seq 50])."
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/protected-path/architecture/criteria-register.json",
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Legacy auth module is upgraded without regressing existing sessions.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/protected-path/architecture/milestones.json",
+        {
+          "schema_version": 1,
+          "milestones": [
+            {
+              "id": "M1",
+              "order": 1,
+              "title": "Legacy auth upgrade",
+              "designer_family": "gpt",
+              "slice_goal": "Upgrade the inherited auth module.",
+              "chunk_count_estimate": 2,
+              "criteria_ids": [
+                "ACR-1"
+              ]
+            }
+          ],
+          "touched_paths": [
+            "src/legacy/auth.js",
+            "docs/readme.md"
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/protected-path/architecture/artifact-map.json",
+        {
+          "artifacts": [
+            {
+              "path": "milestones/index.json",
+              "format": "json",
+              "writer": "implementation",
+              "created_by_phase": "implementation",
+              "restart_role": "milestone progress index"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/protected-path/architecture/protocol-record.md",
+        {
+          "protocol": "standard",
+          "draft_pass": "plan-author drafted once from vision/vision.md + decisions.jsonl + research/summary.md",
+          "coverage_check": "plan-coverage-checker: zero findings, no repair needed",
+          "closure": "standard protocol closed after one clean coverage pass"
+        }
+      ]
+    },
+    {
+      "op": "scout.writeConstraints",
+      "args": [
+        "$TMP/protected-path",
+        {
+          "schema_version": 1,
+          "revision": 1,
+          "preserve": [],
+          "protected_paths": [
+            {
+              "trust_flag": "inherited-unverified",
+              "path": "src/legacy",
+              "anchor": "src/legacy/index.js:1",
+              "note": "legacy auth tree — operator sign-off required before touching (scout-agent finding)"
+            }
+          ],
+          "compatibility": [],
+          "migrations": [],
+          "known_failures": []
+        }
+      ]
+    },
+    {
+      "op": "planGate.approveGate",
+      "args": [
+        "$TMP/protected-path/architecture"
+      ],
+      "expectError": "conflicts with protected_paths entry \"src/legacy\""
+    },
+    {
+      "op": "scout.writeConstraints",
+      "args": [
+        "$TMP/protected-path",
+        {
+          "schema_version": 1,
+          "revision": 2,
+          "preserve": [],
+          "protected_paths": [],
+          "compatibility": [],
+          "migrations": [],
+          "known_failures": []
+        }
+      ]
+    },
+    {
+      "op": "planGate.approveGate",
+      "args": [
+        "$TMP/protected-path/architecture",
+        {
+          "decision": "auto-approved",
+          "decision_source": "configured-policy"
+        }
+      ],
+      "ignore": [
+        "manifest",
+        "manifestPath",
+        "gate",
+        "gatePath",
+        "manifestDigest",
+        "created",
+        "ledgerPath",
+        "ledgerSeq"
+      ],
+      "expect": {}
+    },
+    {
+      "op": "planGate.approveGate",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture",
+        {
+          "decision": "auto-approved",
+          "decision_source": "configured-policy"
+        }
+      ],
+      "ignore": [
+        "manifest",
+        "manifestPath",
+        "gate",
+        "gatePath",
+        "manifestDigest",
+        "created",
+        "ledgerPath",
+        "ledgerSeq"
+      ],
+      "expect": {}
+    },
+    {
+      "op": "planGate.verifyGate",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture"
+      ],
+      "expect": {
+        "ok": true,
+        "reasons": []
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture/plan.md",
+        {
+          "title": "Architecture plan",
+          "protocol": "standard",
+          "milestone_ordering_rationale": "M1 (restart-anytime skeleton) precedes M2 (plan gate enforcement) — the gate has nothing to bind a digest to before the skeleton exists.",
+          "summary": "Two milestones deliver the P6 architecture-phase machinery: resumable state plus a digest-bound plan gate.",
+          "tampered": true
+        }
+      ]
+    },
+    {
+      "op": "planGate.verifyGate",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture"
+      ],
+      "expect": {
+        "ok": false,
+        "reasons": [
+          "architecture artifact drift: \"plan.md\" (changed)"
+        ]
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture/plan.md",
+        {
+          "title": "Architecture plan",
+          "protocol": "standard",
+          "milestone_ordering_rationale": "M1 (restart-anytime skeleton) precedes M2 (plan gate enforcement) — the gate has nothing to bind a digest to before the skeleton exists.",
+          "summary": "Two milestones deliver the P6 architecture-phase machinery: resumable state plus a digest-bound plan gate."
+        }
+      ]
+    },
+    {
+      "op": "planGate.verifyGate",
+      "args": [
+        "$TMP/proj/.thelastskill/architecture"
+      ],
+      "expect": {
+        "ok": true,
+        "reasons": []
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/forged-gate/architecture/plan.md",
+        {
+          "title": "Architecture plan",
+          "protocol": "standard",
+          "milestone_ordering_rationale": "M1 (restart-anytime skeleton) precedes M2 (plan gate enforcement) — the gate has nothing to bind a digest to before the skeleton exists.",
+          "summary": "Two milestones deliver the P6 architecture-phase machinery: resumable state plus a digest-bound plan gate."
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/forged-gate/architecture/criteria-register.json",
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Operator can resume the build at any phase boundary without losing state.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            },
+            {
+              "id": "ACR-2",
+              "text": "Implementation structurally refuses to start without an approved, digest-matched architecture gate.",
+              "source_ref": "vision.md#10",
+              "journey_id": "J2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/forged-gate/architecture/milestones.json",
+        {
+          "schema_version": 1,
+          "milestones": [
+            {
+              "id": "M1",
+              "order": 1,
+              "title": "Restart-anytime skeleton",
+              "designer_family": "gpt",
+              "slice_goal": "Stand up state.json/ledger.jsonl resume machinery.",
+              "chunk_count_estimate": 3,
+              "criteria_ids": [
+                "ACR-1"
+              ]
+            },
+            {
+              "id": "M2",
+              "order": 2,
+              "title": "Plan gate enforcement",
+              "designer_family": "gpt",
+              "slice_goal": "Wire manifest+gate digest checks into phase advance.",
+              "chunk_count_estimate": 2,
+              "criteria_ids": [
+                "ACR-2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/forged-gate/architecture/artifact-map.json",
+        {
+          "artifacts": [
+            {
+              "path": "milestones/index.json",
+              "format": "json",
+              "writer": "implementation",
+              "created_by_phase": "implementation",
+              "restart_role": "milestone progress index"
+            },
+            {
+              "path": "verification/suite-state.json",
+              "format": "json",
+              "writer": "verification",
+              "created_by_phase": "verification",
+              "restart_role": "ACR completion map"
+            },
+            {
+              "path": "delivery/last-mile-report.md",
+              "format": "md",
+              "writer": "delivery",
+              "created_by_phase": "delivery",
+              "restart_role": "honest remainder report"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/forged-gate/architecture/protocol-record.md",
+        {
+          "protocol": "standard",
+          "draft_pass": "plan-author drafted once from vision/vision.md + decisions.jsonl + research/summary.md",
+          "coverage_check": "plan-coverage-checker: zero findings, no repair needed",
+          "closure": "standard protocol closed after one clean coverage pass"
+        }
+      ]
+    },
+    {
+      "op": "planGate.approveGate",
+      "args": [
+        "$TMP/forged-gate/architecture",
+        {
+          "decision": "reopened",
+          "decision_source": "configured-policy"
+        }
+      ],
+      "ignore": [
+        "manifest",
+        "manifestPath",
+        "gate",
+        "gatePath",
+        "manifestDigest",
+        "created",
+        "ledgerPath",
+        "ledgerSeq"
+      ],
+      "expect": {}
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/forged-gate/architecture/gate.json",
+        {
+          "schema_version": 1,
+          "decision": "approved",
+          "decision_source": "configured-policy",
+          "manifest_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "decided_at": "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "op": "planGate.verifyGate",
+      "args": [
+        "$TMP/forged-gate/architecture"
+      ],
+      "ignore": [
+        "reasons"
+      ],
+      "expect": {
+        "ok": false
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "architecture",
+        "to": "plan_gate"
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/proj/.thelastskill/state.json",
+        "$TMP/proj/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "plan_gate",
+        "to": "implementation"
+      }
+    },
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/refusal",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal/.thelastskill/state.json",
+        "$TMP/refusal/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "onboarding",
+        "to": "brainstorm"
+      }
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "idea",
+          "payload": {
+            "text": "architecture phase seals manifest+gate before implementation may begin"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "finding",
+          "payload": {
+            "text": "plan-merging by a third mind is evidence-negative — selection with named steals only"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "planning protocol is a settings knob: standard, deep_scrutiny, or maximal_confrontation"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/vision/transcript.jsonl",
+        {
+          "kind": "sealed",
+          "payload": {}
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/vision/vision.md",
+        {
+          "stub": "architecture-flow:vision/vision.md",
+          "crystallized": true,
+          "source": "vision/transcript.jsonl"
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/vision/decisions.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "architecture phase emits the criteria register; phase 7 assembles journeys, never writes them"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/vision/decisions.jsonl",
+        {
+          "kind": "decision",
+          "payload": {
+            "text": "implementation refuses to start without an approved, digest-matched architecture gate"
+          }
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal/.thelastskill/state.json",
+        "$TMP/refusal/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "brainstorm",
+        "to": "research"
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/research/index.json",
+        {
+          "schema_version": 1,
+          "entries": [
+            {
+              "topic": "plan-gate-digest-binding",
+              "path": "research/plan-gate-digest-binding-2026-07-27.md",
+              "date": "2026-07-27",
+              "sources": [
+                {
+                  "url": "https://docs.claude.com/en/docs/claude-code",
+                  "fetched_ts": "2026-07-27T09:00:00Z"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/research/scratchpad.jsonl",
+        {
+          "kind": "steer",
+          "payload": {
+            "text": "width=2: dispatching researcher-1 on plan-gate digest binding, researcher-2 idle-held"
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/research/scratchpad.jsonl",
+        {
+          "kind": "freshness_gate",
+          "payload": {
+            "topic": "plan-gate-digest-binding",
+            "fresh": true,
+            "reason": "cache entry 0d old — cache-first, do not re-research",
+            "load_bearing": true
+          }
+        }
+      ]
+    },
+    {
+      "op": "stream.appendRecord",
+      "args": [
+        "$TMP/refusal/.thelastskill/research/scratchpad.jsonl",
+        {
+          "kind": "finding",
+          "payload": {
+            "text": "gate.json binds to manifest.json via sha256 digest, never the reverse (avoids the circular-hash trap)"
+          }
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/research/summary.md",
+        {
+          "stub": "architecture-flow:research/summary.md",
+          "topics": [
+            "plan-gate-digest-binding"
+          ]
+        }
+      ]
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal/.thelastskill/state.json",
+        "$TMP/refusal/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "research",
+        "to": "architecture"
+      }
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/architecture/criteria-register.json",
+        {
+          "schema_version": 1,
+          "criteria": [
+            {
+              "id": "ACR-1",
+              "text": "Operator can resume the build at any phase boundary without losing state.",
+              "source_ref": "vision.md#5",
+              "journey_id": "J1"
+            },
+            {
+              "id": "ACR-2",
+              "text": "Implementation structurally refuses to start without an approved, digest-matched architecture gate.",
+              "source_ref": "vision.md#10",
+              "journey_id": "J2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/architecture/milestones.json",
+        {
+          "schema_version": 1,
+          "milestones": [
+            {
+              "id": "M1",
+              "order": 1,
+              "title": "Restart-anytime skeleton",
+              "designer_family": "gpt",
+              "slice_goal": "Stand up state.json/ledger.jsonl resume machinery.",
+              "chunk_count_estimate": 3,
+              "criteria_ids": [
+                "ACR-1"
+              ]
+            },
+            {
+              "id": "M2",
+              "order": 2,
+              "title": "Plan gate enforcement",
+              "designer_family": "gpt",
+              "slice_goal": "Wire manifest+gate digest checks into phase advance.",
+              "chunk_count_estimate": 2,
+              "criteria_ids": [
+                "ACR-2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/architecture/plan.md",
+        {
+          "title": "Architecture plan",
+          "protocol": "standard",
+          "milestone_ordering_rationale": "M1 (restart-anytime skeleton) precedes M2 (plan gate enforcement) — the gate has nothing to bind a digest to before the skeleton exists.",
+          "summary": "Two milestones deliver the P6 architecture-phase machinery: resumable state plus a digest-bound plan gate."
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/architecture/artifact-map.json",
+        {
+          "artifacts": [
+            {
+              "path": "milestones/index.json",
+              "format": "json",
+              "writer": "implementation",
+              "created_by_phase": "implementation",
+              "restart_role": "milestone progress index"
+            },
+            {
+              "path": "verification/suite-state.json",
+              "format": "json",
+              "writer": "verification",
+              "created_by_phase": "verification",
+              "restart_role": "ACR completion map"
+            },
+            {
+              "path": "delivery/last-mile-report.md",
+              "format": "md",
+              "writer": "delivery",
+              "created_by_phase": "delivery",
+              "restart_role": "honest remainder report"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "atomicJson.writeAtomic",
+      "args": [
+        "$TMP/refusal/.thelastskill/architecture/protocol-record.md",
+        {
+          "protocol": "standard",
+          "draft_pass": "plan-author drafted once from vision/vision.md + decisions.jsonl + research/summary.md",
+          "coverage_check": "plan-coverage-checker: zero findings, no repair needed",
+          "closure": "standard protocol closed after one clean coverage pass"
+        }
+      ]
+    },
+    {
+      "op": "planGate.approveGate",
+      "args": [
+        "$TMP/refusal/.thelastskill/architecture",
+        {
+          "decision": "rejected",
+          "decision_source": "operator"
+        }
+      ],
+      "ignore": [
+        "manifest",
+        "manifestPath",
+        "gate",
+        "gatePath",
+        "manifestDigest",
+        "created",
+        "ledgerPath",
+        "ledgerSeq"
+      ],
+      "expect": {}
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal/.thelastskill/state.json",
+        "$TMP/refusal/.thelastskill/ledger.jsonl"
+      ],
+      "ignore": [
+        "state"
+      ],
+      "expect": {
+        "from": "architecture",
+        "to": "plan_gate"
+      }
+    },
+    {
+      "op": "phases.advance",
+      "args": [
+        "$TMP/refusal/.thelastskill",
+        {
+          "schema_version": 1,
+          "phases": [
+            {
+              "id": "onboarding",
+              "order": 1,
+              "title": "Onboarding",
+              "interactive": true,
+              "entry_requires": [],
+              "exit_emits": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "brainstorm",
+              "order": 2,
+              "title": "Brainstorm",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md"
+              ],
+              "exit_emits": [
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_checks": [
+                {
+                  "file": "vision/transcript.jsonl",
+                  "check": "jsonl-sealed"
+                },
+                {
+                  "file": "vision/decisions.jsonl",
+                  "check": "jsonl-min-records:1"
+                },
+                {
+                  "file": "vision/vision.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "research",
+              "order": 3,
+              "title": "Research",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl"
+              ],
+              "exit_emits": [
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "research/index.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-min-records:3"
+                },
+                {
+                  "file": "research/scratchpad.jsonl",
+                  "check": "jsonl-has-kind:freshness_gate"
+                },
+                {
+                  "file": "research/summary.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "architecture",
+              "order": 4,
+              "title": "Architecture",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md"
+              ],
+              "exit_emits": [
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/plan.md",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/criteria-register.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/milestones.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/artifact-map.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/manifest.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                },
+                {
+                  "file": "architecture/protocol-record.md",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "plan_gate",
+              "order": 5,
+              "title": "Plan Gate",
+              "interactive": true,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "exit_emits": [
+                "architecture/gate.json"
+              ],
+              "exit_checks": [
+                {
+                  "file": "architecture/gate.json",
+                  "check": "file-nonempty"
+                }
+              ],
+              "resumable": true
+            },
+            {
+              "id": "implementation",
+              "order": 6,
+              "title": "Implementation",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md"
+              ],
+              "entry_checks": [
+                "architecture-gate-approved"
+              ],
+              "exit_emits": [
+                "milestones/index.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "verification",
+              "order": 7,
+              "title": "Verification",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json"
+              ],
+              "exit_emits": [
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "resumable": true
+            },
+            {
+              "id": "delivery",
+              "order": 8,
+              "title": "Delivery",
+              "interactive": false,
+              "entry_requires": [
+                "state.json",
+                "settings.json",
+                "routing/active.json",
+                "ledger.jsonl",
+                "handoff.md",
+                "vision/vision.md",
+                "vision/decisions.jsonl",
+                "research/index.json",
+                "research/scratchpad.jsonl",
+                "research/summary.md",
+                "architecture/plan.md",
+                "architecture/criteria-register.json",
+                "architecture/milestones.json",
+                "architecture/artifact-map.json",
+                "architecture/manifest.json",
+                "architecture/gate.json",
+                "architecture/protocol-record.md",
+                "milestones/index.json",
+                "verification/suite-state.json",
+                "verification/affected-map.json"
+              ],
+              "exit_emits": [
+                "delivery/last-mile-report.md",
+                "delivery/presentation.md"
+              ],
+              "resumable": true
+            }
+          ]
+        },
+        "$TMP/refusal/.thelastskill/state.json",
+        "$TMP/refusal/.thelastskill/ledger.jsonl"
+      ],
+      "expectError": "architecture-gate-approved"
+    }
+  ]
+}

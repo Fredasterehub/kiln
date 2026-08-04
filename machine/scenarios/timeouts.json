@@ -1,0 +1,59 @@
+{
+  "name": "timeouts",
+  "steps": [
+    {
+      "op": "timeouts.boundFor",
+      "args": ["mechanical_step"],
+      "expect": 300000
+    },
+    {
+      "op": "timeouts.boundFor",
+      "args": ["research_read"],
+      "expect": 900000
+    },
+    {
+      "op": "timeouts.boundFor",
+      "args": ["review"],
+      "expect": 1800000
+    },
+    {
+      "op": "timeouts.boundFor",
+      "args": ["chunk_implementation"],
+      "expect": 2700000
+    },
+    {
+      "op": "timeouts.boundFor",
+      "args": ["mind_consult"],
+      "expect": 900000
+    },
+    {
+      "op": "timeouts.boundFor",
+      "args": ["codex_dispatch"],
+      "expect": 1800000
+    },
+    {
+      "op": "timeouts.boundFor",
+      "args": ["deploy"],
+      "expectError": "no task class \"deploy\""
+    },
+    {
+      "op": "timeouts.boundFor",
+      "args": ["toString"],
+      "expectError": "no task class \"toString\""
+    },
+    {
+      "op": "timeouts.loadTable",
+      "args": ["$TMP/not-a-table.json"],
+      "expectError": "cannot read the timeout table"
+    },
+    {
+      "op": "atomicText.writeAtomicText",
+      "args": ["$TMP/bad-table.json", "{\"schema_version\": 1, \"classes\": {}, \"notes\": \"x\"}"]
+    },
+    {
+      "op": "timeouts.loadTable",
+      "args": ["$TMP/bad-table.json"],
+      "expectError": "not the task classes"
+    }
+  ]
+}

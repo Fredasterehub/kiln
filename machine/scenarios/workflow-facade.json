@@ -1,0 +1,145 @@
+{
+  "name": "workflow-facade",
+  "steps": [
+    {
+      "op": "workflow.snapshot",
+      "args": ["$TMP", "implementation"],
+      "expect": {
+        "schema_version": 1,
+        "phase": "implementation",
+        "resume": { "phase": null, "canResume": false, "missing": ["state.json"] },
+        "ledger": { "view": [], "total": 0, "kept": 0, "dropped": 0 }
+      }
+    },
+    {
+      "op": "workflow.snapshot",
+      "args": ["$TMP", "not_a_phase"],
+      "expectError": "no phase \"not_a_phase\" in the registry"
+    },
+    {
+      "op": "workflow.persistReceipt",
+      "args": [
+        "$TMP",
+        "implementation",
+        {
+          "kind": "dispatch",
+          "payload": {
+            "dispatch_id": "d1",
+            "seat": "implementer",
+            "transport": "native",
+            "intended_family": "claude",
+            "task_class": "chunk_implementation",
+            "prompt_ref": "envelopes/implementation/d1.json",
+            "transport_ref": { "task_ref": "task-1" }
+          }
+        }
+      ],
+      "ignore": ["record"],
+      "expect": { "ref": "ledger:0" }
+    },
+    {
+      "op": "workflow.persistReceipt",
+      "args": [
+        "$TMP",
+        "implementation",
+        {
+          "kind": "dispatch",
+          "payload": {
+            "dispatch_id": "d1",
+            "seat": "implementer",
+            "transport": "native",
+            "intended_family": "claude",
+            "task_class": "chunk_implementation",
+            "prompt_ref": "envelopes/implementation/d1.json",
+            "transport_ref": { "task_ref": "task-1" }
+          }
+        }
+      ],
+      "ignore": ["record"],
+      "expect": { "ref": "ledger:0" }
+    },
+    {
+      "op": "workflow.persistReceipt",
+      "args": ["$TMP", "implementation", { "kind": "chunk-green", "payload": {} }],
+      "expectError": "no writer for receipt kind \"chunk-green\""
+    },
+    {
+      "op": "workflow.invoke",
+      "args": ["$TMP", "phases.reopenPhase", ["$TMP"]],
+      "expectError": "unknown op \"phases.reopenPhase\""
+    },
+    {
+      "op": "workflow.invoke",
+      "args": [
+        "$TMP",
+        "receipts.writeHoldOpen",
+        ["$TMP", { "hold_id": "h1", "severity": "S2", "summary": "waiting on a ruling", "origin_ref": "ledger:0" }]
+      ],
+      "ignore": ["record"],
+      "expect": { "ref": "ledger:1" }
+    },
+    {
+      "op": "workflow.invoke",
+      "args": [
+        "$TMP",
+        "architectureTxn.stageArtifacts",
+        [
+          "$TMP/architecture",
+          {
+            "plan.md": "# Plan\n\nRevision one.\n",
+            "criteria-register.json": { "schema_version": 1, "criteria": [] },
+            "milestones.json": { "schema_version": 1, "milestones": [] },
+            "artifact-map.json": { "schema_version": 1, "artifacts": [] },
+            "protocol-record.md": "# Protocol record\n\nProtocol: standard.\n"
+          }
+        ]
+      ],
+      "ignore": ["revisionDir", "manifest", "manifest_file_digest"],
+      "expect": {
+        "revision": 1,
+        "artifacts_digest": "sha256:9c3629d2ed8d4467a401066a8c40610f466a261cd5b477ad8c248507e15a4414"
+      }
+    },
+    {
+      "op": "workflow.invoke",
+      "args": [
+        "$TMP",
+        "architectureTxn.promoteStaged",
+        ["$TMP/architecture", 1, "sha256:9c3629d2ed8d4467a401066a8c40610f466a261cd5b477ad8c248507e15a4414"]
+      ],
+      "ignore": ["revisionDir", "manifest", "marker"],
+      "expect": { "revision": 1 }
+    },
+    {
+      "op": "workflow.invoke",
+      "args": [
+        "$TMP",
+        "receipts.writeEnvelope",
+        [
+          "$TMP",
+          "implementation",
+          "d1",
+          {
+            "state": "done",
+            "result": "chunk implemented",
+            "evidence": "suite green",
+            "risks": "none",
+            "artifact": "src/thing.js",
+            "question": ""
+          }
+        ]
+      ],
+      "expect": {
+        "ref": "envelope:implementation/d1",
+        "envelope": {
+          "state": "done",
+          "result": "chunk implemented",
+          "evidence": "suite green",
+          "risks": "none",
+          "artifact": "src/thing.js",
+          "question": ""
+        }
+      }
+    }
+  ]
+}

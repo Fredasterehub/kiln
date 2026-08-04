@@ -1,0 +1,335 @@
+{
+  "name": "family-evidence",
+  "note": "REFUSAL PATHS ONLY, and the limitation is structural rather than an omission. A successful chunk-built now requires a real git repository: milestones.js recomputes stagedDiffDigest(repoRoot) at the write boundary and compares it against the record, and mock-replay sandboxes are bare mkdtemp directories with no repo. A scenario also cannot thread one step's return value into the next, so it could not carry a computed digest even if a repo existed. The SUCCESSFUL lifecycle - recordBuilt through selectReviewer, selectMilestoneReviewer and verifyReviewFamily - is covered in machine/test/family-evidence.test.js against real throwaway git repositories. What this file covers is the refusal surface: every way a build record can fail to be evidence, through both the boundary and the composer.",
+  "steps": [
+    {
+      "op": "scaffold.scaffoldTree",
+      "args": [
+        "$TMP/proj",
+        {
+          "routingConfigPath": "/DEV/thelastskill/machine/routing/routing-2026-07-27-4.json"
+        }
+      ],
+      "ignore": [
+        "created",
+        "treeRoot",
+        "settingsPath",
+        "statePath"
+      ]
+    },
+    {
+      "op": "milestones.createMilestone",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "id": "M1",
+          "title": "Substrate",
+          "designer_family": "gpt"
+        }
+      ],
+      "expect": {
+        "milestoneId": "M1"
+      },
+      "ignore": [
+        "indexPath",
+        "chunksPath",
+        "entry",
+        "created"
+      ]
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-spec",
+          "chunk_id": "C1",
+          "brief_ref": "M1/spec.md#C1"
+        }
+      ],
+      "expect": {
+        "seq": 1
+      },
+      "ignore": [
+        "chunksPath"
+      ]
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-start",
+          "chunk_id": "C1",
+          "implementer_seat": "implementer",
+          "implementer_family": "gpt"
+        }
+      ],
+      "expect": {
+        "seq": 2
+      },
+      "ignore": [
+        "chunksPath"
+      ]
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-built",
+          "chunk_id": "C1",
+          "actual_family": "gpt"
+        }
+      ],
+      "expectError": "requires \"intended_family\" to be one of claude, gpt"
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-built",
+          "chunk_id": "C1",
+          "actual_family": "gpt",
+          "intended_family": "gpt"
+        }
+      ],
+      "expectError": "requires a \"dispatch_ref\" of the form ledger:<seq>"
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-built",
+          "chunk_id": "C1",
+          "actual_family": "gpt",
+          "intended_family": "gpt",
+          "dispatch_ref": "ledger:1",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "diff_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expectError": "which is not a \"dispatch-terminal\" record"
+    },
+    {
+      "op": "receipts.writeDispatch",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "dispatch_id": "D1",
+          "seat": "implementer",
+          "transport": "codex",
+          "intended_family": "gpt",
+          "task_class": "chunk_implementation",
+          "prompt_ref": "briefs/C1.md",
+          "transport_ref": {
+            "pid": 4242,
+            "pgid": 4242,
+            "session": "4242"
+          }
+        }
+      ],
+      "expect": {
+        "ref": "ledger:1"
+      },
+      "ignore": [
+        "record"
+      ]
+    },
+    {
+      "op": "familyEvidence.recordBuilt",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        "C1",
+        {
+          "dispatch_id": "D1"
+        }
+      ],
+      "expectError": "has no terminal record"
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "dispatch_id": "D1",
+          "status": "failed",
+          "builder": null,
+          "transport_ref": {
+            "pid": 4242,
+            "pgid": 4242,
+            "session": "4242"
+          },
+          "reason": "timeout"
+        }
+      ],
+      "expect": {
+        "ref": "ledger:2"
+      },
+      "ignore": [
+        "record"
+      ]
+    },
+    {
+      "op": "familyEvidence.recordBuilt",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        "C1",
+        {
+          "dispatch_id": "D1"
+        }
+      ],
+      "expectError": "is not a git repository",
+      "note": "recordBuilt reaches for the staged diff before composing, so a repo-less sandbox stops it here; the boundary refusal for a well-formed record citing this same failed terminal is the next step."
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-built",
+          "chunk_id": "C1",
+          "actual_family": "gpt",
+          "intended_family": "gpt",
+          "dispatch_ref": "ledger:2",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "diff_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expectError": "cites a terminal with status \"failed\""
+    },
+    {
+      "op": "receipts.writeDispatch",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "dispatch_id": "D2",
+          "seat": "implementer_ui_creative",
+          "transport": "native",
+          "intended_family": "claude",
+          "task_class": "chunk_implementation",
+          "prompt_ref": "briefs/C1.md",
+          "transport_ref": {
+            "task_ref": "D2"
+          }
+        }
+      ],
+      "expect": {
+        "ref": "ledger:3"
+      },
+      "ignore": [
+        "record"
+      ]
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        {
+          "dispatch_id": "D2",
+          "status": "ok",
+          "builder": "claude-fallback",
+          "transport_ref": {
+            "task_ref": "D2"
+          },
+          "result_ref": "results/D2.md",
+          "model_id": "opus-5",
+          "result_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "expect": {
+        "ref": "ledger:4"
+      },
+      "ignore": [
+        "record"
+      ]
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-built",
+          "chunk_id": "C1",
+          "actual_family": "gpt",
+          "intended_family": "gpt",
+          "dispatch_ref": "ledger:4",
+          "model_id": "opus-5",
+          "result_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "diff_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "expectError": "proves \"claude\""
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        {
+          "kind": "chunk-built",
+          "chunk_id": "C1",
+          "actual_family": "claude",
+          "intended_family": "gpt",
+          "dispatch_ref": "ledger:4",
+          "model_id": "sonnet-5",
+          "result_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "diff_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "expectError": "claims model_id \"sonnet-5\", but its terminal recorded \"opus-5\""
+    },
+    {
+      "op": "familyEvidence.recordBuilt",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        "C1",
+        {
+          "dispatch_id": "D2"
+        }
+      ],
+      "expectError": "is not a git repository"
+    },
+    {
+      "op": "familyEvidence.selectReviewer",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        "C1"
+      ],
+      "expectError": "has no \"chunk-built\" record"
+    },
+    {
+      "op": "familyEvidence.selectMilestoneReviewer",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1"
+      ],
+      "expectError": "has no \"chunk-built\" records"
+    },
+    {
+      "op": "familyEvidence.verifyReviewFamily",
+      "args": [
+        "$TMP/proj/.thelastskill",
+        "M1",
+        "C1",
+        "sol"
+      ],
+      "expectError": "must be one of claude, gpt"
+    }
+  ]
+}

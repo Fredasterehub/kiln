@@ -1,0 +1,46 @@
+{
+  "name": "capsule",
+  "note": "NO capsule.js OPERATION IS WIRED INTO THE REPLAY TABLE, so this file asserts the fence rather than the module. Every capsule function mutates something real - a git worktree, a repository index, a directory removed with --force - and a scenario takes its arguments from a file, so a wired capsule op would let a scenario name any repository on the machine and stage, reset or delete inside it. The fence is drawn around the MODULE, not around its dangerous-looking half: the pure path derivation is out too, because picking which functions look safe is how the previous hole opened. The steps below prove the fence holds by asking mock-replay for each capsule operation by name and getting 'unknown op' back. The module's own behavior - the round trip, forgery unavailability through the capsule path, the machine boundary after export, crash recovery - is covered against throwaway git repositories in machine/test/capsule.test.js, which is where a real worktree can actually be built.",
+  "steps": [
+    {
+      "op": "capsule.openCapsule",
+      "args": ["$TMP", "$TMP", "M1", "C1"],
+      "expectError": "unknown op \"capsule.openCapsule\""
+    },
+    {
+      "op": "capsule.exportDiff",
+      "args": ["$TMP"],
+      "expectError": "unknown op \"capsule.exportDiff\""
+    },
+    {
+      "op": "capsule.discardStaging",
+      "args": ["$TMP"],
+      "expectError": "unknown op \"capsule.discardStaging\""
+    },
+    {
+      "op": "capsule.syncWorktreeToHead",
+      "args": ["$TMP"],
+      "expectError": "unknown op \"capsule.syncWorktreeToHead\""
+    },
+    {
+      "op": "capsule.capsulePathsOf",
+      "args": ["$TMP", "M1", "C1"],
+      "expectError": "unknown op \"capsule.capsulePathsOf\""
+    },
+    {
+      "op": "capsule.applyToStaging",
+      "args": ["$TMP", "$TMP/x.patch", "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      "expectError": "unknown op \"capsule.applyToStaging\""
+    },
+    {
+      "op": "capsule.closeCapsule",
+      "args": ["$TMP"],
+      "expectError": "unknown op \"capsule.closeCapsule\""
+    },
+    {
+      "op": "implementation.stagedDiffDigest",
+      "args": ["$TMP"],
+      "expectError": "is not a git repository"
+    }
+  ]
+}

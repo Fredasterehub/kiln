@@ -1,0 +1,2 @@
+{"family":"claude","review_id":"rv-1","round":1,"verdict":"accept","findings":[],"blockers":[],"law_hash":"3f1c8a2b","run_id":"run-1","published_at":"2026-03-20T09:00:00Z","receipt_sha256":"aa11"}
+{"family":"gpt","review_id":"rv-2","round":1,"verdict":"accept","findings":[],"blockers":[],"law_hash":"3f1c8a2b","run_id":"run-1","published_at":"2026-03-21T09:00:00Z","receipt_sha256":"bb22"}

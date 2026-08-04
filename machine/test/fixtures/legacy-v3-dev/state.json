@@ -1,0 +1,14 @@
+{
+  "revision": 41,
+  "stage": "validate",
+  "active_slice": "render",
+  "next_action_key": "validate.run",
+  "next_action": "run the validate stage",
+  "density": "engineer",
+  "pointers": [".kiln/LAW.md", ".kiln/slices.json"],
+  "seals": ".kiln/seals.log",
+  "run_id": "7c1e0a44-2b6d-4f19-9a03-51d8e2f6b7c0",
+  "master_plan_digest": null,
+  "updated_at": "2026-05-02T08:14:00Z",
+  "render_digest": "9b2e1d7c4a05f3862be1074d9c3a5f8071e2d6b4c8a90f13e5d7b2064a1c8f39"
+}

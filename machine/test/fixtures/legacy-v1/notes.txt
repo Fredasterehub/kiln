@@ -1,0 +1,2 @@
+Loose notes kept beside the run.
+The indexer should stay incremental.

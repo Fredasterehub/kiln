@@ -1,0 +1,275 @@
+{
+  "name": "views-friction",
+  "steps": [
+    {
+      "op": "friction.rates",
+      "args": [
+        "$TMP"
+      ],
+      "expect": {
+        "schema_version": 1,
+        "reviews": {
+          "total": 0,
+          "approve": 0,
+          "revise": 0,
+          "revise_share": 0
+        },
+        "consults": {
+          "total": 0,
+          "chunks_consulted": 0,
+          "chunks_seen": 0,
+          "per_chunk": 0
+        },
+        "dispatches": {
+          "dispatched": 0,
+          "terminals": 0,
+          "pending": 0,
+          "failed": 0,
+          "timeout": 0,
+          "failure_share": 0,
+          "timeout_share": 0
+        },
+        "holds": {
+          "opened": 0,
+          "resolved": 0,
+          "open": 0
+        },
+        "per_key": {
+          "chunks": [],
+          "seats": [],
+          "transports": []
+        }
+      }
+    },
+    {
+      "op": "friction.listOpenHolds",
+      "args": [
+        "$TMP"
+      ],
+      "expect": []
+    },
+    {
+      "op": "receipts.writeHoldOpen",
+      "args": [
+        "$TMP",
+        {
+          "hold_id": "h1",
+          "severity": "S2",
+          "summary": "waiting on a ruling",
+          "origin_ref": "ledger:0"
+        }
+      ],
+      "ignore": [
+        "record"
+      ],
+      "expect": {
+        "ref": "ledger:0"
+      }
+    },
+    {
+      "op": "receipts.writeHoldOpen",
+      "args": [
+        "$TMP",
+        {
+          "hold_id": "h2",
+          "severity": "S3",
+          "summary": "codex unreachable",
+          "origin_ref": "ledger:0"
+        }
+      ],
+      "ignore": [
+        "record"
+      ],
+      "expect": {
+        "ref": "ledger:1"
+      }
+    },
+    {
+      "op": "receipts.writeHoldResolve",
+      "args": [
+        "$TMP",
+        {
+          "hold_id": "h1",
+          "exit": "resolved",
+          "resolution_ref": "ledger:0"
+        }
+      ],
+      "ignore": [
+        "record"
+      ],
+      "expect": {
+        "ref": "ledger:2"
+      }
+    },
+    {
+      "op": "receipts.writeDegradedRoute",
+      "args": [
+        "$TMP",
+        {
+          "route_id": "r1",
+          "expected": "codex",
+          "actual": "claude",
+          "reason": "codex unreachable",
+          "scope_ref": "ledger:1"
+        }
+      ],
+      "ignore": [
+        "record"
+      ],
+      "expect": {
+        "ref": "ledger:3"
+      }
+    },
+    {
+      "op": "friction.rates",
+      "args": [
+        "$TMP"
+      ],
+      "expect": {
+        "schema_version": 1,
+        "reviews": {
+          "total": 0,
+          "approve": 0,
+          "revise": 0,
+          "revise_share": 0
+        },
+        "consults": {
+          "total": 0,
+          "chunks_consulted": 0,
+          "chunks_seen": 0,
+          "per_chunk": 0
+        },
+        "dispatches": {
+          "dispatched": 0,
+          "terminals": 0,
+          "pending": 0,
+          "failed": 0,
+          "timeout": 0,
+          "failure_share": 0,
+          "timeout_share": 0
+        },
+        "holds": {
+          "opened": 2,
+          "resolved": 1,
+          "open": 1
+        },
+        "per_key": {
+          "chunks": [],
+          "seats": [],
+          "transports": []
+        }
+      }
+    },
+    {
+      "op": "views.regenerate",
+      "args": [
+        "$TMP"
+      ],
+      "ignore": [
+        "generated_at",
+        "views"
+      ],
+      "expect": {
+        "schema_version": 1
+      }
+    },
+    {
+      "op": "atomicJson.readJson",
+      "args": [
+        "$TMP/views/friction-rates.json"
+      ],
+      "ignore": [
+        "generated_at"
+      ],
+      "expect": {
+        "schema_version": 1,
+        "total": 1,
+        "dropped": 0,
+        "entries": [
+          {
+            "reviews_total": 0,
+            "reviews_approve": 0,
+            "reviews_revise": 0,
+            "reviews_revise_share": 0,
+            "consults_total": 0,
+            "consults_chunks_consulted": 0,
+            "consults_chunks_seen": 0,
+            "consults_per_chunk": 0,
+            "dispatches_dispatched": 0,
+            "dispatches_terminals": 0,
+            "dispatches_pending": 0,
+            "dispatches_failed": 0,
+            "dispatches_timeout": 0,
+            "dispatches_failure_share": 0,
+            "dispatches_timeout_share": 0,
+            "holds_opened": 2,
+            "holds_resolved": 1,
+            "holds_open": 1
+          }
+        ]
+      }
+    },
+    {
+      "op": "atomicJson.readJson",
+      "args": [
+        "$TMP/views/position.json"
+      ],
+      "ignore": [
+        "generated_at"
+      ],
+      "expect": {
+        "schema_version": 1,
+        "total": 1,
+        "dropped": 0,
+        "entries": [
+          {
+            "phase": null,
+            "next_action": null,
+            "milestone_id": null,
+            "milestone_index": null,
+            "milestone_total": null,
+            "milestone_status": null,
+            "chunks_recorded": 0,
+            "chunks_green": 0
+          }
+        ]
+      }
+    },
+    {
+      "op": "atomicJson.readJson",
+      "args": [
+        "$TMP/views/open-holds.json"
+      ],
+      "ignore": [
+        "generated_at",
+        "entries"
+      ],
+      "expect": {
+        "schema_version": 1,
+        "total": 1,
+        "dropped": 0
+      }
+    },
+    {
+      "op": "atomicText.writeAtomicText",
+      "args": [
+        "$TMP/ledger.jsonl",
+        "{\"schema_version\":1,\"seq\":0,\"kind\":\"hold-open\"}\n{oops\n"
+      ]
+    },
+    {
+      "op": "friction.rates",
+      "args": [
+        "$TMP"
+      ],
+      "expectError": "refusing to rate part of a stream"
+    },
+    {
+      "op": "views.regenerate",
+      "args": [
+        "$TMP"
+      ],
+      "expectError": "refusing to rate part of a stream"
+    }
+  ]
+}

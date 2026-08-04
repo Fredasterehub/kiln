@@ -1,0 +1,21 @@
+{
+  "name": "gate-worktree",
+  "note": "NO gate-worktree.js OPERATION IS WIRED INTO THE REPLAY TABLE, and this file asserts that fence rather than the module. Every function of it mutates something real - it adds a git worktree, writes objects into a repository, and removes a directory with --force - and a scenario takes its arguments from a file, so a wired op would let a scenario name any repository on the machine and check out or delete inside it. Same fence, same reason, as machine/scenarios/capsule.json. The one reachable door is the workflow facade's own 'checkHonesty.runStagedGate', which takes a TREE root and derives the repository from it: the last step walks through that door against the sandbox, where there is no repository, and gets the refusal rather than a checkout. The module's real behavior - the staged tree, re-entry after a kill, the untouched project - is covered against throwaway git repositories in machine/test/gate-worktree.test.js, which is where a real worktree can actually be built.",
+  "steps": [
+    {
+      "op": "gateWorktree.openGateWorktree",
+      "args": ["$TMP", "chunk:M1:C1", "node-cli"],
+      "expectError": "unknown op \"gateWorktree.openGateWorktree\""
+    },
+    {
+      "op": "gateWorktree.closeGateWorktree",
+      "args": ["$TMP", "chunk:M1:C1"],
+      "expectError": "unknown op \"gateWorktree.closeGateWorktree\""
+    },
+    {
+      "op": "workflow.invoke",
+      "args": ["$TMP", "checkHonesty.runStagedGate", ["$TMP", "chunk:M1:C1", "true", "node-cli"]],
+      "expectError": "is not a git repository"
+    }
+  ]
+}

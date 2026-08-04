@@ -1,0 +1,3 @@
+{"family":"claude","review_id":"rv-11","round":1,"verdict":"revise","findings":["the torn-line path is untested"],"blockers":[],"law_hash":"88ac4e12","run_id":"run-7","published_at":"2026-04-27T12:00:00Z","receipt_sha256":"cc33"}
+{"family":"gpt","review_id":"rv-12","round":2,"verdict":"accept","findings":[],"blockers":[],"law_hash":"88ac4e12","run_id":"run-7","published_at":"2026-04-28T09:30:00Z","receipt_sha256":"dd44"}
+{"family":"claude","review_id":"rv-13","round":2,"verdict":"accept","findings":[],"blockers":[],"law_hash":"88ac4e12","run_id":"run-7","published_at":"2026-04-28T09:55:00Z","receipt_sha256":"ee55"}

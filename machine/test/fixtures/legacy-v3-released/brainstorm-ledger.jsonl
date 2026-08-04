@@ -1,0 +1,4 @@
+{"seq":0,"e":"session_start","by":"operator","project":"config-linter"}
+{"seq":1,"e":"idea","by":"operator","text":"it should refuse, not guess"}
+{"seq":2,"e":"essence","by":"operator","text":"a linter that never invents a value","confirmed":true}
+{"seq":3,"e":"session_complete","entries":3}

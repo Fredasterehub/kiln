@@ -1,0 +1,3 @@
+{"seq":0,"e":"session_start","by":"operator","project":"stream-viewer"}
+{"seq":1,"e":"idea","by":"operator","text":"the view should be rebuildable from the record alone"}
+{"seq":2,"e":"turn","by":"da-vinci","text":"what happens when the last line is torn?"}

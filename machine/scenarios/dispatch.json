@@ -1,0 +1,163 @@
+{
+  "name": "dispatch-records",
+  "steps": [
+    {
+      "op": "receipts.writeDispatch",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "seat": "implementer",
+          "transport": "codex",
+          "intended_family": "gpt",
+          "task_class": "chunk_implementation",
+          "prompt_ref": "briefs/C1.md",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" }
+        }
+      ],
+      "expect": { "ref": "ledger:0" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" },
+          "result_ref": "dispatch/D1.result.md"
+        }
+      ],
+      "expectError": "with status \"ok\" is missing required field \"model_id\""
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" },
+          "result_ref": "dispatch/D1.result.md",
+          "model_id": "gpt-5.6-sol"
+        }
+      ],
+      "expectError": "with status \"ok\" is missing required field \"result_digest\""
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" },
+          "result_ref": "dispatch/D1.result.md",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "not-a-digest"
+        }
+      ],
+      "expectError": "\"result_digest\" must be a digest"
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "failed",
+          "builder": null,
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" },
+          "reason": "timeout",
+          "result_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expectError": "with status \"failed\" must not carry \"result_digest\""
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 9999, "pgid": 9999, "session": "9999" },
+          "result_ref": "dispatch/D1.result.md",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expectError": "transport_ref for dispatch_id \"D1\" does not match its dispatch's transport_ref"
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" },
+          "result_ref": "dispatch/D1.result.md",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expect": { "ref": "ledger:1" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" },
+          "result_ref": "dispatch/D1.result.md",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "expectError": "already exists with a different payload"
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D2",
+          "status": "failed",
+          "builder": null,
+          "transport_ref": { "task_ref": "D2" },
+          "reason": "abandoned"
+        }
+      ],
+      "expectError": "no dispatch record for dispatch_id \"D2\""
+    },
+    {
+      "op": "receipts.resolveRef",
+      "args": ["$TMP", "ledger:1"],
+      "expect": {
+        "schema_version": 1,
+        "seq": 1,
+        "kind": "dispatch-terminal",
+        "correlation_id": "D1",
+        "dispatch_id": "D1",
+        "status": "ok",
+        "builder": "sol",
+        "transport_ref": { "pid": 4242, "pgid": 4242, "session": "4242" },
+        "result_ref": "dispatch/D1.result.md",
+        "model_id": "gpt-5.6-sol",
+        "result_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "ignore": ["ts"]
+    }
+  ]
+}

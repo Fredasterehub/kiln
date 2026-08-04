@@ -1,0 +1,282 @@
+{
+  "name": "architecture-txn",
+  "steps": [
+    {
+      "op": "architectureTxn.stageArtifacts",
+      "args": [
+        "$TMP/architecture",
+        {
+          "plan.md": "# Plan\n\nRevision one.\n",
+          "criteria-register.json": {
+            "schema_version": 1,
+            "criteria": []
+          },
+          "milestones.json": {
+            "schema_version": 1,
+            "milestones": []
+          },
+          "artifact-map.json": {
+            "schema_version": 1,
+            "artifacts": []
+          },
+          "protocol-record.md": "# Protocol record\n\nProtocol: standard.\n"
+        }
+      ],
+      "ignore": [
+        "revisionDir",
+        "manifest",
+        "manifest_file_digest"
+      ],
+      "expect": {
+        "revision": 1,
+        "artifacts_digest": "sha256:9c3629d2ed8d4467a401066a8c40610f466a261cd5b477ad8c248507e15a4414"
+      }
+    },
+    {
+      "op": "architectureTxn.readCurrent",
+      "args": [
+        "$TMP/architecture"
+      ],
+      "expectError": "no promoted revision"
+    },
+    {
+      "op": "architectureTxn.promoteStaged",
+      "args": [
+        "$TMP/architecture",
+        1,
+        "sha256:9c3629d2ed8d4467a401066a8c40610f466a261cd5b477ad8c248507e15a4414"
+      ],
+      "ignore": [
+        "revisionDir",
+        "manifest",
+        "marker"
+      ],
+      "expect": {
+        "revision": 1
+      }
+    },
+    {
+      "op": "architectureTxn.readCurrent",
+      "args": [
+        "$TMP/architecture"
+      ],
+      "ignore": [
+        "revisionDir",
+        "manifest",
+        "marker"
+      ],
+      "expect": {
+        "revision": 1
+      }
+    },
+    {
+      "op": "architectureTxn.promoteStaged",
+      "args": [
+        "$TMP/architecture",
+        1,
+        "sha256:9c3629d2ed8d4467a401066a8c40610f466a261cd5b477ad8c248507e15a4414"
+      ],
+      "ignore": [
+        "revisionDir",
+        "manifest",
+        "marker"
+      ],
+      "expect": {
+        "revision": 1
+      }
+    },
+    {
+      "op": "architectureTxn.promoteStaged",
+      "args": [
+        "$TMP/architecture",
+        3,
+        "sha256:9c3629d2ed8d4467a401066a8c40610f466a261cd5b477ad8c248507e15a4414"
+      ],
+      "expectError": "is not the next revision after 1"
+    },
+    {
+      "op": "architectureTxn.stageArtifacts",
+      "args": [
+        "$TMP/architecture",
+        {
+          "plan.md": "# Plan\n\nRevision two.\n",
+          "criteria-register.json": {
+            "schema_version": 1,
+            "criteria": []
+          },
+          "milestones.json": {
+            "schema_version": 1,
+            "milestones": []
+          },
+          "artifact-map.json": {
+            "schema_version": 1,
+            "artifacts": []
+          },
+          "protocol-record.md": "# Protocol record\n\nProtocol: standard, revised.\n"
+        }
+      ],
+      "ignore": [
+        "revisionDir",
+        "manifest",
+        "manifest_file_digest"
+      ],
+      "expect": {
+        "revision": 2,
+        "artifacts_digest": "sha256:2fbd7fdfcb6f31ad991361c2d7ca3304e7b804873032c2990c481c76071e528a"
+      }
+    },
+    {
+      "op": "architectureTxn.stageArtifacts",
+      "args": [
+        "$TMP/architecture",
+        {
+          "plan.md": "# Plan\n\nA third body for a revision already staged.\n",
+          "criteria-register.json": {
+            "schema_version": 1,
+            "criteria": []
+          },
+          "milestones.json": {
+            "schema_version": 1,
+            "milestones": []
+          },
+          "artifact-map.json": {
+            "schema_version": 1,
+            "artifacts": []
+          },
+          "protocol-record.md": "# Protocol record\n\nProtocol: standard, revised.\n"
+        }
+      ],
+      "expectError": "already staged"
+    },
+    {
+      "op": "atomicText.writeAtomicText",
+      "args": [
+        "$TMP/architecture/revisions/2/plan.md",
+        "# Plan\n\nTampered after staging.\n"
+      ]
+    },
+    {
+      "op": "architectureTxn.promoteStaged",
+      "args": [
+        "$TMP/architecture",
+        2,
+        "sha256:2fbd7fdfcb6f31ad991361c2d7ca3304e7b804873032c2990c481c76071e528a"
+      ],
+      "expectError": "does not match its own manifest"
+    },
+    {
+      "op": "architectureTxn.readCurrent",
+      "args": [
+        "$TMP/architecture"
+      ],
+      "ignore": [
+        "revisionDir",
+        "manifest",
+        "marker"
+      ],
+      "expect": {
+        "revision": 1
+      }
+    },
+    {
+      "op": "architectureTxn.reopenThroughTxn",
+      "args": [
+        "$TMP/architecture",
+        {
+          "rationale": "operator rejected the plan",
+          "rejected_digest": "not-a-digest"
+        },
+        {
+          "registry": {
+            "schema_version": 1,
+            "phases": []
+          }
+        }
+      ],
+      "expectError": "rejected_digest"
+    },
+    {
+      "op": "architectureTxn.reopenThroughTxn",
+      "args": [
+        "$TMP/architecture",
+        {
+          "rationale": "operator rejected the plan",
+          "rejected_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "registry": {
+            "schema_version": 1,
+            "phases": []
+          },
+          "statePath": "$TMP/state.json"
+        }
+      ],
+      "expectError": "nothing to reopen"
+    },
+    {
+      "op": "atomicJson.readJson",
+      "args": [
+        "$TMP/architecture/revision.json"
+      ],
+      "ignore": [
+        "manifest_digest",
+        "promoted_at"
+      ],
+      "expect": {
+        "schema_version": 1,
+        "revision": 1
+      }
+    },
+    {
+      "op": "receipts.writeMindOpen",
+      "args": [
+        "$TMP",
+        {
+          "mind": "architect",
+          "scope": "architecture",
+          "session": "sess-1",
+          "handle": "agent-1",
+          "generation": 1
+        }
+      ],
+      "ignore": ["ref", "record"],
+      "expect": {}
+    },
+    {
+      "op": "receipts.supersedeMind",
+      "args": [
+        "$TMP",
+        { "mind": "architect", "scope": "architecture", "reason": "supersede", "generation": 1 },
+        {
+          "mind": "architect",
+          "scope": "architecture",
+          "session": "sess-2",
+          "handle": "agent-2",
+          "generation": 2
+        }
+      ],
+      "ignore": ["retire", "open"],
+      "expect": {}
+    },
+    {
+      "op": "architectureTxn.promoteStaged",
+      "args": [
+        "$TMP/architecture",
+        2,
+        "sha256:2fbd7fdfcb6f31ad991361c2d7ca3304e7b804873032c2990c481c76071e528a",
+        { "mind": "architect", "scope": "architecture", "generation": 1 }
+      ],
+      "expectError": "is not live (generation 2 is)"
+    },
+    {
+      "op": "architectureTxn.promoteStaged",
+      "args": [
+        "$TMP/architecture",
+        2,
+        "sha256:2fbd7fdfcb6f31ad991361c2d7ca3304e7b804873032c2990c481c76071e528a",
+        { "mind": "architect", "scope": "architecture" }
+      ],
+      "expectError": "requires all of {mind, scope, generation} or none"
+    }
+  ]
+}

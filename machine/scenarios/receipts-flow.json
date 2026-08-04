@@ -1,0 +1,266 @@
+{
+  "name": "receipts-flow",
+  "steps": [
+    {
+      "op": "receipts.writeDispatch",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "seat": "implementer",
+          "transport": "codex",
+          "intended_family": "gpt",
+          "task_class": "chunk_implementation",
+          "prompt_ref": "briefs/C1.md",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "sess-abc" }
+        }
+      ],
+      "expect": { "ref": "ledger:0" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "sess-abc" },
+          "result_ref": "envelopes/implementation/D1.json",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expect": { "ref": "ledger:1" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeEnvelope",
+      "args": [
+        "$TMP",
+        "implementation",
+        "D1",
+        {
+          "state": "done",
+          "result": "chunk implemented",
+          "evidence": "suite green",
+          "risks": "none",
+          "artifact": "machine/src/receipts.js",
+          "question": "none"
+        }
+      ],
+      "expect": { "ref": "envelope:implementation/D1" },
+      "ignore": ["envelope"]
+    },
+    {
+      "op": "receipts.writeWorkflowReturn",
+      "args": [
+        "$TMP",
+        {
+          "workflow": "dev-chunk-cycle",
+          "run_ref": "run-1",
+          "return": "phase_complete",
+          "record_ref": "ledger:1"
+        }
+      ],
+      "expect": { "ref": "ledger:2" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeHoldOpen",
+      "args": [
+        "$TMP",
+        {
+          "hold_id": "H1",
+          "severity": "S2",
+          "summary": "codex transport unavailable mid-build",
+          "origin_ref": "ledger:2"
+        }
+      ],
+      "expect": { "ref": "ledger:3" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeHoldResolve",
+      "args": [
+        "$TMP",
+        { "hold_id": "H1", "exit": "resolved", "resolution_ref": "ledger:3" }
+      ],
+      "expect": { "ref": "ledger:4" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeDegradedRoute",
+      "args": [
+        "$TMP",
+        {
+          "route_id": "R1",
+          "expected": "sol",
+          "actual": "claude-fallback",
+          "reason": "codex unresponsive",
+          "scope_ref": "milestones/M1"
+        }
+      ],
+      "expect": { "ref": "ledger:5" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeMindOpen",
+      "args": [
+        "$TMP",
+        {
+          "mind": "designer",
+          "scope": "milestones/M1",
+          "session": "sess-mind-1",
+          "handle": "agent-7f3",
+          "generation": 1
+        }
+      ],
+      "expect": { "ref": "ledger:6" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeMindOpen",
+      "args": [
+        "$TMP",
+        {
+          "mind": "designer",
+          "scope": "milestones/M1",
+          "session": "sess-mind-rogue",
+          "handle": "agent-b12",
+          "generation": 1
+        }
+      ],
+      "expectError": "already exists with a different payload"
+    },
+    {
+      "op": "receipts.writeMindRetire",
+      "args": [
+        "$TMP",
+        { "mind": "designer", "scope": "milestones/M1", "reason": "supersede", "generation": 1 }
+      ],
+      "expectError": "written only by supersedeMind"
+    },
+    {
+      "op": "receipts.supersedeMind",
+      "args": [
+        "$TMP",
+        { "mind": "designer", "scope": "milestones/M1", "reason": "supersede", "generation": 1 },
+        {
+          "mind": "designer",
+          "scope": "milestones/M1",
+          "session": "sess-mind-2",
+          "handle": "agent-c99",
+          "generation": 2
+        }
+      ],
+      "ignore": ["retire", "open"],
+      "expect": {}
+    },
+    {
+      "op": "receipts.resolveRef",
+      "args": ["$TMP", "ledger:7"],
+      "ignore": ["ts"],
+      "expect": {
+        "schema_version": 1,
+        "seq": 7,
+        "kind": "mind-retire",
+        "correlation_id": "mind [\"designer\",\"milestones/M1\"]",
+        "mind": "designer",
+        "scope": "milestones/M1",
+        "reason": "supersede",
+        "generation": 1
+      }
+    },
+    {
+      "op": "receipts.resolveRef",
+      "args": ["$TMP", "ledger:8"],
+      "ignore": ["ts"],
+      "expect": {
+        "schema_version": 1,
+        "seq": 8,
+        "kind": "mind-open",
+        "correlation_id": "mind [\"designer\",\"milestones/M1\"]",
+        "mind": "designer",
+        "scope": "milestones/M1",
+        "session": "sess-mind-2",
+        "handle": "agent-c99",
+        "generation": 2
+      }
+    },
+    {
+      "op": "receipts.writeMindOpen",
+      "args": [
+        "$TMP",
+        {
+          "mind": "designer",
+          "scope": "milestones/M1",
+          "session": "sess-mind-3",
+          "handle": "agent-d41",
+          "generation": 3
+        }
+      ],
+      "expectError": "is still live"
+    },
+    {
+      "op": "receipts.writeMindOpen",
+      "args": [
+        "$TMP",
+        {
+          "mind": "designer",
+          "scope": "milestones/M1",
+          "session": "sess-mind-4",
+          "handle": "agent-e07",
+          "generation": 5
+        }
+      ],
+      "expectError": "generations do not skip"
+    },
+    {
+      "op": "receipts.writeMindRetire",
+      "args": [
+        "$TMP",
+        { "mind": "designer", "scope": "milestones/M1", "reason": "close", "generation": 4 }
+      ],
+      "expectError": "cannot retire before it is opened"
+    },
+    {
+      "op": "receipts.resolveRef",
+      "args": ["$TMP", "envelope:implementation/D1"],
+      "expect": {
+        "state": "done",
+        "result": "chunk implemented",
+        "evidence": "suite green",
+        "risks": "none",
+        "artifact": "machine/src/receipts.js",
+        "question": "none"
+      }
+    },
+    {
+      "op": "receipts.writeDispatch",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "D1",
+          "seat": "implementer",
+          "transport": "codex",
+          "intended_family": "gpt",
+          "task_class": "chunk_implementation",
+          "prompt_ref": "briefs/C1.md",
+          "transport_ref": { "pid": 4242, "pgid": 4242, "session": "sess-abc" }
+        }
+      ],
+      "expect": { "ref": "ledger:0" },
+      "ignore": ["record"]
+    },
+    {
+      "op": "receipts.writeHoldResolve",
+      "args": [
+        "$TMP",
+        { "hold_id": "H2", "exit": "resolved", "resolution_ref": "ledger:3" }
+      ],
+      "expectError": "no hold-open record for hold_id \"H2\""
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+{"type":"audit","seam":"seam-1","outcome":"accept","label":"dual","run_id":"run-7","ts":"2026-04-29T11:00:00Z"}
+{"type":"audit","seam":"phase-2.final","outcome":"accept","label":"single-family","run_id":"run-7","ts":"2026-05-01T17:05:00Z"}

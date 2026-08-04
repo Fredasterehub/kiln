@@ -1,0 +1,157 @@
+{
+  "name": "implementation-txn",
+  "steps": [
+    {
+      "op": "milestones.createMilestone",
+      "args": [
+        "$TMP",
+        { "id": "M1", "title": "Substrate", "designer_family": "gpt" }
+      ],
+      "ignore": ["created"],
+      "expect": { "milestoneId": "M1" }
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP",
+        "M1",
+        { "kind": "chunk-spec", "chunk_id": "C1", "brief_ref": "M1/spec.md#C1" }
+      ],
+      "ignore": ["chunksPath"],
+      "expect": { "seq": 1 }
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP",
+        "M1",
+        {
+          "kind": "chunk-start",
+          "chunk_id": "C1",
+          "implementer_seat": "sol",
+          "implementer_family": "gpt"
+        }
+      ],
+      "ignore": ["chunksPath"],
+      "expect": { "seq": 2 }
+    },
+    {
+      "op": "receipts.writeDispatch",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "EV3",
+          "seat": "implementer",
+          "transport": "codex",
+          "intended_family": "gpt",
+          "task_class": "chunk_implementation",
+          "prompt_ref": "briefs/C1.md",
+          "transport_ref": { "pid": 4003, "pgid": 4003, "session": "4003" }
+        }
+      ],
+      "ignore": ["record", "ref"]
+    },
+    {
+      "op": "receipts.writeDispatchTerminal",
+      "args": [
+        "$TMP",
+        {
+          "dispatch_id": "EV3",
+          "status": "ok",
+          "builder": "sol",
+          "transport_ref": { "pid": 4003, "pgid": 4003, "session": "4003" },
+          "result_ref": "results/EV3.md",
+          "model_id": "gpt-5.6-sol",
+          "result_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000003"
+        }
+      ],
+      "ignore": ["record"],
+      "expect": { "ref": "ledger:1" }
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP",
+        "M1",
+        {
+          "kind": "chunk-built",
+          "chunk_id": "C1",
+          "actual_family": "gpt",
+          "intended_family": "gpt",
+          "model_id": "gpt-5.6-sol",
+          "dispatch_ref": "ledger:1",
+          "result_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000003",
+          "diff_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ,
+        { "repoRoot": "/DEV/thelastskill/machine" }
+      ],
+      "ignore": ["chunksPath"],
+      "expect": { "seq": 3 }
+    },
+    {
+      "op": "milestones.recordChunk",
+      "args": [
+        "$TMP",
+        "M1",
+        {
+          "kind": "chunk-review",
+          "chunk_id": "C1",
+          "review": {
+            "family": "claude",
+            "verdict": "approve",
+            "ref": "envelopes/implementation/C1-review.json"
+          }
+        }
+      ],
+      "ignore": ["chunksPath"],
+      "expect": { "seq": 4 }
+    },
+    {
+      "op": "implementation.stagedDiffDigest",
+      "args": ["$TMP"],
+      "expectError": "is not a git repository"
+    },
+    {
+      "op": "implementation.sealChunk",
+      "args": [
+        "$TMP",
+        "M1",
+        "C1",
+        {
+          "diff_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "review_ref": "envelopes/implementation/C1-review.json",
+          "gate_ref": "ledger:0"
+        },
+        { "repoRoot": "$TMP" }
+      ],
+      "expectError": "is not a git repository"
+    },
+    {
+      "op": "implementation.closeMilestoneTxn",
+      "args": [
+        "$TMP",
+        "M1",
+        { "tag": "milestone/M1-green", "review_evidence": "envelopes/implementation/M1-review.json" },
+        { "repoRoot": "$TMP" }
+      ],
+      "expectError": "is not a git repository"
+    },
+    {
+      "op": "atomicJson.readJson",
+      "args": ["$TMP/milestones/index.json"],
+      "expect": {
+        "schema_version": 1,
+        "milestones": [
+          {
+            "id": "M1",
+            "title": "Substrate",
+            "designer_family": "gpt",
+            "toolchain_profile": null,
+            "status": "open"
+          }
+        ]
+      }
+    }
+  ]
+}
