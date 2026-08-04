@@ -78,6 +78,31 @@ function writeGate(treeRoot, gateId, exitCode, cmd = 'npm test') {
   });
 }
 
+// The stand-in for `receipts.writeEnvelope`, which is what the WORKFLOW calls
+// after each of the three transitions whose durable result is a deterministic
+// envelope. The resolver reads those transitions as a PAIR — the canonical
+// result plus the envelope — so a fixture that writes only the transaction half
+// leaves the tree at a torn transition, which is a different question from the
+// one most of these tests ask.
+function settleEnvelope(treeRoot, envelopeId) {
+  const file = path.join(treeRoot, 'envelopes', 'implementation', `${envelopeId}.json`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  writeAtomic(file, { state: 'done', result: 'settled', evidence: 'e', risks: 'none', artifact: 'a', question: 'none' });
+}
+
+// The open transition, whole: `createMilestone` is only its transaction half.
+function openMilestone(treeRoot, entry) {
+  const created = createMilestone(treeRoot, entry);
+  settleEnvelope(treeRoot, `open.${entry.id}`);
+  return created;
+}
+
+// The close transition, whole, for the fixtures that stand in for it by
+// flipping the index row the transaction would have flipped.
+function settleClose(treeRoot, milestoneId = 'M1') {
+  settleEnvelope(treeRoot, `close.${milestoneId}`);
+}
+
 // ---------- the milestone ladder ----------
 
 test('an architecture with no milestone open yet resolves to opening the first one', () => {
@@ -112,7 +137,7 @@ test('a tree whose architecture names no milestone at all is blocked, not silent
 
 test('an open milestone with a green preflight and nothing else on disk resolves to its spec', () => {
   const { treeRoot } = makeTree();
-  createMilestone(treeRoot, PROFILED);
+  openMilestone(treeRoot, PROFILED);
   writeGate(treeRoot, 'toolchain-preflight:M1', 0, 'true');
 
   const next = nextTransition(treeRoot);
@@ -125,7 +150,7 @@ test('an open milestone with a green preflight and nothing else on disk resolves
 
 test('a milestone declaring a toolchain profile preflights before it specs', () => {
   const { treeRoot } = makeTree();
-  createMilestone(treeRoot, {
+  openMilestone(treeRoot, {
     id: 'M1',
     title: 'Milestone M1',
     designer_family: 'gpt',
@@ -140,7 +165,7 @@ test('a milestone declaring a toolchain profile preflights before it specs', () 
 
 test('a red preflight BLOCKS the spec and cites the gate record that says so', () => {
   const { treeRoot } = makeTree();
-  createMilestone(treeRoot, {
+  openMilestone(treeRoot, {
     id: 'M1',
     title: 'Milestone M1',
     designer_family: 'gpt',
@@ -157,7 +182,7 @@ test('a red preflight BLOCKS the spec and cites the gate record that says so', (
 
 test('a green preflight makes spec the next transition, and the tree stays green on replay', () => {
   const { treeRoot } = makeTree();
-  createMilestone(treeRoot, {
+  openMilestone(treeRoot, {
     id: 'M1',
     title: 'Milestone M1',
     designer_family: 'gpt',
@@ -184,14 +209,14 @@ test('a green preflight makes spec the next transition, and the tree stays green
 // needs. The wall goes where the wall actually is.
 test('a milestone that declares no toolchain profile specs and builds normally', () => {
   const { treeRoot } = makeTree();
-  createMilestone(treeRoot, { id: 'M1', title: 'Milestone M1', designer_family: 'gpt' });
+  openMilestone(treeRoot, { id: 'M1', title: 'Milestone M1', designer_family: 'gpt' });
 
   assert.equal(nextTransition(treeRoot).transition, TRANSITIONS.SPEC);
 });
 
 test('a null-profile milestone blocks at the chunk gate, citing the command it cannot name', () => {
   const { treeRoot } = makeTree();
-  createMilestone(treeRoot, { id: 'M1', title: 'Milestone M1', designer_family: 'gpt' });
+  openMilestone(treeRoot, { id: 'M1', title: 'Milestone M1', designer_family: 'gpt' });
   writeChunkPlan(treeRoot, 'M1', ['C1']);
   buildC1(treeRoot);
   recordChunk(treeRoot, 'M1', {
@@ -211,7 +236,7 @@ test('a null-profile milestone blocks at the chunk gate, citing the command it c
 
 test('the resolver derives from disk alone: a fresh process reads the same answer', () => {
   const { treeRoot } = makeTree();
-  createMilestone(treeRoot, PROFILED);
+  openMilestone(treeRoot, PROFILED);
   writeGate(treeRoot, 'toolchain-preflight:M1', 0, 'true');
 
   const here = nextTransition(treeRoot);
@@ -244,7 +269,7 @@ function writeChunkPlan(treeRoot, milestoneId, chunkIds) {
 }
 
 function openM1(treeRoot, chunkIds = ['C1']) {
-  createMilestone(treeRoot, PROFILED);
+  openMilestone(treeRoot, PROFILED);
   writeGate(treeRoot, 'toolchain-preflight:M1', 0, 'true');
   writeChunkPlan(treeRoot, 'M1', chunkIds);
 }
@@ -286,9 +311,7 @@ function buildC1(treeRoot, chunkId = 'C1', dispatchId = 'D1') {
 }
 
 function settlePostSeal(treeRoot, chunkId = 'C1', milestoneId = 'M1') {
-  const file = path.join(treeRoot, 'envelopes', 'implementation', `postseal.${milestoneId}.${chunkId}.json`);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  writeAtomic(file, { state: 'done', result: 'settled', evidence: 'e', risks: 'none', artifact: 'a', question: 'none' });
+  settleEnvelope(treeRoot, `postseal.${milestoneId}.${chunkId}`);
 }
 
 function greenC1(treeRoot, chunkId = 'C1', dispatchId = 'D1') {
@@ -608,17 +631,82 @@ test('every milestone green resolves to advancing the phase, once', () => {
   greenC1(treeRoot);
   writeMilestoneReview(treeRoot, 'M1');
   writeGate(treeRoot, 'regression-floor:M1', 0);
-  // The close transaction is what flips the index entry; the fixture stands in
-  // for it so the resolver's own terminal rung is what is under test.
+  // The close transaction is what flips the index entry and the workflow's
+  // envelope is what completes the transition; the fixture stands in for both,
+  // so the resolver's own terminal rung is what is under test rather than a
+  // close still owed its record.
   const indexPath = path.join(treeRoot, 'milestones', 'index.json');
   const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
   index.milestones[0].status = 'green';
   writeAtomic(indexPath, index);
+  settleClose(treeRoot, 'M1');
 
   const next = nextTransition(treeRoot);
 
   assert.equal(next.transition, TRANSITIONS.PHASE_ADVANCE);
   assert.equal(next.return, 'phase_complete');
+});
+
+// A COMPLETION ENVELOPE IS A MILESTONE-SCOPED IDENTITY, and both of these
+// fixtures are built so that the wrong answer is a DIFFERENT answer: two
+// milestones, one settled and one torn, so an envelope id that dropped its
+// milestone would let the settled one answer for the torn one and the tear
+// would be invisible. The envelope each fixture writes is the one the RESOLVER
+// itself named — the workflow writes `next.envelope_id` and nothing else — so
+// no fixture here derives an identity production is supposed to own.
+function twoMilestones() {
+  return makeTree({
+    milestones: [
+      { id: 'M1', order: 1, toolchain_profile: 'node-cli' },
+      { id: 'M2', order: 2, toolchain_profile: 'node-cli' },
+    ],
+  });
+}
+
+function greenIndexRow(treeRoot, milestoneId) {
+  const indexPath = path.join(treeRoot, 'milestones', 'index.json');
+  const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+  index.milestones.find((m) => m.id === milestoneId).status = 'green';
+  index.milestones.find((m) => m.id === milestoneId).review_evidence = `the ${milestoneId} slice composes`;
+  writeAtomic(indexPath, index);
+}
+
+test('a close envelope answers only for the milestone it names', () => {
+  const { treeRoot } = twoMilestones();
+  for (const id of ['M1', 'M2']) {
+    openMilestone(treeRoot, { id, title: `Milestone ${id}`, designer_family: 'gpt', toolchain_profile: 'node-cli' });
+    greenIndexRow(treeRoot, id);
+  }
+  // M1's close is finished, the way the workflow finishes it: the envelope the
+  // resolver's own close descriptor named.
+  const closeM1 = nextTransition(treeRoot);
+  assert.equal(closeM1.milestone_id, 'M1');
+  settleEnvelope(treeRoot, closeM1.envelope_id);
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.CLOSE);
+  assert.equal(next.milestone_id, 'M2');
+  assert.equal(next.envelope_id, 'close.M2');
+  assert.equal(next.review_evidence, 'the M2 slice composes');
+});
+
+test('an open envelope answers only for the milestone it names', () => {
+  const { treeRoot } = twoMilestones();
+  const openM1Next = nextTransition(treeRoot);
+  assert.equal(openM1Next.milestone_id, 'M1');
+  createMilestone(treeRoot, { id: 'M1', title: 'Milestone M1', designer_family: 'gpt', toolchain_profile: 'node-cli' });
+  settleEnvelope(treeRoot, openM1Next.envelope_id);
+  greenIndexRow(treeRoot, 'M1');
+  settleEnvelope(treeRoot, nextTransition(treeRoot).envelope_id);
+  // M2's transaction commits and its session dies before its own envelope.
+  createMilestone(treeRoot, { id: 'M2', title: 'Milestone M2', designer_family: 'gpt', toolchain_profile: 'node-cli' });
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.OPEN_MILESTONE);
+  assert.equal(next.milestone_id, 'M2');
+  assert.equal(next.envelope_id, 'open.M2');
 });
 
 // ---------- completion advances without another worker turn ----------
@@ -637,7 +725,7 @@ test('each rung advances on its own evidence alone, walked end to end', () => {
   };
 
   step(); // open-milestone
-  createMilestone(treeRoot, PROFILED);
+  openMilestone(treeRoot, PROFILED);
   step(); // toolchain-preflight
   writeGate(treeRoot, 'toolchain-preflight:M1', 0, 'true');
   step(); // spec
@@ -689,6 +777,7 @@ test('each rung advances on its own evidence alone, walked end to end', () => {
   const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
   index.milestones[0].status = 'green';
   writeAtomic(indexPath, index);
+  settleClose(treeRoot, 'M1');
   const done = step(); // phase-advance
 
   assert.deepEqual(seen, [
@@ -717,7 +806,7 @@ test('each rung advances on its own evidence alone, walked end to end', () => {
 test('every rung of the ladder is re-entrant: asked again, and asked by a new process, it answers the same', () => {
   const { treeRoot } = makeTree();
   const advance = [
-    () => createMilestone(treeRoot, PROFILED),
+    () => openMilestone(treeRoot, PROFILED),
     () => writeGate(treeRoot, 'toolchain-preflight:M1', 0, 'true'),
     () => writeChunkPlan(treeRoot, 'M1', ['C1']),
     () => recordChunk(treeRoot, 'M1', { kind: 'chunk-spec', chunk_id: 'C1', brief_ref: 'M1/briefs/C1.json' }),
@@ -1236,7 +1325,7 @@ test('an ordinary milestone dispatches the Sol implementer; a UI/creative one di
   const ordinary = makeTree({
     milestones: [{ id: 'M1', order: 1, designer_family: 'gpt', toolchain_profile: 'node-cli' }],
   }).treeRoot;
-  createMilestone(ordinary, { id: 'M1', title: 'Milestone M1', designer_family: 'gpt', toolchain_profile: 'node-cli' });
+  openMilestone(ordinary, { id: 'M1', title: 'Milestone M1', designer_family: 'gpt', toolchain_profile: 'node-cli' });
   writeGate(ordinary, 'toolchain-preflight:M1', 0, 'true');
   writeChunkPlan(ordinary, 'M1', ['C1']);
   recordChunk(ordinary, 'M1', { kind: 'chunk-spec', chunk_id: 'C1', brief_ref: 'M1/briefs/C1.json' });
@@ -1249,7 +1338,7 @@ test('an ordinary milestone dispatches the Sol implementer; a UI/creative one di
   const creative = makeTree({
     milestones: [{ id: 'M1', order: 1, designer_family: 'claude', toolchain_profile: 'node-cli' }],
   }).treeRoot;
-  createMilestone(creative, {
+  openMilestone(creative, {
     id: 'M1',
     title: 'Milestone M1',
     designer_family: 'claude',

@@ -86,7 +86,16 @@ test('scaffoldTree returns {created} listing every path it touched', () => {
 
 // --- genesis files parse + header-valid ---
 
-test('state.json genesis carries schema_version, created_ts, and the resume pointer fields (no gates/checklist keys)', () => {
+// The genesis state file, and the two fields it deliberately does NOT carry.
+// `current_milestone` and `current_chunk` were written here at scaffold time and
+// by nothing else, ever: across a whole implementation phase of the first live
+// fire — eleven productive invocations, a milestone opened, chunks sealed — both
+// stayed at their genesis `null`, because position is derived from
+// `milestones/index.json` and the chunk records and no writer was ever owed
+// them. A key that no operation advances is not a resume pointer; it is a
+// second, permanently stale answer to a question the tree already answers, and
+// the honest form of "dead" is absent rather than null.
+test('state.json genesis carries schema_version, created_ts and the phase fields, and carries no milestone/chunk pointer keys', () => {
   const tmp = makeTmpDir();
   scaffoldTree(tmp, { routingConfigPath: ROUTING_CONFIG });
   const state = JSON.parse(
@@ -96,12 +105,14 @@ test('state.json genesis carries schema_version, created_ts, and the resume poin
   assert.equal(typeof state.created_ts, 'string');
   assert.equal(state.phase, 'onboarding');
   assert.deepEqual(state.phase_status, {});
-  assert.equal(state.current_milestone, null);
-  assert.equal(state.current_chunk, null);
   assert.equal(typeof state.next_action, 'string');
   assert.equal(typeof state.updated_utc, 'string');
   assert.equal('gates' in state, false);
   assert.equal('checklist' in state, false);
+  // `in`, not a null check: a genesis writing `null` passes any comparison
+  // against the value and is exactly what this deletes.
+  assert.equal('current_milestone' in state, false);
+  assert.equal('current_chunk' in state, false);
 });
 
 test('settings.json genesis is an empty object (no model judgment at scaffold time)', () => {

@@ -433,8 +433,11 @@ test('NON-GOAL 2 (the anti-synthesis test): after the harvest, state.json is sti
   assert.equal(state.phase, 'onboarding');
   assert.equal(state.next_action, 'onboarding');
   assert.deepEqual(state.phase_status, {});
-  assert.equal(state.current_milestone, null);
-  assert.equal(state.current_chunk, null);
+  // No position is synthesized, and there is no longer a key in which to
+  // synthesize one: genesis writes no milestone/chunk pointer at all, so a
+  // harvest that invented one would have had to invent the field too.
+  assert.equal('current_milestone' in state, false);
+  assert.equal('current_chunk' in state, false);
   // The old run's own vocabulary never appears in the new state file.
   for (const legacyKey of ['stage', 'next_action_key', 'active_slice', 'revision', 'render_digest', 'seals']) {
     assert.equal(

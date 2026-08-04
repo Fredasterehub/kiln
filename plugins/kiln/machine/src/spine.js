@@ -179,16 +179,38 @@ function regressionGateId(milestoneId) {
   return `regression-floor:${milestoneId}`;
 }
 
-// The post-seal repair's own durable record. An envelope rather than a ledger
-// kind: the machine already has a record for "one unit of work, and what came
-// of it", and inventing a kind for a cleanup step would be complexity that has
-// to earn itself.
-function postSealEnvelopeId(milestoneId, chunkId) {
-  return `postseal.${milestoneId}.${chunkId}`;
+// THE COMPLETION HALF OF A TRANSITION THAT LEAVES NO LEDGER RECORD. Some
+// transitions land their whole result as canonical files and a git commit —
+// the post-seal repair, opening a milestone, closing one — and their durable
+// record is a deterministic envelope rather than a ledger kind: the machine
+// already has a record for "one unit of work, and what came of it", and
+// inventing a kind for each of them would be complexity that has to earn
+// itself.
+//
+// That makes each of them a PAIR — the transaction, then the envelope — with a
+// crash point between the two, and the first live fire fell into exactly it:
+// `open-milestone` committed and the session died before the envelope, so the
+// milestone was open on disk with no completion record, this resolver answered
+// the rung after it, and nothing was ever going to write one. So whether the
+// transition is owed is derived from BOTH halves, for all three of them: the
+// canonical result AND the envelope. Every one of these transactions answers a
+// replay from what it already wrote, which is what makes re-resolving the same
+// transition the whole repair — no reconciliation transition, no new receipt
+// kind, and no second way to do one thing.
+function envelopePath(treeRoot, envelopeId) {
+  return path.join(treeRoot, 'envelopes', 'implementation', `${envelopeId}.json`);
 }
 
-function postSealEnvelopePath(treeRoot, milestoneId, chunkId) {
-  return path.join(treeRoot, 'envelopes', 'implementation', `${postSealEnvelopeId(milestoneId, chunkId)}.json`);
+function openEnvelopeId(milestoneId) {
+  return `open.${milestoneId}`;
+}
+
+function closeEnvelopeId(milestoneId) {
+  return `close.${milestoneId}`;
+}
+
+function postSealEnvelopeId(milestoneId, chunkId) {
+  return `postseal.${milestoneId}.${chunkId}`;
 }
 
 function chunkGateId(milestoneId, chunkId) {
@@ -403,6 +425,25 @@ function blocked(reason, fields = {}) {
   return Object.assign({ transition: TRANSITIONS.BLOCKED, return: RETURNS.BLOCKED, reason }, fields);
 }
 
+// The open transition, built from the architecture's own entry. Two rungs
+// return it and they return the SAME descriptor: a milestone the index does not
+// carry yet, and one whose transaction committed without its envelope.
+// `openMilestoneTxn` answers a replay from the index entry it already wrote, so
+// the second is the first re-run, and only the reason differs.
+function openMilestone(milestone, reason) {
+  return transition(TRANSITIONS.OPEN_MILESTONE, {
+    milestone_id: milestone.id,
+    // The architecture's own description, carried through. Dropping it is
+    // how a milestone reached the chunk ladder with no toolchain profile and
+    // bypassed its preflight entirely.
+    envelope_id: openEnvelopeId(milestone.id),
+    title: isNonEmptyString(milestone.title) ? milestone.title : milestone.id,
+    designer_family: milestone.designer_family,
+    toolchain_profile: milestone.toolchain_profile === undefined ? null : milestone.toolchain_profile,
+    reason,
+  });
+}
+
 // ---------- nextTransition ----------
 
 // nextTransition(treeRoot) — the one question this module answers: given what
@@ -478,6 +519,29 @@ function nextTransition(treeRoot) {
     }
   }
 
+  // A CLOSE THAT TORE. The green index entry is the close transaction's own
+  // receipt; the envelope is the transition's completion record. Asked here —
+  // ahead of the active milestone's ladder and ahead of the phase advance —
+  // because both of those walk past a green milestone, and a milestone the
+  // ladder has walked past is one nothing will ever come back to.
+  for (const milestone of planned) {
+    const entry = index.find((candidate) => candidate.id === milestone.id);
+    if (!isPlainObject(entry) || entry.status !== 'green') continue;
+    if (fs.existsSync(envelopePath(treeRoot, closeEnvelopeId(milestone.id)))) continue;
+    return transition(TRANSITIONS.CLOSE, {
+      milestone_id: milestone.id,
+      envelope_id: closeEnvelopeId(milestone.id),
+      // FROM THE GREEN ENTRY, NOT FROM `review.json`. The entry is where the
+      // close durably bound the evidence it closed under, and
+      // `closeMilestoneTxn` compares a re-call's evidence against exactly that
+      // — a replay citing the review artifact instead would fail closed the
+      // moment the artifact and the entry disagreed, which is the one case
+      // this rung exists to survive.
+      review_evidence: entry.review_evidence,
+      reason: `milestone ${milestone.id} is closed on disk and has no close envelope — the transition tore between its transaction and its record`,
+    });
+  }
+
   if (active === undefined) {
     return Object.assign(
       transition(TRANSITIONS.PHASE_ADVANCE, {
@@ -488,17 +552,16 @@ function nextTransition(treeRoot) {
   }
 
   if (statusOf(active.id) === null) {
-    return transition(TRANSITIONS.OPEN_MILESTONE, {
-      milestone_id: active.id,
-      // The architecture's own description, carried through. Dropping it is
-      // how a milestone reached the chunk ladder with no toolchain profile and
-      // bypassed its preflight entirely.
-      envelope_id: `open.${active.id}`,
-      title: isNonEmptyString(active.title) ? active.title : active.id,
-      designer_family: active.designer_family,
-      toolchain_profile: active.toolchain_profile === undefined ? null : active.toolchain_profile,
-      reason: `milestone ${active.id} is next in the architecture and has not been opened`,
-    });
+    return openMilestone(active, `milestone ${active.id} is next in the architecture and has not been opened`);
+  }
+
+  // AN OPEN THAT TORE — the same question at the other end of the milestone's
+  // life, and the one the first live fire actually hit.
+  if (!fs.existsSync(envelopePath(treeRoot, openEnvelopeId(active.id)))) {
+    return openMilestone(
+      active,
+      `milestone ${active.id} is open on disk and has no open envelope — the transition tore between its transaction and its record`
+    );
   }
 
   const indexEntry = index.find((candidate) => candidate.id === active.id);
@@ -755,7 +818,7 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
         // by their own rung, and whether that rung is owed is derived from the
         // pair — the green record, and the envelope the repair writes — so a
         // crash between them is visible rather than skipped forever.
-        if (!fs.existsSync(postSealEnvelopePath(treeRoot, milestoneId, chunkId))) {
+        if (!fs.existsSync(envelopePath(treeRoot, postSealEnvelopeId(milestoneId, chunkId)))) {
           // The journey this chunk's plan nominated, carried to the rung that
           // records it. The catalog entry waits for the seal deliberately: the
           // script is authored inside the capsule and reviewed with the chunk,

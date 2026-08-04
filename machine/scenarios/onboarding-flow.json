@@ -96,8 +96,6 @@
         "schema_version": 1,
         "phase": "onboarding",
         "phase_status": {},
-        "current_milestone": null,
-        "current_chunk": null,
         "next_action": "onboarding",
         "gates": [
           { "name": "preflight-node", "cmd": "node --version", "last_result": "pass" },

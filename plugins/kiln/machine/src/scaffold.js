@@ -104,18 +104,26 @@ function scaffoldTree(targetRoot, opts = {}) {
     created.push(abs);
   }
 
-  // state.json — THE resume pointer. Deliberately carries no
+  // state.json — the PHASE pointer, and nothing finer. Deliberately carries no
   // "gates"/"checklist" fields: those are not part of the binding schema
   // (check-honesty.js treats their absence as zero declared obligations,
   // not a violation — see check-honesty.js's state-contract comment).
+  //
+  // AND NO `current_milestone` / `current_chunk`. This scaffold was their only
+  // writer in the whole machine: across a complete implementation phase of the
+  // first live fire — a milestone opened, chunks built, sealed and reviewed —
+  // both sat at the `null` written here, because position is DERIVED from
+  // milestones/index.json and the chunk records, which is what spine.js, wake
+  // and the position view all read. A field nothing advances is not a pointer;
+  // it is a second answer that is permanently wrong, and a resume that ever
+  // trusted it would resume at genesis. Trees written before this still carry
+  // the two keys; they are inert, and no reader may treat them as authoritative.
   const statePath = path.join(root, 'state.json');
   writeAtomic(statePath, {
     schema_version: 1,
     created_ts: RFC3339(),
     phase: 'onboarding',
     phase_status: {},
-    current_milestone: null,
-    current_chunk: null,
     next_action: 'onboarding',
     updated_utc: RFC3339(),
   });

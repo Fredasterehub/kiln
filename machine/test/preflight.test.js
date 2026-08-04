@@ -171,9 +171,11 @@ test('run: preserves every field scaffold.scaffoldTree wrote to state.json, addi
   assert.equal(after.created_ts, before.created_ts);
   assert.equal(after.phase, before.phase);
   assert.deepEqual(after.phase_status, before.phase_status);
-  assert.equal(after.current_milestone, before.current_milestone);
-  assert.equal(after.current_chunk, before.current_chunk);
   assert.equal(after.next_action, before.next_action);
+  // The merge adds gates/preflight and INVENTS nothing: the two dead position
+  // pointers genesis stopped writing must not reappear here either.
+  assert.equal('current_milestone' in after, false);
+  assert.equal('current_chunk' in after, false);
   assert.ok(Array.isArray(after.gates) && after.gates.length === 3);
   assert.ok(typeof after.preflight === 'object' && after.preflight !== null);
 });

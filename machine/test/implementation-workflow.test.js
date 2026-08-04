@@ -76,7 +76,7 @@ const { nextTransition } = require('../src/spine.js');
 const { assembleSuite } = require('../src/verification.js');
 const { writeAtomic, readJson } = require('../src/atomic-json.js');
 const { readRecords } = require('../src/stream.js');
-const { writeSteerRaise } = require('../src/receipts.js');
+const { writeSteerRaise, resolveRef } = require('../src/receipts.js');
 
 const SCRIPT_PATH = path.join(__dirname, '..', '..', 'workflows', 'implementation.js');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -1092,6 +1092,131 @@ test('the ladder finishes after an invocation is killed at any rung', async () =
       assert.equal(recs.filter((r) => r.kind === 'chunk-start').length, 1, `${rung}/${op}: started more than once`);
     }
 
+  }
+});
+
+// ---------- the envelope is the other half of the transaction ----------
+
+// F7 of the first live fire. `open-milestone` committed its transaction and the
+// session died before `receipts.writeEnvelope`: the milestone was open on disk,
+// its completion envelope was permanently absent, and the resolver's next answer
+// was the rung AFTER the torn one — so nothing was ever going to write it. The
+// kill matrix above never caught it because its windows are the three ops it
+// names, and this window sits between a transaction and its receipt.
+//
+// `post-seal` has derived "is this owed" from the PAIR since D4 — the green
+// record, plus the envelope the repair writes. Open and close now answer the
+// same way, with no new transition name and no new receipt kind: the existing
+// transition is resolved again, its idempotent transaction replays, and the
+// existing envelope writer finishes what it started.
+//
+// Driven at both ends of a milestone's life, on a real tree, killing at the one
+// window between the transaction and its record.
+const ENVELOPE_WINDOWS = [
+  {
+    rung: 'open-milestone',
+    envelope: 'open.M1',
+    // What the transaction had already committed when the session died — and
+    // what there must still be exactly one of after the replay. Both halves of
+    // the genesis are counted: `createMilestone` is one-shot and throws on a
+    // repeat, so a replay that re-ran it would fail loudly, but a replay that
+    // wrote a SECOND index row through some other route would not.
+    committed: (project) => ({
+      entries: indexRows(project.treeRoot).map((m) => `${m.id}:${m.status}`),
+      genesis: readRecords(path.join(project.treeRoot, 'milestones', 'M1', 'chunks.jsonl')).records.filter(
+        (r) => r.kind === 'genesis'
+      ).length,
+    }),
+    expected: { entries: ['M1:open'], genesis: 1 },
+    // Where the ladder goes once the pair is complete — and, before this rung
+    // existed, where it went while the envelope was still missing.
+    next: 'toolchain-preflight',
+  },
+  {
+    rung: 'close',
+    envelope: 'close.M1',
+    // The close's canonical result is three things in a real repository, and a
+    // second close would show up in any of them: the green index row, the
+    // annotated tag, and the merge commit carrying the milestone's close
+    // trailer.
+    committed: (project) => ({
+      entries: indexRows(project.treeRoot).map((m) => `${m.id}:${m.status}`),
+      tags: gitLines(project.repoRoot, ['tag', '--list', 'M1-green']).length,
+      merges: gitLines(project.repoRoot, ['log', '--all', '--format=%H', '--grep', 'Kiln-Milestone-Close: M1']).length,
+    }),
+    expected: { entries: ['M1:green'], tags: 1, merges: 1 },
+    next: 'phase-advance',
+  },
+];
+
+function indexRows(treeRoot) {
+  const index = readJson(path.join(treeRoot, 'milestones', 'index.json'), null);
+  return index === null ? [] : index.milestones;
+}
+
+function gitLines(repoRoot, args) {
+  return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n')
+    .filter((line) => line !== '');
+}
+
+test('a transition killed between its transaction and its envelope is owed the envelope, and the replay writes exactly one', async () => {
+  for (const window of ENVELOPE_WINDOWS) {
+    const project = makeProject();
+    await driveTo(project, [window.rung], { budget: 40, stopBefore: true });
+    assert.equal(
+      nextTransition(project.treeRoot).transition,
+      window.rung,
+      `stopBefore left the ladder past ${window.rung}, so this kill would hit the wrong rung`
+    );
+
+    let fired = 0;
+    await invokeWorkflow(project.treeRoot, {
+      seat: makeSeat(project),
+      onHands: async (prompt) => {
+        if (payloadIn(prompt).op === 'receipts.writeEnvelope') {
+          fired += 1;
+          throw new Error(`the session died just before the ${window.rung} envelope`);
+        }
+      },
+    }).catch(() => {});
+    // VERIFY THE VERIFIER, then verify what it left behind. The counter proves
+    // the kill fired; it cannot prove the transaction ran, because `onHands`
+    // fires BEFORE its operation. Only the postcondition on disk proves that,
+    // and it is the postcondition that makes this the torn window rather than
+    // an ordinary crash before the work.
+    assert.equal(fired, 1, `${window.rung}: the kill never fired, so this case proved nothing`);
+    const envelopeFile = path.join(project.treeRoot, 'envelopes', 'implementation', `${window.envelope}.json`);
+    assert.deepEqual(
+      window.committed(project),
+      window.expected,
+      `${window.rung}: the transaction did not commit, so the kill landed somewhere other than the torn window`
+    );
+    assert.equal(fs.existsSync(envelopeFile), false, `${window.rung}: the envelope survived the kill`);
+
+    assert.equal(
+      nextTransition(project.treeRoot).transition,
+      window.rung,
+      `${window.rung}: a committed transaction with no envelope must resolve back to its own transition`
+    );
+
+    const { result } = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+
+    assert.equal(result.transition, window.rung);
+    assert.equal(result.record_ref, `envelope:implementation/${window.envelope}`);
+    // Resolvable through the grammar's own decoder, not merely a path that
+    // exists: the return contract is that a later reader can resolve what the
+    // invocation cites.
+    assert.equal(resolveRef(project.treeRoot, result.record_ref).state, 'done');
+    assert.equal(fs.existsSync(envelopeFile), true, `${window.rung}: the replay did not finish the pair`);
+    assert.deepEqual(
+      window.committed(project),
+      window.expected,
+      `${window.rung}: the replay duplicated what the transaction had already committed`
+    );
+    // The ordinary ladder resumes. Nothing about the repair is sticky: with
+    // both halves on disk the tree resolves to the rung after it.
+    assert.equal(nextTransition(project.treeRoot).transition, window.next);
   }
 });
 

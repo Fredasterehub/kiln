@@ -27,6 +27,18 @@
       "expect": {}
     },
     {
+      "note": "The other half of the open transition. The transaction alone is a torn transition — the resolver reads open as a PAIR and asks for it again until its deterministic envelope lands, which is what the first live fire needed and did not have.",
+      "op": "receipts.writeEnvelope",
+      "args": [
+        "$TMP",
+        "implementation",
+        "open.M1",
+        { "state": "done", "result": "milestone M1 is open", "evidence": "opened", "risks": "none", "artifact": "milestones/index.json", "question": "none" }
+      ],
+      "ignore": ["envelope"],
+      "expect": { "ref": "envelope:implementation/open.M1" }
+    },
+    {
       "op": "spine.nextTransition",
       "args": ["$TMP"],
       "expect": { "transition": "toolchain-preflight", "return": "beat", "milestone_id": "M1", "profile_id": "node-cli", "gate_id": "toolchain-preflight:M1" },
