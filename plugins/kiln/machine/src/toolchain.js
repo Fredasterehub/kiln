@@ -330,6 +330,40 @@ function composeSuite(profileId, pmOrDir, opts = {}) {
   return flags === '' ? template : `${template} ${flags}`;
 }
 
+// sanctionedGateCommands(profileId, role) -> the exact command strings this
+// machine itself composes for a gate role: 'install', 'suite' or 'probe'. It
+// answers the question a GATE RECORD cannot: the record says which id a result
+// was filed under and which command produced it, and only the profile knows
+// whether that command is the one the machine would have run.
+//
+// WHY A SET AND NOT A STRING. `node-web` substitutes a package manager into
+// both its install and its suite, and which manager a project resolves to is a
+// fact about that project's directory — a lockfile, a `packageManager` field,
+// or a PATH probe that SPAWNS. A reader that must not spawn (the resolver is
+// pure over disk, and that is a property worth more than this one distinction)
+// therefore cannot narrow the four forms to one, so it accepts the profile's own
+// command under any known manager and nothing else. The other two profiles
+// substitute nothing and collapse to a single form.
+//
+// DERIVED THROUGH THE COMPOSERS THEMSELVES, never through a second reading of
+// the templates: a checker with its own copy of the substitution rules is a
+// second truth about what the command is, and the first divergence would be a
+// door that refuses the very command the workflow just ran.
+function sanctionedGateCommands(profileId, role) {
+  assertKnownProfileId(profileId);
+  const registry = loadProfiles();
+  if (role === 'probe') return [registry.profiles[profileId].probe_cmd];
+  if (role !== 'install' && role !== 'suite') {
+    throw new TypeError(`toolchain: role must be one of install, suite, probe (got ${JSON.stringify(role)})`);
+  }
+  const compose = role === 'install' ? composeInstall : composeSuite;
+  const forms = new Set();
+  for (const pm of KNOWN_PACKAGE_MANAGERS) {
+    forms.add(compose(profileId, pm));
+  }
+  return [...forms];
+}
+
 // The manager both composeInstall and composeSuite resolve the same way: a
 // known manager name is used directly, anything else is a target directory to
 // detect one in, and a directory with no detectable manager has nothing honest
@@ -627,6 +661,7 @@ module.exports = {
   detectPackageManager,
   composeInstall,
   composeSuite,
+  sanctionedGateCommands,
   probeSatisfied,
   scaffoldProfile,
   PROFILE_DEPENDENCY_DIRS,

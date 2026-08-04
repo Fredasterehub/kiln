@@ -63,6 +63,7 @@ const { SEAT_AGENTS } = require('./validators.js');
 // lawful reviewer for this chunk" out of the same disk this module already
 // reads, and writes nothing.
 const { reviewerAvailability } = require('./family-evidence.js');
+const { sanctionedGateCommands } = require('./toolchain.js');
 
 // The transition vocabulary, closed. A name that is not in here is not a
 // thing the workflow can be asked to do.
@@ -178,6 +179,105 @@ function preflightGateId(milestoneId) {
 
 function regressionGateId(milestoneId) {
   return `regression-floor:${milestoneId}`;
+}
+
+// The install the preflight rung runs when its probe comes back unsatisfied.
+// Named here because it is now read as well as written: it is the durable
+// record the preflight's re-run door opens on.
+function installGateId(milestoneId) {
+  return `toolchain-install:${milestoneId}`;
+}
+
+// ---------- the three re-run doors ----------
+//
+// A RED GATE USED TO BE A TERMINUS. The resolver blocked for as long as a
+// gate's latest record was red, and nothing on the workflow path could ever put
+// a green one on the tree — so a transient red (an install that failed, a
+// toolchain repaired since, a suite that could not run) ended the phase's own
+// progress permanently, whatever was true of the world afterwards.
+//
+// THE TRACE, ONE ROW PER RUNG. There is no universal re-run token, because
+// there is no universal repair: each of the three IMPLEMENTATION-owned gates
+// fails about a different thing, so each one names the repair for ITS failure
+// and reads exactly that record.
+//
+//   toolchain-preflight   the toolchain is not there
+//                         -> run the profile's own install through `runGate`
+//                         -> green `toolchain-install:<M>`, later than the failure
+//
+//   chunk-gate            the chunk's suite could not be run green where the
+//                         chunk's work is staged
+//                         -> re-attest the milestone's toolchain by running the
+//                            profile's probe through `runGate`
+//                         -> green `toolchain-preflight:<M>`, later than the failure
+//
+//   regression-floor      the slice breaks the project
+//                         -> the slice's own constituents measured again: a
+//                            planned chunk's suite run through `runGate`
+//                         -> green `chunk:<M>:<planned chunk>`, later than the failure
+//
+// EVERY DOOR IS A MEASUREMENT, NEVER A WORD. All three records come from
+// `check-honesty.js#runGate`, the one sanctioned command-execution-plus-evidence
+// mechanism, which runs the command and records the exit code the process really
+// returned. So an operator's statement — spoken, steered, or written into any
+// artifact — opens nothing here: what opens a door is a command that was run and
+// an exit code that was observed, and this resolver never interprets prose.
+//
+// AND THE MEASUREMENT HAS TO BE OF THE SANCTIONED ACTION. A gate id says where a
+// result was FILED, never what was run: `runGate` takes both the id and the
+// command from its caller, so `true` under `toolchain-install:<M>` is a real
+// green measurement of nothing at all, and a door that read only the id would
+// open on it. Each door therefore matches the record's COMMAND against the exact
+// forms this milestone's own profile composes for that repair — every gate
+// record carries the command it ran, so the evidence for this was already on
+// disk. That is what makes a door bound to the repair ACTION rather than to a
+// convenient exit code.
+//
+// EVERY DOOR IS SINGLE-USE, BY ORDERING RATHER THAN BY A FLAG. The repair must
+// be LATER than the failure it answers, and the authorized run appends its own
+// gate record after it — so a re-run that fails again leaves the repair older
+// than the newest failure and the block stands, without anything having to
+// remember that an authorization was spent. It is the same law that makes the
+// LATEST record for a gate id the one that counts, applied to the repair.
+//
+// WHAT A DOOR DOES NOT DO. It re-runs the gate; it does not weaken what the gate
+// passes on, and it opens no route around a stop that belongs to someone else. A
+// chunk gate that runs again still has to come back green before its chunk
+// seals, and the chunk still seals under the review it already has — a door here
+// re-attests the world the gate ran in, never the work the gate ran over.
+function repairedSince(records, repairGateId, failedSeq, sanctioned) {
+  const latest = latestGate(records, repairGateId);
+  if (latest === null || latest.exit_code !== 0 || latest.seq <= failedSeq) return null;
+  return sanctioned.includes(latest.cmd) ? latest : null;
+}
+
+// The commands a door will accept for one repair role, FAIL-CLOSED. The profile
+// id is read off `milestones/index.json` like any other disk fact, so a tree
+// carrying one this machine does not know has no sanctioned vocabulary at all —
+// and a door with no vocabulary opens on nothing, which leaves the block exactly
+// where it already was. Every other path keeps behaving as it did: a resolver
+// that started throwing on a malformed profile would be answering a different
+// question than the one it was asked.
+function sanctionedFor(profileId, role) {
+  try {
+    return sanctionedGateCommands(profileId, role);
+  } catch {
+    return [];
+  }
+}
+
+// The floor's repair, which is the only one of the three whose evidence can
+// arrive under more than one id: the slice is its chunks, so any chunk THIS
+// MILESTONE PLANS may carry it. The plan is what bounds the vocabulary — a gate
+// id for a chunk this milestone does not plan, or for another milestone's chunk
+// of the same name, is a different id and answers nothing. Read in plan order,
+// so the record cited is derived rather than dependent on ledger accidents.
+function chunkRepairSince(records, milestoneId, plannedChunks, failedSeq, sanctioned) {
+  for (const chunkId of plannedChunks) {
+    const repair = repairedSince(records, chunkGateId(milestoneId, chunkId), failedSeq, sanctioned);
+    if (repair !== null) return repair;
+  }
+  return null;
 }
 
 // THE COMPLETION HALF OF A TRANSITION THAT LEAVES NO LEDGER RECORD. Some
@@ -641,10 +741,21 @@ function nextTransition(treeRoot) {
     });
   }
   if (preflight.exit_code !== 0) {
-    return blocked(
-      `the toolchain preflight for milestone ${active.id} last exited ${preflight.exit_code} — nothing after it is reachable until a green preflight gate is on record`,
-      { milestone_id: active.id, record_ref: `ledger:${preflight.seq}` }
-    );
+    const repair = repairedSince(records, installGateId(active.id), preflight.seq, sanctionedFor(profileId, 'install'));
+    if (repair === null) {
+      return blocked(
+        `the toolchain preflight for milestone ${active.id} last exited ${preflight.exit_code} — nothing after it is reachable until a green preflight gate is on record`,
+        { milestone_id: active.id, record_ref: `ledger:${preflight.seq}` }
+      );
+    }
+    return transition(TRANSITIONS.TOOLCHAIN_PREFLIGHT, {
+      milestone_id: active.id,
+      profile_id: profileId,
+      gate_id: preflightGateId(active.id),
+      failed_gate_ref: `ledger:${preflight.seq}`,
+      repair_ref: `ledger:${repair.seq}`,
+      reason: `the toolchain preflight for milestone ${active.id} last exited ${preflight.exit_code}, and the profile's install has run green since — the preflight is asked again on that evidence, and its own re-probe is what decides`,
+    });
   }
 
   // A worker is waiting on an answer. Nothing else it was doing can proceed,
@@ -817,10 +928,46 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
             });
           }
           if (gate.exit_code !== 0) {
-            return blocked(
-              `the gate for chunk ${chunkId} of milestone ${milestoneId} last exited ${gate.exit_code} — an approved chunk that does not pass its own suite does not seal`,
-              { milestone_id: milestoneId, chunk_id: chunkId, record_ref: `ledger:${gate.seq}` }
+            const repair = repairedSince(
+              ledger,
+              preflightGateId(milestoneId),
+              gate.seq,
+              sanctionedFor(profileId, 'probe')
             );
+            if (repair === null) {
+              return blocked(
+                `the gate for chunk ${chunkId} of milestone ${milestoneId} last exited ${gate.exit_code} — an approved chunk that does not pass its own suite does not seal`,
+                { milestone_id: milestoneId, chunk_id: chunkId, record_ref: `ledger:${gate.seq}` }
+              );
+            }
+            // THE RE-RUN IS PINNED TO THE WORK THAT FAILED. This chunk already
+            // carries an approving review, and the seal cites that review over
+            // whatever the gate went green on — so a re-run left free to gate
+            // the index AS IT IS NOW would seal work no reviewer ever saw if
+            // anything staged in between. The failed record names the tree it
+            // answered about, that tree travels in the descriptor, and the
+            // staged-gate operation states it to `runGate`, whose own check
+            // refuses a checkout holding anything else.
+            //
+            // A failed record naming NO tree cannot be pinned, and a door that
+            // cannot be pinned does not open: `check-honesty.js run-gate` is a
+            // real command form that states no tree, so a chunk gate id can
+            // carry evidence about an unnamed subject, and re-running on it
+            // would be exactly the unbound case this pin exists to refuse.
+            if (!isNonEmptyString(gate.tree)) {
+              return blocked(
+                `the gate for chunk ${chunkId} of milestone ${milestoneId} last exited ${gate.exit_code} and its record names no tree — a re-run cannot be held to the work that failed, so this gate stays where it is`,
+                { milestone_id: milestoneId, chunk_id: chunkId, record_ref: `ledger:${gate.seq}` }
+              );
+            }
+            return at(TRANSITIONS.CHUNK_GATE, {
+              gate_id: chunkGateId(milestoneId, chunkId),
+              profile_id: profileId,
+              failed_gate_ref: `ledger:${gate.seq}`,
+              repair_ref: `ledger:${repair.seq}`,
+              expected_tree: gate.tree,
+              reason: `the gate for chunk ${chunkId} last exited ${gate.exit_code}, and milestone ${milestoneId}'s toolchain has been re-attested green since — the chunk's own suite is run again over the same staged tree on that evidence`,
+            });
           }
           return at(TRANSITIONS.SEAL, {
             // Everything `sealChunk` requires, derived rather than invented:
@@ -927,14 +1074,17 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
     }
   }
 
-  return closeLadder(treeRoot, milestoneId, ledger, profileId);
+  return closeLadder(treeRoot, milestoneId, ledger, profileId, planned);
 }
 
 // Every chunk is green; what remains is the milestone's own gate sequence.
 // Review first, because a slice that does not compose to its goal should not
 // spend a full regression run; then the floor, because a green slice that
 // breaks the project is not closeable; then the close transaction.
-function closeLadder(treeRoot, milestoneId, ledger, profileId) {
+// `planned` travels this far for one reason: the floor's re-run door reads the
+// gates of the chunks THIS MILESTONE PLANS, and the plan is the only thing that
+// bounds that vocabulary.
+function closeLadder(treeRoot, milestoneId, ledger, profileId, planned) {
   const review = readJson(path.join(treeRoot, 'milestones', milestoneId, 'review.json'), null);
   if (!isPlainObject(review) || !isNonEmptyString(review.verdict)) {
     return transition(TRANSITIONS.MILESTONE_REVIEW, {
@@ -977,10 +1127,21 @@ function closeLadder(treeRoot, milestoneId, ledger, profileId) {
     });
   }
   if (gate.exit_code !== 0) {
-    return blocked(
-      `the regression floor for milestone ${milestoneId} last exited ${gate.exit_code} — a slice that breaks the project does not close`,
-      { milestone_id: milestoneId, record_ref: `ledger:${gate.seq}` }
-    );
+    const repair = chunkRepairSince(ledger, milestoneId, planned, gate.seq, sanctionedFor(profileId, 'suite'));
+    if (repair === null) {
+      return blocked(
+        `the regression floor for milestone ${milestoneId} last exited ${gate.exit_code} — a slice that breaks the project does not close`,
+        { milestone_id: milestoneId, record_ref: `ledger:${gate.seq}` }
+      );
+    }
+    return transition(TRANSITIONS.REGRESSION_FLOOR, {
+      milestone_id: milestoneId,
+      gate_id: regressionGateId(milestoneId),
+      profile_id: profileId,
+      failed_gate_ref: `ledger:${gate.seq}`,
+      repair_ref: `ledger:${repair.seq}`,
+      reason: `the regression floor for milestone ${milestoneId} last exited ${gate.exit_code}, and a chunk this milestone plans has passed its own suite since — the floor is run again on that evidence`,
+    });
   }
 
   return transition(TRANSITIONS.CLOSE, {

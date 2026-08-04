@@ -443,12 +443,23 @@ const OPS = Object.freeze({
   // `finally` because the record is already durable by then: a checkout left
   // behind by a killed process is reclaimed on re-entry, but one left behind by
   // a thrown error would simply accumulate.
+  //
+  // `expectedTree` IS A RE-RUN'S PIN, AND IT REFUSES THROUGH THE CHECK THAT
+  // ALREADY EXISTS. A first gate has nothing to be held to and states the tree
+  // it just materialized. A gate the resolver is re-running after a failure
+  // states the tree its FAILURE answered about instead — so if the index has
+  // moved in between, the checkout holds something else and `runGate`'s own
+  // stated-tree check refuses before any suite runs and before any record is
+  // written. Nothing new decides this: the mechanism that stops a gate claiming
+  // a tree it did not run against is the same one that stops a re-run gating
+  // work the approving review never saw.
   'checkHonesty.runStagedGate': {
-    call: (treeRoot, gateId, cmd, profileId) => {
+    call: (treeRoot, gateId, cmd, profileId, expectedTree) => {
       const repoRoot = path.join(treeRoot, '..');
       const { dir, tree } = gateWorktree.openGateWorktree(repoRoot, gateId, profileId);
       try {
-        return runGate({ gateId, cmd, ledgerPath: path.join(treeRoot, 'ledger.jsonl'), cwd: dir, tree });
+        const stated = expectedTree === undefined || expectedTree === null ? tree : expectedTree;
+        return runGate({ gateId, cmd, ledgerPath: path.join(treeRoot, 'ledger.jsonl'), cwd: dir, tree: stated });
       } finally {
         gateWorktree.closeGateWorktree(repoRoot, gateId);
       }

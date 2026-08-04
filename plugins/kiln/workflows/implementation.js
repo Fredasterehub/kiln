@@ -595,6 +595,12 @@ Your input is the staged diff in the project and the brief; you have read access
     // record it leaves names that tree. Run in the project itself, as it once
     // was, it answered about the tree the chunk replaces and passed a chunk
     // whose own suite was red.
+    // A RE-RUN CARRIES ITS PIN. When the resolver is asking for this gate again
+    // after a failure, the descriptor names the tree that failure answered
+    // about, and the gate is held to it: the chunk already has an approving
+    // review, so a re-run over whatever the index holds now could hand the seal
+    // a green gate over work nobody reviewed. A first run names no tree here and
+    // the machine states the one it materializes.
     case 'chunk-gate': {
       const suite = await hands('toolchain.composeSuite', [treeRoot, next.profile_id])
       const gate = await hands('checkHonesty.runStagedGate', [
@@ -602,6 +608,7 @@ Your input is the staged diff in the project and the brief; you have read access
         next.gate_id,
         suite.cmd,
         next.profile_id,
+        next.expected_tree || null,
       ])
       return `ledger:${gate.seq}`
     }

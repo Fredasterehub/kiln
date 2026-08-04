@@ -20,6 +20,7 @@ const {
 } = require('../src/receipts.js');
 const { appendRecord, readRecords } = require('../src/stream.js');
 const { writeAtomic } = require('../src/atomic-json.js');
+const { composeInstall, composeSuite, probeSatisfied } = require('../src/toolchain.js');
 
 const MODULE_PATH = path.join(__dirname, '..', 'src', 'spine.js');
 
@@ -68,14 +69,29 @@ const PROFILED = Object.freeze({
   toolchain_profile: 'node-cli',
 });
 
+// THE EXACT COMMANDS THIS PROFILE COMPOSES. A re-run door reads the repair
+// record's COMMAND as well as its gate id, so a fixture that invented a
+// plausible-looking string would be arranging evidence production never
+// produces. These come from the same composers the workflow itself runs, which
+// is the only way the fixture and the machine cannot drift apart.
+const INSTALL_CMD = composeInstall('node-cli', 'npm');
+const SUITE_CMD = composeSuite('node-cli', 'npm');
+const PROBE_CMD = probeSatisfied('node-cli', __dirname).probe_cmd;
+
+// A git tree id, in the width git produces here. A chunk gate always names the
+// tree it answered about — `runStagedGate` states one on every record it writes
+// — so a chunk-gate fixture that carried none would be a record this machine
+// does not write.
+const RED_TREE = 'a'.repeat(40);
+
 function ledgerPathOf(treeRoot) {
   return path.join(treeRoot, 'ledger.jsonl');
 }
 
-function writeGate(treeRoot, gateId, exitCode, cmd = 'npm test') {
+function writeGate(treeRoot, gateId, exitCode, cmd = 'npm test', tree) {
   return appendRecord(ledgerPathOf(treeRoot), {
     kind: 'gate',
-    payload: { gate_id: gateId, cmd, exit_code: exitCode },
+    payload: { gate_id: gateId, cmd, exit_code: exitCode, ...(tree === undefined ? {} : { tree }) },
     correlation_id: gateId,
   });
 }
@@ -272,7 +288,7 @@ function writeChunkPlan(treeRoot, milestoneId, chunkIds) {
 
 function openM1(treeRoot, chunkIds = ['C1']) {
   openMilestone(treeRoot, PROFILED);
-  writeGate(treeRoot, 'toolchain-preflight:M1', 0, 'true');
+  writeGate(treeRoot, 'toolchain-preflight:M1', 0, PROBE_CMD);
   writeChunkPlan(treeRoot, 'M1', chunkIds);
 }
 
@@ -793,6 +809,337 @@ test('every milestone green resolves to advancing the phase, once', () => {
 
   assert.equal(next.transition, TRANSITIONS.PHASE_ADVANCE);
   assert.equal(next.return, 'phase_complete');
+});
+
+// ---------- the three re-run doors ----------
+//
+// THE TRACE, ONE ROW PER RUNG — the failure as it lands today, the sanctioned
+// repair for THAT failure, and the durable record the resolver reads to let the
+// gate run again. There is no universal token: each door names one gate id, and
+// a record produced by any other rung's repair leaves the block standing.
+//
+//   toolchain-preflight   red `toolchain-preflight:<M>`
+//                         -> run the profile's own install through `runGate`
+//                         -> green `toolchain-install:<M>` LATER than the failure
+//
+//   chunk-gate            red `chunk:<M>:<C>`
+//                         -> re-attest the milestone's toolchain: run the
+//                            profile's probe through `runGate`
+//                         -> green `toolchain-preflight:<M>` LATER than the failure
+//
+//   regression-floor      red `regression-floor:<M>`
+//                         -> the slice's own constituents measured again: a
+//                            planned chunk's suite run through `runGate`
+//                         -> green `chunk:<M>:<planned C>` LATER than the failure
+//
+// EVERY DOOR IS A MEASUREMENT, NEVER A WORD. All three records come from the one
+// sanctioned command-execution-plus-evidence mechanism, which runs the command
+// and records the exit code the process really returned — so no operator
+// statement, steer or hand-authored append can open a door, and the repair is
+// evidenced by the same machinery the gate itself is evidenced by.
+//
+// AND EVERY DOOR IS SINGLE-USE BY ORDERING RATHER THAN BY A FLAG. The repair has
+// to be LATER than the failure it answers; the re-run appends a new gate record
+// after it; so a re-run that fails again leaves the repair older than the newest
+// failure and the block stands. Nothing has to remember that an authorization was
+// spent — the same law that makes `latestGate` the record that counts.
+//
+// AND THE MEASUREMENT HAS TO BE OF THE SANCTIONED ACTION. A gate id says where a
+// record was filed, never what was run: the one op that files gate evidence
+// takes the gate id and the command from its caller, so `true` filed under
+// `toolchain-install:<M>` is a real green measurement of nothing. Each door
+// therefore matches the record's COMMAND against the exact form this milestone's
+// own profile composes for that repair — the install command for the preflight's
+// door, the probe command for the chunk gate's, the suite command for the
+// floor's — and a green record carrying any other command answers nothing.
+const INSTALL = 'toolchain-install:M1';
+const PREFLIGHT = 'toolchain-preflight:M1';
+
+// A milestone standing exactly where a red preflight leaves it: opened, its
+// profile declared, and the newest word on its preflight a failure.
+function redPreflight(treeRoot) {
+  openMilestone(treeRoot, PROFILED);
+  return writeGate(treeRoot, PREFLIGHT, 1, PROBE_CMD);
+}
+
+test('a red preflight whose install has since run green runs the preflight again, citing both records', () => {
+  const { treeRoot } = makeTree();
+  const failed = redPreflight(treeRoot);
+  const repair = writeGate(treeRoot, INSTALL, 0, INSTALL_CMD);
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.TOOLCHAIN_PREFLIGHT);
+  assert.equal(next.gate_id, PREFLIGHT);
+  assert.equal(next.profile_id, 'node-cli');
+  // The descriptor says what it is answering and on what evidence, so the
+  // re-run is bound to the failure rather than merely following it.
+  assert.equal(next.failed_gate_ref, `ledger:${failed}`);
+  assert.equal(next.repair_ref, `ledger:${repair}`);
+  assert.deepEqual(nextTransition(treeRoot), nextTransition(treeRoot));
+});
+
+// THE WRONG ANSWER HERE IS A DIFFERENT ANSWER. Every record below is one this
+// machine really writes — another milestone's install, a chunk's own gate, the
+// install that ran before the failure, an install that failed — placed where a
+// resolver reading the record CLASS rather than the exact id, or ignoring the
+// ordering, would consume it. The ledger is one stream shared by every milestone
+// and every chunk of a build, so the id is the whole of what keeps them apart.
+test("the preflight door reads that milestone's own install, and only a green one after the failure", () => {
+  const refused = {
+    'an install that went green BEFORE the failure': (treeRoot) => {
+      writeGate(treeRoot, INSTALL, 0, INSTALL_CMD);
+      redPreflight(treeRoot);
+    },
+    'an install that went red after it': (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, INSTALL, 1, INSTALL_CMD);
+    },
+    "another milestone's install": (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, 'toolchain-install:M2', 0, INSTALL_CMD);
+    },
+    "the chunk gate's own repair record": (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, 'chunk:M1:C1', 0, SUITE_CMD);
+    },
+    "the floor's own repair record": (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, 'regression-floor:M1', 0, SUITE_CMD);
+    },
+    // THE RECORD IS GREEN, LATER, AND UNDER THE RIGHT ID — and the command it
+    // measured is not the profile's install. Nothing stops a caller filing a
+    // gate under any id it likes with any command it likes, so this is the
+    // arbitrary-green-command door, and it must not open.
+    'a command that always succeeds, filed under the install id': (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, INSTALL, 0, 'true');
+    },
+    "another package manager's install of some other project": (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, INSTALL, 0, 'npm ci');
+    },
+    "the profile's own probe, run under the install id": (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, INSTALL, 0, PROBE_CMD);
+    },
+    "the profile's own suite, run under the install id": (treeRoot) => {
+      redPreflight(treeRoot);
+      writeGate(treeRoot, INSTALL, 0, SUITE_CMD);
+    },
+  };
+
+  const seen = {};
+  for (const [name, arrange] of Object.entries(refused)) {
+    const { treeRoot } = makeTree();
+    arrange(treeRoot);
+    seen[name] = nextTransition(treeRoot).transition;
+  }
+
+  assert.deepEqual(
+    seen,
+    Object.fromEntries(Object.keys(refused).map((name) => [name, TRANSITIONS.BLOCKED]))
+  );
+});
+
+test('one install buys one preflight re-run: a preflight that fails again strands', () => {
+  const { treeRoot } = makeTree();
+  redPreflight(treeRoot);
+  writeGate(treeRoot, INSTALL, 0, INSTALL_CMD);
+  assert.equal(nextTransition(treeRoot).transition, TRANSITIONS.TOOLCHAIN_PREFLIGHT);
+
+  // The authorized run happened and failed: the repair is now older than the
+  // newest failure, and nothing had to remember it was spent.
+  const failed = writeGate(treeRoot, PREFLIGHT, 1, PROBE_CMD);
+
+  const next = nextTransition(treeRoot);
+  assert.equal(next.transition, TRANSITIONS.BLOCKED);
+  assert.equal(next.record_ref, `ledger:${failed}`);
+});
+
+// A chunk standing at a red gate: approved by a cross-family review, and its
+// own suite the newest thing to have failed. `openM1` already put this
+// milestone's green preflight on the ledger, so the record the door wants is a
+// NEWER one than the ladder itself walked past.
+function redChunkGate(treeRoot, tree = RED_TREE) {
+  openM1(treeRoot);
+  buildC1(treeRoot);
+  recordChunk(treeRoot, 'M1', {
+    kind: 'chunk-review',
+    chunk_id: 'C1',
+    review: { family: 'claude', verdict: 'approve', ref: 'reviews/C1.md' },
+  });
+  return writeGate(treeRoot, 'chunk:M1:C1', 1, SUITE_CMD, tree);
+}
+
+test('a red chunk gate whose milestone has re-attested its toolchain runs the gate again', () => {
+  const { treeRoot } = makeTree();
+  const failed = redChunkGate(treeRoot);
+  const repair = writeGate(treeRoot, PREFLIGHT, 0, PROBE_CMD);
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.CHUNK_GATE);
+  assert.equal(next.gate_id, 'chunk:M1:C1');
+  assert.equal(next.chunk_id, 'C1');
+  assert.equal(next.profile_id, 'node-cli');
+  assert.equal(next.failed_gate_ref, `ledger:${failed}`);
+  assert.equal(next.repair_ref, `ledger:${repair}`);
+  // THE RE-RUN IS PINNED TO THE WORK THAT FAILED. A chunk gate answers about a
+  // staged tree, and this chunk already carries an approving review — so a
+  // re-run left free to gate whatever the index holds now could pass over work
+  // nobody reviewed and let it seal under that review. The descriptor carries
+  // the failed record's own tree, and the staged-gate operation is what refuses
+  // a different one.
+  assert.equal(next.expected_tree, RED_TREE);
+  assert.deepEqual(nextTransition(treeRoot), nextTransition(treeRoot));
+});
+
+test('a red chunk gate whose record names no tree cannot be pinned, so no door opens', () => {
+  const { treeRoot } = makeTree();
+  openM1(treeRoot);
+  buildC1(treeRoot);
+  recordChunk(treeRoot, 'M1', {
+    kind: 'chunk-review',
+    chunk_id: 'C1',
+    review: { family: 'claude', verdict: 'approve', ref: 'reviews/C1.md' },
+  });
+  // `check-honesty.js run-gate` is a real command form that states no tree, so
+  // a chunk gate id can carry a record with none. It is evidence of a run over
+  // an unnamed subject, and a re-run cannot be held to a subject nobody named.
+  const failed = writeGate(treeRoot, 'chunk:M1:C1', 1, SUITE_CMD);
+  writeGate(treeRoot, PREFLIGHT, 0, PROBE_CMD);
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.BLOCKED);
+  assert.equal(next.record_ref, `ledger:${failed}`);
+  assert.match(next.reason, /tree/);
+});
+
+test("the chunk-gate door reads the milestone's preflight, and only a green one after the failure", () => {
+  const refused = {
+    'nothing since the failure — the preflight the ladder walked past predates it': () => {},
+    'an install that went green after it': (treeRoot) => writeGate(treeRoot, INSTALL, 0, INSTALL_CMD),
+    "another milestone's preflight": (treeRoot) => writeGate(treeRoot, 'toolchain-preflight:M2', 0, PROBE_CMD),
+    "another chunk's gate": (treeRoot) => writeGate(treeRoot, 'chunk:M1:C2', 0, SUITE_CMD, RED_TREE),
+    "the floor's own repair record": (treeRoot) => writeGate(treeRoot, 'regression-floor:M1', 0, SUITE_CMD),
+    // Green, later, under the milestone's own preflight id — and a measurement
+    // of something other than this profile's probe.
+    'a command that always succeeds, filed under the preflight id': (treeRoot) =>
+      writeGate(treeRoot, PREFLIGHT, 0, 'true'),
+    "the profile's own install, run under the preflight id": (treeRoot) =>
+      writeGate(treeRoot, PREFLIGHT, 0, INSTALL_CMD),
+    "the profile's own suite, run under the preflight id": (treeRoot) => writeGate(treeRoot, PREFLIGHT, 0, SUITE_CMD),
+  };
+
+  const seen = {};
+  for (const [name, arrange] of Object.entries(refused)) {
+    const { treeRoot } = makeTree();
+    redChunkGate(treeRoot);
+    arrange(treeRoot);
+    seen[name] = nextTransition(treeRoot).transition;
+  }
+
+  assert.deepEqual(
+    seen,
+    Object.fromEntries(Object.keys(refused).map((name) => [name, TRANSITIONS.BLOCKED]))
+  );
+});
+
+test('one re-attested toolchain buys one chunk-gate re-run: a gate that fails again strands', () => {
+  const { treeRoot } = makeTree();
+  redChunkGate(treeRoot);
+  writeGate(treeRoot, PREFLIGHT, 0, PROBE_CMD);
+  assert.equal(nextTransition(treeRoot).transition, TRANSITIONS.CHUNK_GATE);
+
+  const failed = writeGate(treeRoot, 'chunk:M1:C1', 1, SUITE_CMD, RED_TREE);
+
+  const next = nextTransition(treeRoot);
+  assert.equal(next.transition, TRANSITIONS.BLOCKED);
+  assert.equal(next.record_ref, `ledger:${failed}`);
+});
+
+// A milestone standing at a red floor: every planned chunk green, the slice
+// reviewed, and the project's own suite the newest thing to have failed.
+function redFloor(treeRoot, chunkIds = ['C1']) {
+  openM1(treeRoot, chunkIds);
+  greenC1(treeRoot);
+  writeMilestoneReview(treeRoot, 'M1');
+  return writeGate(treeRoot, 'regression-floor:M1', 1, SUITE_CMD);
+}
+
+test("a red regression floor whose planned chunk's gate has since gone green runs the floor again", () => {
+  const { treeRoot } = makeTree();
+  const failed = redFloor(treeRoot);
+  const repair = writeGate(treeRoot, 'chunk:M1:C1', 0, SUITE_CMD, RED_TREE);
+
+  const next = nextTransition(treeRoot);
+
+  assert.equal(next.transition, TRANSITIONS.REGRESSION_FLOOR);
+  assert.equal(next.gate_id, 'regression-floor:M1');
+  assert.equal(next.profile_id, 'node-cli');
+  assert.equal(next.failed_gate_ref, `ledger:${failed}`);
+  assert.equal(next.repair_ref, `ledger:${repair}`);
+  assert.deepEqual(nextTransition(treeRoot), nextTransition(treeRoot));
+});
+
+test('the floor door reads only the gates of the chunks this milestone plans', () => {
+  const refused = {
+    'nothing since the failure': () => {},
+    'a chunk gate that went green BEFORE the failure': null, // arranged below
+    "a chunk id this milestone's plan does not name": (treeRoot) =>
+      writeGate(treeRoot, 'chunk:M1:C9', 0, SUITE_CMD, RED_TREE),
+    "another milestone's chunk gate": (treeRoot) => writeGate(treeRoot, 'chunk:M2:C1', 0, SUITE_CMD, RED_TREE),
+    'the preflight that repairs a chunk gate': (treeRoot) => writeGate(treeRoot, PREFLIGHT, 0, PROBE_CMD),
+    'the install that repairs a preflight': (treeRoot) => writeGate(treeRoot, INSTALL, 0, INSTALL_CMD),
+    'a planned chunk gate that went red after it': (treeRoot) =>
+      writeGate(treeRoot, 'chunk:M1:C1', 1, SUITE_CMD, RED_TREE),
+    // Green, later, under a planned chunk's own gate id — and a measurement of
+    // something other than the slice's suite.
+    'a command that always succeeds, filed under a planned chunk gate id': (treeRoot) =>
+      writeGate(treeRoot, 'chunk:M1:C1', 0, 'true', RED_TREE),
+    "the profile's own install, run under a planned chunk gate id": (treeRoot) =>
+      writeGate(treeRoot, 'chunk:M1:C1', 0, INSTALL_CMD, RED_TREE),
+    'the suite without the reporter flag the profile appends': (treeRoot) =>
+      writeGate(treeRoot, 'chunk:M1:C1', 0, 'node --test', RED_TREE),
+  };
+
+  const seen = {};
+  for (const [name, arrange] of Object.entries(refused)) {
+    const { treeRoot } = makeTree();
+    if (arrange === null) {
+      // The chunk's own gate, where production actually writes it: before the
+      // seal, and therefore before any floor this milestone ever ran.
+      openM1(treeRoot);
+      writeGate(treeRoot, 'chunk:M1:C1', 0, SUITE_CMD, RED_TREE);
+      greenC1(treeRoot);
+      writeMilestoneReview(treeRoot, 'M1');
+      writeGate(treeRoot, 'regression-floor:M1', 1, SUITE_CMD);
+    } else {
+      redFloor(treeRoot);
+      arrange(treeRoot);
+    }
+    seen[name] = nextTransition(treeRoot).transition;
+  }
+
+  assert.deepEqual(
+    seen,
+    Object.fromEntries(Object.keys(refused).map((name) => [name, TRANSITIONS.BLOCKED]))
+  );
+});
+
+test('one green chunk gate buys one floor re-run: a floor that fails again strands', () => {
+  const { treeRoot } = makeTree();
+  redFloor(treeRoot);
+  writeGate(treeRoot, 'chunk:M1:C1', 0, SUITE_CMD, RED_TREE);
+  assert.equal(nextTransition(treeRoot).transition, TRANSITIONS.REGRESSION_FLOOR);
+
+  const failed = writeGate(treeRoot, 'regression-floor:M1', 1, SUITE_CMD);
+
+  const next = nextTransition(treeRoot);
+  assert.equal(next.transition, TRANSITIONS.BLOCKED);
+  assert.equal(next.record_ref, `ledger:${failed}`);
 });
 
 // A COMPLETION ENVELOPE IS A MILESTONE-SCOPED IDENTITY, and both of these

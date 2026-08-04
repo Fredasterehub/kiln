@@ -15,6 +15,7 @@ const {
   detectPackageManager,
   composeInstall,
   composeSuite,
+  sanctionedGateCommands,
   probeSatisfied,
   scaffoldProfile,
 } = require('../src/toolchain.js');
@@ -312,6 +313,65 @@ test('composeInstall: throws on an unknown profileId', () => {
 
 test('composeInstall: throws on a null profileId', () => {
   assert.throws(() => composeInstall(null, 'npm'), /toolchain/);
+});
+
+// ---------- sanctionedGateCommands ----------
+//
+// The reader of a gate RECORD needs the other half of what `compose*` gives a
+// runner: not "what should I run here" but "is the command in this record the
+// one the machine would have run". Those are the same question for two of the
+// three profiles and a different one for `node-web`, whose commands carry a
+// package manager the record's reader may have no way to resolve — so the answer
+// is the set of forms the profile itself composes, and never a wider vocabulary.
+
+test('sanctionedGateCommands: node-web install and suite are exactly the forms composeInstall/composeSuite produce, one per known manager', () => {
+  for (const role of ['install', 'suite']) {
+    const compose = role === 'install' ? composeInstall : composeSuite;
+    const expected = [...KNOWN_PACKAGE_MANAGERS].map((pm) => compose('node-web', pm));
+    assert.deepEqual(sanctionedGateCommands('node-web', role).sort(), [...new Set(expected)].sort());
+    assert.equal(new Set(expected).size, KNOWN_PACKAGE_MANAGERS.size, 'two managers composed the same command');
+  }
+});
+
+test('sanctionedGateCommands: a profile that substitutes no manager offers exactly one form', () => {
+  for (const profileId of ['node-cli', 'python-pytest']) {
+    assert.deepEqual(sanctionedGateCommands(profileId, 'install'), [composeInstall(profileId, 'npm')]);
+    assert.deepEqual(sanctionedGateCommands(profileId, 'suite'), [composeSuite(profileId, 'npm')]);
+  }
+});
+
+test("sanctionedGateCommands: the probe role is the registry's own probe_cmd, and no other role's command is in any set", () => {
+  for (const profileId of [...PROFILE_IDS]) {
+    assert.deepEqual(sanctionedGateCommands(profileId, 'probe'), [probeSatisfied(profileId, mkTmpDir()).probe_cmd]);
+    // The three roles are three vocabularies. A door reading the wrong one
+    // would accept a real, green, sanctioned command that repaired something
+    // else entirely — which is why they are asked for by name.
+    for (const [role, other] of [
+      ['probe', 'install'],
+      ['install', 'suite'],
+      ['suite', 'probe'],
+    ]) {
+      for (const cmd of sanctionedGateCommands(profileId, other)) {
+        assert.ok(!sanctionedGateCommands(profileId, role).includes(cmd), `${profileId}: ${role} accepted ${other}`);
+      }
+    }
+  }
+});
+
+test('sanctionedGateCommands: a command nobody composed is in no set at all', () => {
+  for (const profileId of [...PROFILE_IDS]) {
+    for (const role of ['install', 'suite', 'probe']) {
+      for (const cmd of ['true', 'npm ci', 'npm test', '']) {
+        assert.ok(!sanctionedGateCommands(profileId, role).includes(cmd), `${profileId}/${role} accepted ${cmd}`);
+      }
+    }
+  }
+});
+
+test('sanctionedGateCommands: throws on an unknown role and on an unknown profile', () => {
+  assert.throws(() => sanctionedGateCommands('node-cli', 'preflight'), /toolchain/);
+  assert.throws(() => sanctionedGateCommands('node-cli', undefined), /toolchain/);
+  assert.throws(() => sanctionedGateCommands('go-modules', 'install'), /toolchain/);
 });
 
 // ---------- probeSatisfied ----------

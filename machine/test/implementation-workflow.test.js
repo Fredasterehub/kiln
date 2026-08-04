@@ -293,13 +293,20 @@ function makeProject({
   chunks = ['C1'],
   nominate = { C1: { journey_id: JOURNEY, script_path: JOURNEY_SCRIPT, harness: 'node-test' } },
   inherited = null,
+  // The milestone's declared toolchain. Every walk but the preflight's runs
+  // this project's own `node --test` suite and wants `node-cli`; the preflight
+  // needs a profile whose probe can genuinely fail, which `node-cli`'s cannot.
+  profile = 'node-cli',
 } = {}) {
   const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-runtime-'));
   const git = (...a) => execFileSync('git', a, { cwd: repoRoot, encoding: 'utf8' });
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'Test');
-  fs.writeFileSync(path.join(repoRoot, '.gitignore'), 'tree/\n');
+  // A dependency directory is ignored by its own ecosystem's convention, and
+  // the machine relies on that: a `.venv` git carried would travel into every
+  // staged tree a gate materializes.
+  fs.writeFileSync(path.join(repoRoot, '.gitignore'), profile === 'python-pytest' ? 'tree/\n.venv/\n' : 'tree/\n');
   fs.writeFileSync(path.join(repoRoot, 'README.md'), 'seed\n');
   fs.mkdirSync(path.join(repoRoot, 'test'));
   fs.writeFileSync(
@@ -330,7 +337,7 @@ function makeProject({
         order: 1,
         title: 'The first slice',
         designer_family: 'gpt',
-        toolchain_profile: 'node-cli',
+        toolchain_profile: profile,
         slice_goal: 'Ship M1.',
         chunk_count_estimate: chunks.length,
         criteria_ids: ['ACR-1'],
@@ -398,7 +405,10 @@ function makeProject({
 
 // The seat stub: it writes what its prompt asked for, at the path its prompt
 // named, and reports the shape the schema requires.
-function makeSeat({ repoRoot, chunks, nominate = {} }, { verdicts = {}, reviewsSeen = {}, findings = {}, breaksSuite = false } = {}) {
+function makeSeat(
+  { repoRoot, chunks, nominate = {} },
+  { verdicts = {}, reviewsSeen = {}, findings = {}, breaksSuite = false, transientBreak = false } = {}
+) {
   return async (prompt, opts) => {
     const targets = pathsIn(prompt);
     const seat = opts.agentType;
@@ -423,6 +433,18 @@ function makeSeat({ repoRoot, chunks, nominate = {} }, { verdicts = {}, reviewsS
         fs.writeFileSync(
           path.join(capsuleDir, 'test', 'smoke.test.js'),
           "const test = require('node:test');\nconst assert = require('node:assert');\ntest('smoke', () => assert.ok(false, 'this chunk broke the suite'));\n"
+        );
+      }
+      // A chunk whose work is perfectly good and whose SUITE depends on the
+      // world around it — the transient a re-run door exists for. The tracked
+      // bytes are identical on both sides of the repair, so a gate that goes red
+      // and then green over this file answered about the same tree twice and
+      // changed its mind about the environment, which is the only case a door
+      // may lawfully answer.
+      if (transientBreak) {
+        fs.writeFileSync(
+          path.join(capsuleDir, 'test', 'smoke.test.js'),
+          "const test = require('node:test');\nconst assert = require('node:assert');\ntest('smoke', () => assert.notEqual(process.env.KILN_FIXTURE_TRANSIENT, 'red'));\n"
         );
       }
       // JIT journey authoring: the chunk whose plan entry nominated a journey
@@ -1923,6 +1945,198 @@ test("the gate leaves the project's own working tree and index untouched", async
   assert.equal(result.transition, 'chunk-gate');
   assert.equal(gateRecord(project.treeRoot, 'chunk:M1:C1').exit_code, 0, 'no gate ran, so nothing was proven unchanged');
   assert.deepEqual(snapshot(), before);
+});
+
+// ---------- the three re-run doors, executed ----------
+//
+// Each of these drives the REAL script through the whole trace — the gate fails
+// for a real reason, the ladder strands, the rung's own sanctioned repair is
+// performed by the machine's own operations, and the next invocation runs the
+// gate again and reaches green. No record here is hand-written: every gate
+// record on either side of every repair comes from `runGate` running a command.
+
+// THE RED IS THE PROFILE'S OWN PROBE, FAILING FOR THE REASON IT REALLY FAILS.
+// `node-cli` cannot produce one — its probe is satisfied by the Node runtime the
+// harness is already running on — so this walk gives the milestone the
+// `python-pytest` profile and hands it the broken venv that profile's probe
+// exists to catch: the marker file `.venv/bin/pytest` is there, so the preflight
+// arm installs nothing and goes straight to the probe, and the probe's
+// interpreter (`.venv/bin/python`) is not, so the command really fails. That is
+// the original failing rung, reached through `probeSatisfied` and `runGate`,
+// with no record placed by hand.
+//
+// And the repair really repairs it: the profile's own install command builds the
+// venv, which is what the interpreter was missing, so the re-probe passes for
+// the reason the install ran. Nothing here is simulated except the pytest
+// executable itself, which stands in for the package that would be installed
+// into that venv from a network this suite must not need.
+function brokenVenv(repoRoot) {
+  const bin = path.join(repoRoot, '.venv', 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(path.join(bin, 'pytest'), `#!${path.join(bin, 'python')}\nprint("pytest 8.0.0")\n`);
+  fs.chmodSync(path.join(bin, 'pytest'), 0o755);
+  // `pip install -r` needs the file to exist; the profile's scaffold writes it
+  // for a project that has none, and a project already carrying a venv marker
+  // carries this too.
+  fs.writeFileSync(path.join(repoRoot, 'requirements-dev.txt'), '');
+}
+
+test("a red toolchain preflight strands, and the profile's own install run green lets it run again", async () => {
+  const project = makeProject({ profile: 'python-pytest' });
+  brokenVenv(project.repoRoot);
+  await driveTo(project, ['toolchain-preflight'], { stopBefore: true });
+
+  const { result: red } = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+  assert.equal(red.transition, 'toolchain-preflight');
+  const failed = gateRecord(project.treeRoot, 'toolchain-preflight:M1');
+  assert.notEqual(failed.exit_code, 0, 'the probe succeeded — the broken venv never fired and this case proves nothing');
+  assert.equal(
+    failed.cmd,
+    workflow.invoke(project.treeRoot, 'toolchain.probeSatisfied', [project.treeRoot, 'python-pytest']).probe_cmd,
+    'the red came from something other than the profile\'s own probe'
+  );
+
+  const stranded = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+  assert.equal(stranded.result.return, 'blocked');
+  assert.match(stranded.result.reason, /preflight/i);
+
+  // A GREEN COMMAND UNDER THE RIGHT GATE ID IS NOT A REPAIR. The op that files
+  // gate evidence takes both the id and the command from its caller, so this
+  // record is a genuine measurement — of a command that installs nothing.
+  workflow.invoke(project.treeRoot, 'checkHonesty.runGate', [project.treeRoot, 'toolchain-install:M1', 'true']);
+  const notARepair = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+  assert.equal(notARepair.result.return, 'blocked', 'an arbitrary green command opened the preflight door');
+
+  // The sanctioned repair for THIS rung: the profile's own install command,
+  // composed by the machine and run by the same producer.
+  const install = workflow.invoke(project.treeRoot, 'toolchain.composeInstall', [project.treeRoot, 'python-pytest']);
+  const repair = workflow.invoke(project.treeRoot, 'checkHonesty.runGate', [
+    project.treeRoot,
+    'toolchain-install:M1',
+    install.cmd,
+  ]);
+  assert.equal(
+    repair.exitCode,
+    0,
+    `the python-pytest profile's own install could not run here — this fixture needs python3 with its venv module: ${repair.stderr}`
+  );
+
+  const { result } = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+
+  assert.equal(result.transition, 'toolchain-preflight');
+  const green = gateRecord(project.treeRoot, 'toolchain-preflight:M1');
+  assert.equal(green.exit_code, 0, 'the re-run left no green preflight');
+  assert.equal(result.record_ref, `ledger:${green.seq}`);
+  // And the ladder is moving again rather than merely un-blocked.
+  assert.equal(nextTransition(project.treeRoot).transition, 'spec');
+});
+
+test('a chunk gate that failed on the world around it re-runs once the toolchain is re-attested', async () => {
+  const project = makeProject();
+  let red;
+  process.env.KILN_FIXTURE_TRANSIENT = 'red';
+  try {
+    await driveTo(project, ['chunk-gate'], { seatOpts: { transientBreak: true } });
+    red = gateRecord(project.treeRoot, 'chunk:M1:C1');
+  } finally {
+    delete process.env.KILN_FIXTURE_TRANSIENT;
+  }
+  assert.notEqual(red.exit_code, 0, 'the transient never fired — the gate went green and this case proves nothing');
+  assert.equal(nextTransition(project.treeRoot).transition, 'blocked');
+
+  // The sanctioned repair for THIS rung: the milestone's toolchain re-attested
+  // by the profile's own probe, through the same producer.
+  const probe = workflow.invoke(project.treeRoot, 'toolchain.probeSatisfied', [project.treeRoot, 'node-cli']);
+  workflow.invoke(project.treeRoot, 'checkHonesty.runGate', [
+    project.treeRoot,
+    'toolchain-preflight:M1',
+    probe.probe_cmd,
+  ]);
+
+  const { result } = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+
+  assert.equal(result.transition, 'chunk-gate');
+  const green = gateRecord(project.treeRoot, 'chunk:M1:C1');
+  assert.equal(green.exit_code, 0, 'the re-run left no green chunk gate');
+  // THE DOOR RE-ATTESTED THE WORLD, NOT THE WORK: both records name the same
+  // staged tree, so the chunk that seals is the chunk the review approved.
+  assert.equal(green.tree, red.tree);
+  assert.equal(nextTransition(project.treeRoot).transition, 'seal');
+});
+
+test('a chunk-gate re-run refuses an index that moved after the failure', async () => {
+  const project = makeProject();
+  let red;
+  process.env.KILN_FIXTURE_TRANSIENT = 'red';
+  try {
+    await driveTo(project, ['chunk-gate'], { seatOpts: { transientBreak: true } });
+    red = gateRecord(project.treeRoot, 'chunk:M1:C1');
+  } finally {
+    delete process.env.KILN_FIXTURE_TRANSIENT;
+  }
+  assert.notEqual(red.exit_code, 0, 'the transient never fired — the gate went green and this case proves nothing');
+
+  const probe = workflow.invoke(project.treeRoot, 'toolchain.probeSatisfied', [project.treeRoot, 'node-cli']);
+  workflow.invoke(project.treeRoot, 'checkHonesty.runGate', [
+    project.treeRoot,
+    'toolchain-preflight:M1',
+    probe.probe_cmd,
+  ]);
+  assert.equal(nextTransition(project.treeRoot).transition, 'chunk-gate', 'the door never opened, so nothing is pinned');
+
+  // THE INDEX MOVES. Work nobody reviewed is staged after the failure — which
+  // is the whole danger: the transient is gone, so an unpinned re-run would run
+  // this tree's suite, pass, and hand the seal a green gate over a diff the
+  // approving review never saw.
+  const stowaway = path.join(project.repoRoot, 'stowaway.js');
+  fs.writeFileSync(stowaway, "module.exports = 'nobody reviewed this'\n");
+  execFileSync('git', ['add', 'stowaway.js'], { cwd: project.repoRoot, encoding: 'utf8' });
+  assert.notEqual(stagedTreeOf(project.repoRoot), red.tree, 'the index never moved and this case proves nothing');
+
+  await assert.rejects(
+    invokeWorkflow(project.treeRoot, { seat: makeSeat(project) }),
+    /states tree/,
+    'the re-run gated a tree the failure never answered about'
+  );
+
+  // The refusal is total: no gate record was written at all, so there is no
+  // green the seal could ever cite for the tree that arrived unreviewed.
+  assert.equal(gateRecord(project.treeRoot, 'chunk:M1:C1').seq, red.seq);
+});
+
+test("a red regression floor re-runs once a planned chunk's suite has passed again, and the milestone closes", async () => {
+  const project = makeProject();
+  await driveTo(project, ['regression-floor'], { stopBefore: true, seatOpts: { transientBreak: true } });
+
+  let red;
+  process.env.KILN_FIXTURE_TRANSIENT = 'red';
+  try {
+    const { result } = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+    assert.equal(result.transition, 'regression-floor');
+    red = gateRecord(project.treeRoot, 'regression-floor:M1');
+  } finally {
+    delete process.env.KILN_FIXTURE_TRANSIENT;
+  }
+  assert.notEqual(red.exit_code, 0, 'the transient never fired — the floor went green and this case proves nothing');
+  assert.equal(nextTransition(project.treeRoot).transition, 'blocked');
+
+  // The sanctioned repair for THIS rung: the slice's own constituent measured
+  // again, where a chunk gate is measured — in a checkout of the staged tree.
+  const suite = workflow.invoke(project.treeRoot, 'toolchain.composeSuite', [project.treeRoot, 'node-cli']);
+  const repair = workflow.invoke(project.treeRoot, 'checkHonesty.runStagedGate', [
+    project.treeRoot,
+    'chunk:M1:C1',
+    suite.cmd,
+    'node-cli',
+  ]);
+  assert.equal(repair.exitCode, 0, 'the repair itself failed, so no door should have opened');
+
+  const { result } = await invokeWorkflow(project.treeRoot, { seat: makeSeat(project) });
+
+  assert.equal(result.transition, 'regression-floor');
+  const green = gateRecord(project.treeRoot, 'regression-floor:M1');
+  assert.equal(green.exit_code, 0, 'the re-run left no green floor');
+  assert.equal(nextTransition(project.treeRoot).transition, 'close');
 });
 
 // ---------- a stop is durable too ----------
