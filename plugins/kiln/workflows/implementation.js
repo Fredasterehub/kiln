@@ -120,6 +120,29 @@ The command prints a single JSON object with \`ok\` and \`result\`. Report those
   if (!reply || reply.ok !== true) {
     throw new Error(`implementation: ${op} refused — ${reply ? reply.result : 'the hands returned nothing'}`)
   }
+  // THE SEAT IS A MODEL, AND A MODEL ANSWERS IN TEXT. `result` is schema-typed
+  // as anything at all — it has to be, since every op returns its own shape —
+  // so the operation's return arrives as the JSON TEXT the command printed just
+  // as lawfully as it arrives parsed, and the live seat's first fire reported
+  // text. Every field this script reads off a machine return — `.transition`,
+  // `.ref`, `.seq`, `.staged_path`, `.capsuleDir`, `.patch_digest` — is
+  // `undefined` against a string, which is how a perfectly correct resolution
+  // died two lines later as `the resolver named "undefined"`. So the shape is
+  // settled HERE, at the one boundary every machine call passes through, and no
+  // caller downstream has to know what the seat did with it. The same defence
+  // the script already gives its own stringified `args`, on the larger surface.
+  if (typeof reply.result === 'string') {
+    try {
+      return JSON.parse(reply.result)
+    } catch {
+      // Text that is not the operation's result is not a result. Passed on, it
+      // becomes a silent `undefined` at whichever field is read next, and the
+      // failure surfaces blaming something that was correct.
+      throw new Error(
+        `implementation: ${op} came back as text that is not the operation's result — ${reply.result}`
+      )
+    }
+  }
   return reply.result
 }
 

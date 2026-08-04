@@ -84,7 +84,9 @@ The command already prints exactly what you must report — a single JSON object
 false when it refused, and `result` is either the operation's own return value
 or the refusal's message verbatim.
 
-Report those two fields as they came out. Do not re-derive `ok` from your own
-reading of the output, do not reformat `result`, and do not add commentary, next
-steps, or an interpretation of what any of it means for the build. The workflow
-that called you is the one reading it.
+Report those two fields as they came out. Carrying `result` back as the
+operation's result value as JSON text is a correct answer — the workflow parses
+what it needs — so long as that text is the value's serialization verbatim. Do not re-derive `ok` from your
+own reading of the output, do not reformat `result`, and do not add commentary,
+next steps, or an interpretation of what any of it means for the build. The
+workflow that called you is the one reading it.

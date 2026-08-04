@@ -25,9 +25,14 @@
 // actually built and runs it through the real `workflow.js#invoke` against a
 // real git-backed tree. So the facade, the resolver, the transactions, the
 // capsule, the gates and the promotions are all genuinely exercised, and the
-// payload's own well-formedness is under test too. Only the model's judgment
-// is stubbed — the seat writes the artifact its prompt named, which is exactly
-// what a real seat would do and the only part a test cannot supply.
+// payload's own well-formedness is under test too. Two things are stubbed:
+// the model's judgment — the seat writes the artifact its prompt named,
+// which is exactly what a real seat would do — and, in the default mode, the
+// SHAPE of its reply. A hands stub that hands back a native object supplies
+// the one thing the live seat cannot promise, since `HANDS.result` is typed
+// as anything at all and a model reporting a command's stdout may lawfully
+// report its text. The first live invocation did exactly that and died. Both
+// shapes are driven here now (`stringifiedHands`).
 //
 // WHAT THIS IS NOT, SAID HERE BECAUSE THIS IS WHERE IT WILL BE BELIEVED. This
 // harness is a FAITHFUL STAND-IN for the Workflow runtime. It is not the
@@ -90,11 +95,17 @@ function loadScript() {
 }
 
 // One invocation of the real script, with a recording `agent`.
-async function invokeWorkflow(treeRoot, { seat, calls = [], onHands } = {}) {
+//
+// `handsShape` is what the SEAT does to a reply on its way back to the script —
+// the machine call itself is real either way. The default is the shape this
+// stub finds most convenient, and convenient is not the same as faithful: see
+// `stringifiedHands`.
+async function invokeWorkflow(treeRoot, { seat, calls = [], onHands, handsShape } = {}) {
   const script = loadScript();
   const meta = { value: null };
   const agent = async (prompt, opts) => {
-    calls.push({ prompt, opts });
+    const call = { prompt, opts };
+    calls.push(call);
     if (opts.agentType === 'kiln:workflow-hands') {
       // `onHands` runs BEFORE the operation does, which is what lets a test
       // kill the session at a named window. Without this hook the hands went
@@ -102,7 +113,13 @@ async function invokeWorkflow(treeRoot, { seat, calls = [], onHands } = {}) {
       // matrix aimed at machine operations was only ever killing seat steps,
       // and said nothing about the rungs that run no seat at all.
       if (onHands) await onHands(prompt, opts);
-      return runHands(prompt);
+      const reply = runHands(prompt);
+      // RECORDED AS THE SCRIPT RECEIVES IT, not as the shaper meant to send it.
+      // A shaper counting its own intentions satisfies its own assertion while
+      // quietly handing the script the convenient shape — the reply the script
+      // actually read is the only witness that a reply-shape test tested one.
+      call.reply = handsShape ? handsShape(reply, payloadIn(prompt).op) : reply;
+      return call.reply;
     }
     return seat(prompt, opts);
   };
@@ -128,19 +145,46 @@ async function invokeWorkflow(treeRoot, { seat, calls = [], onHands } = {}) {
   return { result, meta: meta.value, calls };
 }
 
-// The hands, for real. The payload is read back out of the prompt the script
-// wrote — between the very markers the seat is told to copy — so a script that
-// built a malformed payload, or embedded it any other way, fails here.
-function runHands(prompt) {
+// The payload the script actually built, read back out of the prompt it wrote
+// — between the very markers the seat is told to copy — so a script that built
+// a malformed payload, or embedded it any other way, fails here.
+function payloadIn(prompt) {
   const match = /<<'KILN_PAYLOAD'\n([\s\S]*?)\nKILN_PAYLOAD/.exec(prompt);
   assert.ok(match, 'the hands prompt must carry its payload in a quoted heredoc block');
   assert.equal(match[1].includes('\n'), false, 'the payload must be one line, or the heredoc marker is reachable');
-  const payload = JSON.parse(match[1]);
+  return JSON.parse(match[1]);
+}
+
+// The hands, for real: the payload goes through the real facade against a real
+// tree, and what comes back is what the command would have printed.
+function runHands(prompt) {
+  const payload = payloadIn(prompt);
   try {
     return { ok: true, result: workflow.invoke(payload.treeRoot, payload.op, payload.args) };
   } catch (err) {
     return { ok: false, result: `${err.name}: ${err.message}` };
   }
+}
+
+// THE LIVE SEAT'S OTHER REPLY SHAPE — AND THE ONE THE FIRST LIVE FIRE ACTUALLY
+// PRODUCED. `workflow-hands` is a model reporting a command's stdout into a
+// schema whose `result` is typed as anything at all, so the operation's return
+// reaches the script as the JSON TEXT the command printed just as lawfully as
+// it reaches it parsed. A stub that only ever hands back a parsed object
+// supplies, for production, precisely the fact production must demand for
+// itself — which is how this ladder walked green here hundreds of times while
+// BURN-1 died on its first invocation reading `.transition` off a string.
+//
+// The refusal path is left alone on purpose: a refusal's `result` is the error
+// text the command printed, which is already a string and is carried back as
+// one.
+function stringifiedHands() {
+  return (reply) => (reply.ok === true ? { ok: true, result: JSON.stringify(reply.result) } : reply);
+}
+
+// Every hands reply the script was actually handed, in order.
+function handsRepliesIn(calls) {
+  return calls.filter((c) => c.opts.agentType === 'kiln:workflow-hands').map((c) => c.reply);
 }
 
 // The paths a seat prompt names, in the order it names them. The script writes
@@ -397,7 +441,7 @@ function makeSeat({ repoRoot, chunks, nominate = {} }, { verdicts = {}, reviewsS
 
 // Drive invocations until the ladder reaches one of the transitions named, or
 // the budget runs out. Returns every transition seen, in order.
-async function driveTo(project, stopAt, { budget = 40, calls = [], seatOpts = {}, stopBefore = false } = {}) {
+async function driveTo(project, stopAt, { budget = 40, calls = [], seatOpts = {}, stopBefore = false, handsShape } = {}) {
   const stops = stopAt;
   const seat = makeSeat(project, seatOpts);
   const seen = [];
@@ -410,7 +454,7 @@ async function driveTo(project, stopAt, { budget = 40, calls = [], seatOpts = {}
     // `stopBefore` leaves the ladder standing AT the named rung. Executing it
     // first is what made every kill land on a rung nobody named.
     if (stopBefore && stops.includes(peek)) return { seen, result: null };
-    const { result } = await invokeWorkflow(project.treeRoot, { seat, calls });
+    const { result } = await invokeWorkflow(project.treeRoot, { seat, calls, handsShape });
     seen.push(result.transition);
     if (stops.includes(result.transition)) return { seen, result };
   }
@@ -514,6 +558,84 @@ test('the workflow walks the ladder from an unopened milestone through to the cl
   assert.equal(advanced.result.return, 'phase_complete');
   assert.match(advanced.result.record_ref, /^ledger:\d+$/);
   assert.equal(JSON.parse(fs.readFileSync(path.join(treeRoot, 'state.json'), 'utf8')).phase, 'verification');
+});
+
+// ---------- the hands report text, which is what the live seat did ----------
+
+// The same ladder, with the hands reporting the way the live seat reported in
+// BURN-1. Every field this script reads off a machine return — `.transition`,
+// `.ref`, `.seq`, `.staged_path`, `.capsuleDir`, `.patch_digest` — is
+// `undefined` against a string, so a walk that gets past the first rung at all
+// is a walk whose boundary parsed. This is the class the first live fire died
+// of, on its first invocation, bound here.
+test('the ladder walks the same when the hands report their result as JSON text', async () => {
+  const project = makeProject();
+  const calls = [];
+  const { seen, result } = await driveTo(project, ['close'], { calls, handsShape: stringifiedHands() });
+
+  // VERIFY THE VERIFIER, off the replies the SCRIPT received rather than off a
+  // counter the shaper keeps: every machine call in this walk came back as
+  // text, and there were many of them. A walk that stringified nothing would
+  // otherwise pass this test while proving the opposite of what it claims.
+  const replies = handsRepliesIn(calls);
+  assert.ok(replies.length > 30, `the walk barely called the machine: ${replies.length}`);
+  for (const reply of replies) {
+    assert.equal(typeof reply.result, 'string', 'a hands reply reached the script parsed, so this walk asks nothing');
+  }
+  assert.deepEqual(seen, [
+    'open-milestone',
+    'toolchain-preflight',
+    'spec',
+    'next-chunk-brief',
+    'dispatch-implementer',
+    'record-built',
+    'review',
+    'chunk-gate',
+    'seal',
+    'post-seal',
+    'milestone-review',
+    'regression-floor',
+    'close',
+  ]);
+  // And the walk was real rather than a sequence of names: the artifacts a
+  // stringified `staged_path` would have sent to `undefined` are on disk, the
+  // milestone actually closed, and the invocation's own return cites a record —
+  // which is the `.ref` read off a machine return, one boundary further on.
+  const treeRoot = project.treeRoot;
+  assert.ok(fs.existsSync(path.join(treeRoot, 'milestones', 'M1', 'briefs', 'C1.json')));
+  assert.ok(fs.existsSync(path.join(treeRoot, 'milestones', 'M1', 'reviews', 'C1-r1.json')));
+  assert.equal(readJson(path.join(treeRoot, 'milestones', 'index.json'), null).milestones[0].status, 'green');
+  assert.match(
+    result.record_ref,
+    /^envelope:implementation\/close\.M1$/,
+    'the closing return cites no record, so a `.ref` read off a machine return came back undefined'
+  );
+});
+
+// The other half of the boundary: text that is not a result at all. Handed on
+// unparsed it becomes a silent `undefined` at whichever field is read next, and
+// the failure then surfaces blaming something that was correct — the first live
+// fire blamed its resolver for an answer the resolver had given right. So it is
+// refused at the call that produced it, naming the op.
+test("a hands reply that is text but not the operation's result is refused, naming the op", async () => {
+  const project = makeProject();
+
+  await assert.rejects(
+    invokeWorkflow(project.treeRoot, {
+      seat: makeSeat(project),
+      handsShape: (reply, op) =>
+        op === 'spine.nextTransition' ? { ok: true, result: 'the operation ran fine' } : reply,
+    }),
+    (err) => {
+      assert.match(err.message, /spine\.nextTransition/, 'the refusal must name the op whose reply it could not read');
+      assert.match(err.message, /the operation ran fine/, 'the refusal must carry the text it could not read');
+      // Not the downstream symptom: a boundary that passes the string on
+      // reaches `perform` and blames the resolver for a resolution it made
+      // correctly.
+      assert.doesNotMatch(err.message, /resolver named/);
+      return true;
+    }
+  );
 });
 
 // The return contract, checked over the whole walk rather than at one rung:
