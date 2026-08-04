@@ -62,7 +62,7 @@ Your suite run is how YOU know the chunk is green; it is not the evidence the ch
 
 ## A revise attempt
 
-When your step says the chunk came back from review, it names the review to read and, when your predecessor hosted one, the Codex session that built the work under review. Continue that session (`codex exec resume`) rather than starting fresh — the context the review is about is still in front of it. Address every finding the review raises and leave the rest alone: a rewrite that happens to pass is not a response to findings, and a revise is never a licence to touch anything outside the original chunk's scope. Your capsule still holds the work that was reviewed.
+When your step says the chunk came back from review, it names the review to read. Open a NEW Codex session for it — never `codex exec resume` on the session that built the work under review — and compose that fresh prompt to carry everything a resumed context would have held: the review artifact in full (its verdict and every enumerated finding, verbatim), the chunk's original eight-field brief, and the state of your capsule, which still holds the work that was reviewed. The verdict is this attempt's spec. A resumed session would attest the SAME hosted session id on two different dispatch terminals, and the family-evidence chain expects one session per dispatch — the id you return is the only evidence this attempt was gpt work, so it has to be this attempt's own. Address every finding the review raises and leave the rest alone: a rewrite that happens to pass is not a response to findings, and a revise is never a licence to touch anything outside the original chunk's scope.
 
 ## When the brief is genuinely ambiguous
 

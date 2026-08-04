@@ -44,6 +44,8 @@ const spine = require('./spine.js');
 const views = require('./views.js');
 const familyEvidence = require('./family-evidence.js');
 const capsule = require('./capsule.js');
+const gateWorktree = require('./gate-worktree.js');
+const journeys = require('./journeys.js');
 const dispatch = require('./dispatch.js');
 const toolchain = require('./toolchain.js');
 const { runGate } = require('./check-honesty.js');
@@ -424,6 +426,42 @@ const OPS = Object.freeze({
         // some other directory.
         cwd: path.join(treeRoot, '..'),
       }),
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // The same gate, run where the chunk's work actually is. Until the seal
+  // commits it, a chunk lives in the project's INDEX and not in its working
+  // tree, so a gate run in the project answers about the tree the chunk
+  // replaces — and passed a chunk whose own suite was red. Here the staged tree
+  // is checked out as a throwaway worktree, the suite runs there, and the
+  // record names that tree.
+  //
+  // THE DIRECTORY IS DERIVED, NEVER NAMED. A workflow that could pass the cwd
+  // could run a gate anywhere on the machine and file the result under a gate
+  // id; it passes the profile, and the machine decides where. The cleanup is a
+  // `finally` because the record is already durable by then: a checkout left
+  // behind by a killed process is reclaimed on re-entry, but one left behind by
+  // a thrown error would simply accumulate.
+  'checkHonesty.runStagedGate': {
+    call: (treeRoot, gateId, cmd, profileId) => {
+      const repoRoot = path.join(treeRoot, '..');
+      const { dir, tree } = gateWorktree.openGateWorktree(repoRoot, gateId, profileId);
+      try {
+        return runGate({ gateId, cmd, ledgerPath: path.join(treeRoot, 'ledger.jsonl'), cwd: dir, tree });
+      } finally {
+        gateWorktree.closeGateWorktree(repoRoot, gateId);
+      }
+    },
+    root: (args) => args[0],
+    receipt: 'none',
+  },
+  // The journey catalog's one write, and its audit record with it. The repo
+  // root is DERIVED like every other project-facing op's: the entry is only
+  // written once git can show the script in the sealed commit, and a workflow
+  // free to name the repository could vouch for a file in another one.
+  'journeys.recordAuthored': {
+    call: (treeRoot, milestoneId, chunkId, nomination) =>
+      journeys.recordAuthoredJourney(treeRoot, path.join(treeRoot, '..'), milestoneId, chunkId, nomination),
     root: (args) => args[0],
     receipt: 'none',
   },

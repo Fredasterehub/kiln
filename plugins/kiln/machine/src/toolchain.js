@@ -484,6 +484,33 @@ const PROBE_MARKERS = {
   'python-pytest': path.join('.venv', 'bin', 'pytest'),
 };
 
+// PROFILE_DEPENDENCY_DIRS — the one directory in the target project each
+// profile's suite needs and git does not carry: the installed dependencies.
+// They are ignored by every ecosystem's own convention, so a fresh checkout of
+// the project's tree — a `git worktree add`, for instance — does not have them,
+// and a suite run there fails for want of its own libraries rather than because
+// the code is wrong.
+//
+// It is the ECOSYSTEM's directory, not the profile's own install: `node-cli`
+// installs nothing (node:test ships with the runtime) and still needs whatever
+// the project itself depends on. `null` means this profile's suite needs no
+// installed tree at all — no profile claims that today, and the shape is here
+// so a future one can say so rather than being silently assumed into node.
+const PROFILE_DEPENDENCY_DIRS = Object.freeze({
+  'node-web': 'node_modules',
+  'node-cli': 'node_modules',
+  'python-pytest': '.venv',
+});
+
+// dependencyDirOf(profileId) -> the directory name, or null. Derived from the
+// profile id rather than accepted from a caller: a caller free to name the
+// directory would be naming a path inside somebody else's checkout.
+function dependencyDirOf(profileId) {
+  assertKnownProfileId(profileId);
+  const dir = PROFILE_DEPENDENCY_DIRS[profileId];
+  return dir === undefined ? null : dir;
+}
+
 // probeSatisfied(profileId, dir) -> {satisfied, probe_cmd}. `probe_cmd` is
 // carried through from the profile registry as informational metadata for
 // whatever runs the real preflight (check-honesty.js's runGate) —
@@ -602,4 +629,6 @@ module.exports = {
   composeSuite,
   probeSatisfied,
   scaffoldProfile,
+  PROFILE_DEPENDENCY_DIRS,
+  dependencyDirOf,
 };

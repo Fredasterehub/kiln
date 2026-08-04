@@ -343,7 +343,15 @@ Write TWO files, and nothing anywhere else:
         "chunks" array, each entry carrying a unique "id" and a "title", in the
         order they are to be built.
 
-The two must agree — the plan's chunk ids are the chunks the spec describes. When both are written, report \`wrote: true\`, the model id you are running as, and a one-sentence summary.`,
+        A chunk that CLOSES one of this milestone's criteria also carries a
+        "journey" object: \`{"journey_id": ..., "script_path": ..., "harness": ...}\`.
+        The journey_id is the one architecture/criteria-register.json already
+        minted for that criterion — never a new one. The script_path is where
+        that chunk's implementer will write the journey script, relative to the
+        project root. The harness is one of playwright, node-test, pytest, cli.
+        Chunks that close no criterion carry no "journey" key at all.
+
+The two must agree — the plan's chunk ids are the chunks the spec describes, and a journey you nominate in the plan is the journey your prose nominates for the same chunk. When both are written, report \`wrote: true\`, the model id you are running as, and a one-sentence summary.`,
         AUTHORED,
         plan.staged_ref,
         'claude'
@@ -398,11 +406,9 @@ The two must agree — the plan's chunk ids are the chunks the spec describes. W
           next.transition === 'revise'
             ? `Chunk ${next.chunk_id} of milestone ${next.milestone_id} came back from review asking for changes. This is attempt ${next.attempt}, and it is a REMEDIATION, not a fresh build.
 
-Read the review that asked for them first — it is at ${next.review_ref} in the Kiln tree at ${treeRoot} — and address every finding it raises. Your capsule still holds the work it reviewed, so change what the review asked about and leave the rest alone; a rewrite that happens to pass is not a response to the findings.${
-                next.prior_session
-                  ? `\n\nThe work under review was built in Codex session ${next.prior_session}. Continue that session rather than starting a new one, so the context the review is about is still in front of you.`
-                  : ''
-              }
+Read the review that asked for them first — it is at ${next.review_ref} in the Kiln tree at ${treeRoot} — and address every finding it raises. Your capsule still holds the work it reviewed, so change what the review asked about and leave the rest alone; a rewrite that happens to pass is not a response to the findings.
+
+This attempt is a session of its own, and it never reopens the one that built the work under review: every attempt is a separate dispatch and answers with its own evidence. So put in front of you what that context would have held — the review's verdict and every finding it enumerates, word for word; the chunk's brief in full; and the state of your capsule as it stands. The verdict is this attempt's spec. If you host your model inside your own turn, that fresh session's prompt is composed out of exactly those three.
 
 `
             : ''
@@ -489,9 +495,20 @@ Your input is the staged diff in the project and the brief; you have read access
       return await closeStep(next, review.outcome)
     }
 
+    // The chunk's own suite, run against the CHUNK. Its approved work is in the
+    // project's index and not in its working tree — the seal is what moves it —
+    // so this gate runs in a throwaway checkout of the staged tree, and the
+    // record it leaves names that tree. Run in the project itself, as it once
+    // was, it answered about the tree the chunk replaces and passed a chunk
+    // whose own suite was red.
     case 'chunk-gate': {
       const suite = await hands('toolchain.composeSuite', [treeRoot, next.profile_id])
-      const gate = await hands('checkHonesty.runGate', [treeRoot, next.gate_id, suite.cmd])
+      const gate = await hands('checkHonesty.runStagedGate', [
+        treeRoot,
+        next.gate_id,
+        suite.cmd,
+        next.profile_id,
+      ])
       return `ledger:${gate.seq}`
     }
 
@@ -572,6 +589,14 @@ Answer it as a verdict plus a VERBATIM ANCHOR — the exact quote and its file:l
     case 'post-seal': {
       await hands('capsule.syncWorktreeToHead', [treeRoot])
       await hands('capsule.closeCapsule', [treeRoot, next.milestone_id, next.chunk_id])
+      // The JIT journey, catalogued here and nowhere earlier. The script was
+      // authored inside the capsule and reviewed with the chunk, so the seal is
+      // the first moment the entry describes work anybody has trusted — and the
+      // machine writes it, never a seat. A chunk that nominated none skips this
+      // and the catalog is not touched at all.
+      if (next.journey) {
+        await hands('journeys.recordAuthored', [treeRoot, next.milestone_id, next.chunk_id, next.journey])
+      }
       return await recordEnvelope(
         next,
         `chunk ${next.chunk_id} of milestone ${next.milestone_id} is sealed and its capsule is closed`,

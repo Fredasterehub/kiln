@@ -796,6 +796,12 @@ if (require.main === module) {
 
 module.exports = {
   assembleSuite,
+  // Exported for the ONE caller that must hold a journey to the same floor
+  // before writing it: `journeys.js`, the catalog's writer. A writer free to
+  // produce what this consumer will refuse is a build that discovers its own
+  // malformed catalog a whole phase later, and a second copy of the rule is
+  // how the two drift. The rule itself is unchanged and still owned here.
+  isContainedScriptPath,
   orderRun,
   startRun,
   recordRun,

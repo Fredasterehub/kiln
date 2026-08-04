@@ -37,6 +37,10 @@ const { isDeepStrictEqual } = require('node:util');
 const { writeAtomic } = require('./atomic-json.js');
 const { writeAtomicText } = require('./atomic-text.js');
 const { validateBrief, DESIGNER_FAMILIES } = require('./validators.js');
+// The journey-nomination rule is owned by the module that will WRITE the
+// nomination into the catalog, and imported here so a malformed one is refused
+// at the promotion boundary rather than twice-defined.
+const { nominationProblem } = require('./journeys.js');
 
 const STAGING_DIRNAME = 'staging';
 
@@ -135,6 +139,28 @@ const CLASSES = Object.freeze({
       }
       if (new Set(ids).size !== ids.length) {
         return 'a chunk plan names the same chunk twice, and the resolver would never reach the second';
+      }
+      // A chunk may nominate the JIT journey it closes, and that nomination is
+      // the only machine-readable form the decision takes — the spec says it in
+      // prose, and prose cannot be asked which journey a chunk closes. Optional,
+      // because most chunks close no criterion; refused here when malformed,
+      // because a designer can still fix it now and `journeys.js` would
+      // otherwise meet it a whole milestone later, at the seal.
+      const nominated = new Map();
+      for (const entry of content.chunks) {
+        if (!isPlainObject(entry) || entry.journey === undefined) continue;
+        const problem = nominationProblem(entry.journey);
+        if (problem !== null) return `chunk "${entry.id}" nominates a journey, and ${problem}`;
+        // A journey is mechanically unique — the criteria register mints exactly
+        // one per criterion — so two chunks claiming the same one is a
+        // decomposition mistake. Caught here it costs a re-plan; left to the
+        // seal it costs two authorship records for one journey, or a collision
+        // that only fires after the second chunk has already sealed.
+        const claimed = nominated.get(entry.journey.journey_id);
+        if (claimed !== undefined) {
+          return `journey "${entry.journey.journey_id}" is nominated by more than one chunk ("${claimed}" and "${entry.id}") — the register mints exactly one journey per criterion, so exactly one chunk closes it`;
+        }
+        nominated.set(entry.journey.journey_id, entry.id);
       }
       return null;
     },

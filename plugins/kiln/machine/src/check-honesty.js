@@ -9,6 +9,9 @@ const { readJson } = require('./atomic-json.js');
 const { readAll } = require('./jsonl.js');
 const { appendRecord, ISO_8601_UTC_RE } = require('./stream.js');
 const { verifyManifest, CANONICAL_ARCHITECTURE_ARTIFACTS } = require('./manifest.js');
+// Read-only, and it imports nothing of this tree's own — so the one module that
+// writes gate evidence can verify a stated tree without a cycle.
+const { git } = require('./staged-diff.js');
 const { validateDeviation, DEVIATION_FIELDS } = require('./validators.js');
 
 const MISSING_STATE = Symbol('check-honesty.missing-state');
@@ -412,6 +415,11 @@ function checkHonesty({ statePath, ledgerPath }) {
   return { ok: violations.length === 0, violations };
 }
 
+// Either width git actually produces: 40 hex in a SHA-1 repository, 64 in a
+// SHA-256 one. The width is not what makes an id right — the comparison below
+// is — and pinning 40 refused every valid identity a SHA-256 target has.
+const TREE_ID_RE = /^([0-9a-f]{40}|[0-9a-f]{64})$/;
+
 // The sole sanctioned producer of gate evidence. It actually executes cmd
 // and records the exit code the process really returned rather than
 // accepting a caller-supplied exit_code, so evidence can never be
@@ -425,7 +433,32 @@ function checkHonesty({ statePath, ledgerPath }) {
 // project's suite has to be run in the target project, and inheriting a
 // caller's working directory silently answers about a different tree. Omitted,
 // the behaviour is unchanged — the calling process's own directory.
-function runGate({ gateId, cmd, ledgerPath, cwd }) {
+//
+// `tree` is optional too, and it is a CLAIM THIS FUNCTION CHECKS rather than a
+// field it copies. Some gates run in a checkout materialized for them — the
+// chunk gate runs in one built from the staged index, because the chunk's work
+// is not in the project's working tree yet — and a record of such a gate is
+// worth nothing unless it says which tree it answered about. So the caller
+// states the tree it believes it built, and this function asks git, in the
+// directory the command is actually about to run in, what tree is checked out
+// there. A mismatch throws BEFORE the command runs: no suite, no record, and
+// nothing on disk that could later be read as a gate over a tree it never saw.
+//
+// TWO QUESTIONS, BECAUSE HEAD IS NOT THE CHECKOUT. `HEAD^{tree}` describes the
+// commit that was checked out, not the bytes lying there now — a checkout
+// somebody left dirty passes a tree comparison perfectly while holding
+// different content, which is exactly what a suite killed mid-run leaves
+// behind. So the tracked files are asked about too, and any modification to one
+// (in the working tree or in that checkout's index) is a refusal. Untracked
+// files are deliberately NOT dirt: the machine plants a dependency symlink
+// before the gate runs and a suite legitimately writes its own output, and
+// neither changes what the stated tree says.
+//
+// Where a gate runs in an ordinary working tree — the toolchain preflight, the
+// regression floor — no tree is stated, and none is recorded. That absence is
+// itself honest: a working tree can differ from its own HEAD, so a tree id
+// recorded there would be a claim about something else.
+function runGate({ gateId, cmd, ledgerPath, cwd, tree }) {
   if (typeof gateId !== 'string' || gateId === '') {
     throw new TypeError('runGate: gateId must be a non-empty string');
   }
@@ -435,14 +468,69 @@ function runGate({ gateId, cmd, ledgerPath, cwd }) {
   if (typeof ledgerPath !== 'string' || ledgerPath === '') {
     throw new TypeError('runGate: ledgerPath must be a non-empty string');
   }
-  const outcome = spawnSync(cmd, { shell: true, encoding: 'utf8', cwd });
+  if (tree !== undefined) {
+    if (typeof tree !== 'string' || !TREE_ID_RE.test(tree)) {
+      throw new TypeError(
+        `runGate: tree must be a hex git tree id, 40 characters or 64 depending on the repository's object format, when stated (got ${JSON.stringify(tree)})`
+      );
+    }
+    if (typeof cwd !== 'string' || cwd === '') {
+      throw new TypeError('runGate: a gate that states a tree must also name the cwd it runs in — the tree is checked there');
+    }
+    const head = git(cwd, ['rev-parse', '--verify', 'HEAD^{tree}']);
+    if (head.status !== 0) {
+      throw new Error(
+        `runGate: gate ${JSON.stringify(gateId)} states tree ${tree}, but ${cwd} is not a git checkout this can verify: ${head.stderr.trim()}`
+      );
+    }
+    const actual = head.stdout.trim();
+    if (actual !== tree) {
+      throw new Error(
+        `runGate: gate ${JSON.stringify(gateId)} states tree ${tree}, but ${cwd} holds ${actual} — a gate record may not claim a tree the gate did not run against`
+      );
+    }
+    // TWO COMPARISONS, BECAUSE THE WORKING TREE AND THE INDEX CAN DISAGREE.
+    // `diff HEAD` answers about the files on disk and `diff --cached HEAD`
+    // about the index, and a change staged and then restored to HEAD's own
+    // bytes is invisible to the first while the second still sees it. Both are
+    // part of what a checkout is, so both are asked. `--quiet` makes the exit
+    // code the whole answer: 0 for no difference, 1 for a difference, anything
+    // above that for a git that could not tell.
+    for (const where of [['diff', '--quiet', 'HEAD'], ['diff', '--cached', '--quiet', 'HEAD']]) {
+      const dirt = git(cwd, where);
+      if (dirt.status === 1) {
+        throw new Error(
+          `runGate: gate ${JSON.stringify(gateId)} states tree ${tree}, but ${cwd} has uncommitted changes to tracked files — the bytes a suite would run there are not the ones that tree names`
+        );
+      }
+      if (dirt.status !== 0) {
+        throw new Error(
+          `runGate: gate ${JSON.stringify(gateId)} states tree ${tree}, and git could not say whether ${cwd} still holds it: ${dirt.stderr.trim()}`
+        );
+      }
+    }
+  }
+  // A GATE MUST NOT INHERIT ITS CALLER'S TEST HARNESS. `node --test` sets
+  // NODE_TEST_CONTEXT in the environment of every process it spawns, and a
+  // `node --test` that finds that variable believes it is a test file reporting
+  // to a parent runner: it reports through the parent and exits 0 whether its
+  // tests passed or failed. So a gate invoked from anywhere inside a node-test
+  // process would run the target project's suite, watch it fail, and record
+  // green — the one thing this function exists to make impossible. Stripped from
+  // the CHILD's environment only; nothing about this process changes.
+  const gateEnv = { ...process.env };
+  delete gateEnv.NODE_TEST_CONTEXT;
+  const outcome = spawnSync(cmd, { shell: true, encoding: 'utf8', cwd, env: gateEnv });
   const exitCode = outcome.status === null ? 1 : outcome.status; // signal-killed -> treated as failure
   const seq = appendRecord(ledgerPath, {
+    // SPREAD RATHER THAN SET-TO-UNDEFINED: a key whose value is `undefined`
+    // survives an in-process comparison and vanishes through JSON, so a record
+    // built with one reads differently depending on who is looking.
     kind: 'gate',
-    payload: { gate_id: gateId, cmd, exit_code: exitCode },
+    payload: { gate_id: gateId, cmd, exit_code: exitCode, ...(tree === undefined ? {} : { tree }) },
     correlation_id: gateId,
   });
-  return { gateId, cmd, exitCode, seq, stdout: outcome.stdout, stderr: outcome.stderr };
+  return { gateId, cmd, exitCode, seq, stdout: outcome.stdout, stderr: outcome.stderr, ...(tree === undefined ? {} : { tree }) };
 }
 
 // The sole sanctioned producer of deviation evidence: a generic,

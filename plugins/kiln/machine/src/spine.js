@@ -253,18 +253,6 @@ function attemptsFor(records, scopeRef) {
   return dispatchRecords(records).filter((record) => record.prompt_ref === scopeRef);
 }
 
-// The Codex session the last successful attempt on this scope hosted, so a
-// revise can resume the run that produced the work under review rather than
-// starting a stranger's.
-function priorHostedSession(records, scopeRef) {
-  const attempts = successfulAttempts(records, scopeRef);
-  for (let i = attempts.length - 1; i >= 0; i -= 1) {
-    const terminal = terminalOf(records, attempts[i].dispatch_id);
-    if (terminal !== null && isNonEmptyString(terminal.hosted_session)) return terminal.hosted_session;
-  }
-  return null;
-}
-
 function successfulAttempts(records, scopeRef) {
   return attemptsFor(records, scopeRef).filter((record) => {
     const terminal = terminalOf(records, record.dispatch_id);
@@ -364,10 +352,26 @@ function chunkRecords(treeRoot, milestoneId) {
 // "is there another chunk after this one", and the resolver would be
 // inferring the shape of the milestone from the records it happens to find —
 // which cannot tell an unstarted chunk from a chunk nobody planned.
-function plannedChunks(treeRoot, milestoneId) {
+function plannedChunkEntries(treeRoot, milestoneId) {
   const plan = readJson(path.join(treeRoot, 'milestones', milestoneId, 'chunk-plan.json'), null);
   if (!isPlainObject(plan) || !Array.isArray(plan.chunks)) return null;
-  return plan.chunks.filter((entry) => isPlainObject(entry) && isNonEmptyString(entry.id)).map((entry) => entry.id);
+  return plan.chunks.filter((entry) => isPlainObject(entry) && isNonEmptyString(entry.id));
+}
+
+function plannedChunks(treeRoot, milestoneId) {
+  const entries = plannedChunkEntries(treeRoot, milestoneId);
+  return entries === null ? null : entries.map((entry) => entry.id);
+}
+
+// The journey a chunk's plan entry nominated, or null. Read here rather than by
+// the workflow for the same reason every other fact is: the script holds no
+// policy, and "does this chunk owe the catalog an entry" is a question about
+// disk that a test can ask without running anything.
+function nominatedJourney(treeRoot, milestoneId, chunkId) {
+  const entries = plannedChunkEntries(treeRoot, milestoneId);
+  if (entries === null) return null;
+  const entry = entries.find((candidate) => candidate.id === chunkId);
+  return entry !== undefined && isPlainObject(entry.journey) ? entry.journey : null;
 }
 
 // The last STRICT lifecycle record for a chunk. The designer's side-channel
@@ -628,9 +632,11 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
         implementer_seat: implementerSeat,
         implementer_family: implementerFamily,
         needs_chunk_start: needsChunkStart,
-        // The review being answered, and the session that built what it
-        // rejected. A revise dispatched without them is a fresh attempt
-        // wearing a revise's name.
+        // The review being answered. A revise dispatched without it is a fresh
+        // attempt wearing a revise's name. The session that BUILT what the
+        // review rejected is deliberately not carried: an attempt runs in a
+        // session of its own, and a resumed one would attest the same hosted
+        // session id on two dispatch terminals.
         //
         // SPREAD RATHER THAN SET-TO-UNDEFINED. A key whose value is `undefined`
         // survives an in-process comparison and vanishes through JSON, so a
@@ -639,9 +645,6 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
         // have. The re-entrancy test caught it.
         ...(name === TRANSITIONS.REVISE && latest.kind === 'chunk-review'
           ? { review_ref: latest.review.ref }
-          : {}),
-        ...(name === TRANSITIONS.REVISE && priorHostedSession(ledger, scopeRef) !== null
-          ? { prior_session: priorHostedSession(ledger, scopeRef) }
           : {}),
         reason:
           name === TRANSITIONS.REVISE
@@ -753,8 +756,16 @@ function chunkLadder(treeRoot, milestoneId, planned, ledger, profileId, designer
         // pair — the green record, and the envelope the repair writes — so a
         // crash between them is visible rather than skipped forever.
         if (!fs.existsSync(postSealEnvelopePath(treeRoot, milestoneId, chunkId))) {
+          // The journey this chunk's plan nominated, carried to the rung that
+          // records it. The catalog entry waits for the seal deliberately: the
+          // script is authored inside the capsule and reviewed with the chunk,
+          // so until the seal commits it there is nothing trustworthy to
+          // catalogue — and a catalogued journey whose chunk was later revised
+          // away would be a suite entry nobody approved.
+          const journey = nominatedJourney(treeRoot, milestoneId, chunkId);
           return at(TRANSITIONS.POST_SEAL, {
             envelope_id: postSealEnvelopeId(milestoneId, chunkId),
+            ...(journey === null ? {} : { journey }),
             reason: `chunk ${chunkId} is sealed and its worktree and capsule have not been settled`,
           });
         }

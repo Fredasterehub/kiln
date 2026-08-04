@@ -125,16 +125,15 @@ A regression discovered after a milestone merged — a later milestone's chunks 
 
 ## The honest gaps
 
-Three things this phase used to do, or would need to do, and that no transition on the workflow path performs. None of them is invented back here: a claim that some seat does them would be an authority the machine does not honor, which is the one thing this document must never carry.
+Two things this phase used to do, or would need to do, and that no transition on the workflow path performs. Neither is invented back here: a claim that some seat does them would be an authority the machine does not honor, which is the one thing this document must never carry.
 
 **A red gate is a terminus, not a loop.** The resolver returns `blocked` for as long as a preflight, chunk, or regression gate's latest record is red, and no sanctioned transition re-runs that gate — remediating the cause does not, by itself, put a green record on the tree, and the fire is forbidden to run the gate by hand as a substitute. So a red gate today ends the phase's own progress and the operator hears why, with the record cited. A re-run rung belongs to whichever slice decides what remediation is allowed to look like.
 
-The two bookkeeping writes that rode on the manual chunk step:
+The one bookkeeping write that rode on the manual chunk step and has not been re-homed:
 
-- **`verification/journeys.json`** — the assemblable catalog `assembleSuite` reads. Journeys are still authored, JIT, by the chunk's implementer and reviewed in that chunk's own review; nothing now appends the `{journey_id, criterion_id, script_path, harness, added_in_milestone}` entry that the catalog needs. `product/verification/flow.md` §"journeys.json provenance" still names implementation's JIT-authoring step as the writer.
-- **`verification/affected-map.json`** — the per-chunk affected-journey entries `product/verification/flow.md` attributes to the chunk-green step.
+- **`verification/affected-map.json`** — the per-chunk affected-journey entries `product/verification/flow.md` attributes to the chunk-green step. It belongs to the slice that cuts verification over, and it is load-bearing for that phase rather than for this one: the anvil closes without it.
 
-Both belong to the slice that cuts verification over, and both are load-bearing for that phase rather than for this one: the anvil closes without either, and the hundred eyes cannot assemble a suite without the first.
+**`verification/journeys.json` no longer belongs on this list.** The catalog `assembleSuite` reads is written by the post-seal transition, through `journeys.js`, one entry per journey a chunk's plan nominated. Journeys are still authored JIT by the chunk's implementer and reviewed in that chunk's own review; what changed is that the entry is now the machine's own write and it waits for the seal, because the seal is the first moment the script is committed work a review has already trusted. The nomination travels as DATA in `chunk-plan.json` — the same reason the chunk list does, since prose cannot be asked which journey a chunk closes — and the entry's `criterion_id` is derived from the frozen criteria register rather than stated by anyone. A chunk that nominates nothing leaves the catalog untouched.
 
 ## Telemetry
 

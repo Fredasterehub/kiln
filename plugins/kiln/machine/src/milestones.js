@@ -668,6 +668,32 @@ function recordChunk(treeRoot, milestoneId, record, opts = {}) {
   assertLifecycleAndCrossChecks(records, record);
   if (record.kind === 'chunk-built') assertBuildIsEvidenced(treeRoot, record, opts);
 
+  // THE ONE KIND WITH A REPLAY, and it earns it by never travelling alone.
+  // `journeys.js` writes this record and then the catalog entry it is the audit
+  // trail for; a crash between the two has to be re-enterable, and it only is if
+  // re-recording the same authorship adopts the record already there instead of
+  // minting a second one. Every other kind is written once by a transition whose
+  // own evidence decides whether it runs at all, so none of them needs this.
+  //
+  // The identity is the whole payload, not the chunk: an identical
+  // (chunk_id, journey_ids) is the replay, and a DIFFERING set for the same
+  // chunk is a contradiction rather than a retry — the same chunk cannot have
+  // authored two different sets of journeys, and appending the second would
+  // leave the stream unable to say which is true.
+  if (record.kind === 'chunk-journeys') {
+    const existing = records.find(
+      (candidate) => candidate.kind === 'chunk-journeys' && candidate.chunk_id === record.chunk_id
+    );
+    if (existing !== undefined) {
+      if (JSON.stringify(existing.journey_ids) !== JSON.stringify(record.journey_ids)) {
+        throw new Error(
+          `milestones: chunk "${record.chunk_id}" already recorded journeys ${JSON.stringify(existing.journey_ids)} — refusing to record a different set ${JSON.stringify(record.journey_ids)} for the same chunk`
+        );
+      }
+      return { chunksPath, seq: existing.seq };
+    }
+  }
+
   const { kind, chunk_id, ...rest } = record;
   const seq = appendRecord(chunksPath, { kind, payload: { chunk_id, ...rest }, correlation_id: chunk_id });
   return { chunksPath, seq };
