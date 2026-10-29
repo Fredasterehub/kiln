@@ -41,8 +41,8 @@ and drops groups emptied by those removals. Non-Kiln content and order remain;
 JSON formatting is normalized with indent 2. Parse and shape checks happen
 before writing, and writes follow a symlink to its resolved target.
 When installation or removal leaves the parsed content unchanged, no write occurs.
-Seat launches write no hook files. Before agent start they persist folder trust
-as described below; hook-review state in Codex `config.toml` remains read-only.
+Seat launches write no hook files. Claude folder trust is described below;
+hook-review state in Codex `config.toml` remains read-only.
 Missing installed Kiln hooks produce a warning and never refuse a launch.
 Codex installs SessionStart for all seats; `start.sh` exits for workers.
 
@@ -98,38 +98,36 @@ seat record on a relaunch, or removes the record for a new seat. Corrupt prior
 records produce a warning and are treated as absent. An overwritten address
 with a different pane produces a warning.
 
-Before `pane split`, the launcher records trust for the exact writable root:
-Codex appends `[projects."<root>"]` with `trust_level = "trusted"` to
-`$CODEX_HOME/config.toml` (default `~/.codex/config.toml`), preserving every
-existing byte as a prefix of the atomically replaced file. It validates TOML before writing and saves `config.toml.bak-kiln`
-once when an existing file needs changing. Already-trusted roots are unchanged.
-Malformed config or an existing non-trusted table for the same root cannot be
-fixed by appending a duplicate table: the launcher reports this without changing
-the file, and does not start the agent. No startup keystrokes answer dialogs.
-The [Codex reference](https://learn.chatgpt.com/docs/config-file/config-reference)
-documents `projects.<path>.trust_level` as `"trusted"` or `"untrusted"`.
+Codex gets no folder pre-trust: with the seat flags Codex 0.165 shows no
+trust dialog and runs Kiln's reviewed user-level hooks in untrusted folders
+(kernel runs 1–2 and live probe, 2026-10-29). Its sandbox keeps `~/.codex`
+read-only; the earlier pre-trust broke sandboxed launchers in the kernel rerun.
+Codex launches make no profile writes; hook-review diagnostics only read it.
 
-Claude sets only `projects[<root>].hasTrustDialogAccepted = true` in
-`$HOME/.claude.json`, preserving all other JSON values and backing up the
-existing file to `.claude.json.bak-kiln` once. The
-[official settings guide](https://code.claude.com/docs/en/settings) identifies
-`.claude.json` as holding per-project trust decisions; the specific Boolean
-field was observed in a trusted project on this host (2026-10-29), rather than
-documented as a provisioning API. Already-trusted records are untouched.
-Invalid JSON is preserved and reported. Claude does not persist trust for the
-home directory itself; use a project subdirectory, per the
-[security documentation](https://code.claude.com/docs/en/security).
-Both trust files use a `<file>.kiln.lock` sidecar flock across read, backup,
-and atomic replacement. A unique temp file in the same directory is set to
-the original mode (0600 for a new file) before content is written, then fsynced
-before replacement. The one-time backup publishes the already-read snapshot
-through a hard link from a complete, fsynced temp file. Codex re-parses the
-installed file under the lock and refuses launch unless this root is trusted.
-Immediately before `agent start`, the launcher re-reads trust and re-applies once
-if missing; a failed confirmation refuses start. CLI writers do not necessarily
-honour Kiln's lock, so this confirmation cannot prevent later external rewrites.
-Dry-run prints planned backups and trust writes without changing either file
-or creating locks.
+Before `pane split`, Claude checks `$HOME/.claude.json` read-only for an exact
+resolved root or ancestor key with `hasTrustDialogAccepted` equal to true.
+Claude trust carries down to child folders (live probe, Claude 2.1.312,
+2026-10-29). When any ancestor is trusted there is no lock, write, or backup.
+Team bootstrap trusts the team folder once from the bridge; later seat roots
+belong under that folder so sandboxed launchers need no profile writes.
+Otherwise the launcher sets only `projects[<root>].hasTrustDialogAccepted = true`,
+preserving other JSON values. It holds a `.claude.json.kiln.lock` flock across
+read, backup, and atomic replacement. A unique same-directory temp file receives
+the original mode (0600 if new) before content, is fsynced, then replaces the
+file. The one-time `.claude.json.bak-kiln` publishes the read snapshot through
+a hard link from a complete, fsynced temp file. Permission/read-only failures
+refuse before pane creation and name the remedy: put seat roots under a folder
+Claude already trusts. Invalid JSON is preserved and reported.
+The [official settings guide](https://code.claude.com/docs/en/settings) describes
+per-project trust in `.claude.json`; the Boolean field is observed state,
+not a documented provisioning API. Claude does not persist trust for HOME
+itself; use a project subdirectory per the
+[security guide](https://code.claude.com/docs/en/security).
+Immediately before `agent start`, the same ancestor check runs again; missing
+trust is re-applied once. Failed confirmation closes the new pane and restores
+the previous seat record. Claude may ignore Kiln's lock and overwrite trust
+after confirmation. Dry-run prints planned backups and writes once without
+changing files or creating locks.
 Workers and pending rows are derived via `team workers` and `team pending`;
 `seat.json` stores neither. Hooks and team share `plugins/kiln/lib/ledger.py`:
 children are seat files whose parent matches this address, regardless of role;

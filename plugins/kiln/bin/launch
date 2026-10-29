@@ -2,6 +2,7 @@
 """Launch a Kiln seat using its pinned native family contract."""
 import argparse
 import copy
+import errno
 import fcntl
 import json
 import os
@@ -248,51 +249,49 @@ def trust_lock(path, dry_run):
         yield
 
 
-def trust_flag(content, root, family):
-    data = tomllib.loads(content.decode("utf-8")) if family == "codex" else json.loads(content)
-    if not isinstance(data, dict):
-        raise ValueError("project trust config must be an object/table")
+def trust_flag(content, root):
+    data = json.loads(content)
+    if not isinstance(data, dict) or not isinstance(data.get("projects", {}), dict):
+        raise ValueError("Claude trust config must contain a projects object")
     projects = data.get("projects", {})
-    if not isinstance(projects, dict):
-        raise ValueError("project trust records must be an object/table")
-    project = projects.get(root, {})
-    key, value = ("trust_level", "trusted") if family == "codex" else ("hasTrustDialogAccepted", True)
-    return isinstance(project, dict) and type(project.get(key)) is type(value) and project.get(key) == value
+    directory = Path(root).resolve()
+    return any(isinstance(project := projects.get(str(parent)), dict)
+               and project.get("hasTrustDialogAccepted") is True
+               for parent in (directory, *directory.parents))
 
 
-def pretrust(root, family, dry_run):
-    path = (codex_home() / "config.toml" if family == "codex" else Path.home() / ".claude.json").resolve()
-    with trust_lock(path, dry_run):
-        exists = path.exists()
-        original = path.read_bytes() if exists else (b"" if family == "codex" else b"{}")
-        mode = path.stat().st_mode & 0o777 if exists else 0o600
-        if trust_flag(original, root, family):
+def pretrust(root, dry_run):
+    root = absolute(root)
+    path = (Path.home() / ".claude.json").resolve()
+    try:
+        # Trusted ancestors are sufficient, even when the profile is read-only.
+        if trust_flag(path.read_bytes() if path.exists() else b"{}", root):
             return
-        if family == "codex":
-            projects = tomllib.loads(original.decode("utf-8")).get("projects", {})
-            if root in projects:
-                raise ValueError(f"existing Codex project {root} is not trusted; cannot replace its table by appending")
-            addition = f'\n[projects.{json.dumps(root, ensure_ascii=False)}]\ntrust_level = "trusted"\n'
-            updated = original + addition.encode("utf-8")
-            description = f"append {path}: {json.dumps(addition)}"
-        else:
+        with trust_lock(path, dry_run):
+            exists = path.exists()
+            original = path.read_bytes() if exists else b"{}"
+            mode = path.stat().st_mode & 0o777 if exists else 0o600
+            if trust_flag(original, root):
+                return
             data = json.loads(original)
             project = data.setdefault("projects", {}).setdefault(root, {})
             if not isinstance(project, dict):
                 raise ValueError("Claude project state must be an object")
             project["hasTrustDialogAccepted"] = True
             updated = (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-            description = f"set {path}: projects[{json.dumps(root)}].hasTrustDialogAccepted = true"
-        if not trust_flag(updated, root, family):
-            raise ValueError(f"{family} folder trust is missing for {root}; refusing launch")
-        backup_once(path, original, mode, dry_run)
-        if dry_run:
-            print(f"# {description}")
-        else:
-            atomic_bytes(path, updated, mode)
-            # The CLI may write independently of our lock; confirm the installed record.
-            if not trust_flag(path.read_bytes(), root, family):
-                raise ValueError(f"{family} folder trust is missing for {root} after re-apply; refusing launch")
+            backup_once(path, original, mode, dry_run)
+            if dry_run:
+                print(f"# set {path}: projects[{json.dumps(root)}].hasTrustDialogAccepted = true")
+            else:
+                atomic_bytes(path, updated, mode)
+                # Claude may write independently of our lock; confirm the installed record.
+                if not trust_flag(path.read_bytes(), root):
+                    raise ValueError(f"Claude folder trust is missing for {root} after re-apply; refusing launch")
+    except OSError as error:
+        if error.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+            raise
+        raise ValueError(f"cannot pre-trust Claude root {root}: put seat roots under a folder Claude already trusts "
+                         "(team bootstrap trusts the team folder from the bridge)") from error
 
 
 def herdr(args, dry_run):
@@ -380,7 +379,8 @@ def main():
         flags = native(seat, config, home)
         if args.family == "codex":
             warn_missing_hooks()
-        pretrust(root, args.family, args.dry_run)
+        if args.family == "claude":
+            pretrust(root, args.dry_run)
         target, seat["tab"] = target_pane(args.tab, workspace, args.dry_run)
         candidate = home / "seats" / f"{args.address}.json"
         if candidate.exists():
@@ -407,9 +407,9 @@ def main():
         label = f"{args.name or args.address} · {role_text} · {short}"
         herdr(["pane", "rename", seat["pane"], label], args.dry_run)
         # Re-read immediately before start and re-apply once if the flag disappeared.
-        if not args.dry_run:
+        if args.family == "claude" and not args.dry_run:
             try:
-                pretrust(root, args.family, False)
+                pretrust(root, False)
             except (OSError, ValueError, KeyError, TypeError):
                 try:
                     herdr(["pane", "close", seat["pane"]], False)

@@ -1,5 +1,6 @@
 import argparse
 import contextlib
+import errno
 import importlib.machinery
 import importlib.util
 import json
@@ -614,50 +615,104 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(split[split.index('--direction') + 1], 'right')
         self.launch('--direction', 'left', ok=False)
 
-    def test_codex_pretrust_appends_preserves_content_and_backs_up_once(self):
-        config = Path(self.env['CODEX_HOME']) / 'config.toml'
-        config.parent.mkdir()
-        original = b'# keep comments\r\nmodel = "gpt-6.1-sol"\r\n[notice]\r\nhide = true # no final newline'
-        config.write_bytes(original)
-        config.chmod(0o600)
+    def test_codex_launch_never_creates_or_changes_profile_files(self):
+        profile = Path(self.env['CODEX_HOME'])
         self.launch('--role', 'helper')
-        backup = config.with_name('config.toml.bak-kiln')
-        self.assertEqual(backup.read_bytes(), original)
-        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
-        self.assertTrue(config.read_bytes().startswith(original))
-        self.assertEqual(tomllib.loads(config.read_text())['projects'][str(self.root)]['trust_level'], 'trusted')
-        trusted = config.read_bytes()
-        self.launch('--role', 'helper')
-        self.assertEqual(config.read_bytes(), trusted)
-        second = self.base / 'quoted " root 😀'
-        self.launch('--role', 'helper', '--root', str(second))
-        self.assertTrue(config.read_bytes().startswith(trusted))
-        self.assertEqual(tomllib.loads(config.read_text())['projects'][str(second)]['trust_level'], 'trusted')
-        self.assertEqual(backup.read_bytes(), original)
+        self.assertFalse(profile.exists())
+        profile.mkdir()
+        config = profile / 'config.toml'
+        config.write_text('broken = [')
+        original = config.read_bytes()
+        profile.chmod(0o500)
+        try:
+            self.launch('--role', 'helper')
+            self.assertEqual(config.read_bytes(), original)
+            self.assertEqual(list(profile.iterdir()), [config])
+        finally:
+            profile.chmod(0o700)
 
-    def test_codex_already_trusted_is_untouched_and_default_home_is_used(self):
-        del self.env['CODEX_HOME']
-        config = Path(self.env['HOME']) / '.codex/config.toml'
-        config.parent.mkdir(parents=True)
-        original = '[projects.' + json.dumps(str(self.root)) + ']\ntrust_level="trusted" # keep\n'
-        config.write_text(original)
-        self.launch('--role', 'helper')
-        self.assertEqual(config.read_text(), original)
-        self.assertFalse(config.with_name('config.toml.bak-kiln').exists())
+    def test_trusted_claude_root_or_ancestor_needs_no_lock_write_or_backup(self):
+        path = Path(self.env['HOME']) / '.claude.json'
+        path.parent.mkdir()
+        for ancestor in (self.root, self.root.parent, Path('/')):
+            original = json.dumps({'projects': {str(ancestor): {'hasTrustDialogAccepted': True}}})
+            path.write_text(original)
+            inode = path.stat().st_ino
+            path.parent.chmod(0o500)
+            try:
+                self.launch()
+                self.assertEqual(path.read_text(), original)
+                self.assertEqual(path.stat().st_ino, inode)
+                self.assertEqual(list(path.parent.iterdir()), [path])
+            finally:
+                path.parent.chmod(0o700)
 
-    def test_unappendable_codex_config_is_preserved_without_start(self):
-        config = Path(self.env['CODEX_HOME']) / 'config.toml'
-        config.parent.mkdir()
-        sources = ['broken = [', 'projects = []',
-                   '[projects.' + json.dumps(str(self.root)) + ']\ntrust_level="untrusted"\n']
-        for source in sources:
-            config.write_text(source)
-            before = len(self.calls())
-            result = self.launch('--role', 'helper', ok=False)
-            self.assertNotIn('Traceback', result.stderr)
-            self.assertEqual(config.read_text(), source)
-            self.assertFalse(config.with_name('config.toml.bak-kiln').exists())
-            self.assertFalse(any(call[:2] in (['pane', 'split'], ['agent', 'start']) for call in self.calls()[before:]))
+    def test_claude_ancestor_keys_are_exact_resolved_paths_and_boolean_true(self):
+        module = load_launcher()
+        def content(key, flag=True):
+            return json.dumps({'projects': {key: {'hasTrustDialogAccepted': flag}}})
+        for key in (str(self.root) + '-other', str(self.root.parent) + '/.', 'relative'):
+            self.assertFalse(module.trust_flag(content(key), str(self.root)))
+        for flag in (1, 'true', False):
+            self.assertFalse(module.trust_flag(content(str(self.root.parent), flag), str(self.root)))
+        alias = self.base / 'alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        self.assertTrue(module.trust_flag(content(str(self.root)), str(alias / 'child')))
+
+    def test_readonly_claude_directory_refuses_before_any_herdr_call(self):
+        path = Path(self.env['HOME']) / '.claude.json'
+        path.parent.mkdir()
+        path.write_text('{}')
+        path.parent.chmod(0o500)
+        try:
+            result = self.launch(ok=False)
+            self.assertIn(str(self.root), result.stderr)
+            self.assertIn('put seat roots under a folder Claude already trusts', result.stderr)
+            self.assertEqual(len(result.stderr.splitlines()), 1)
+            self.assertEqual(path.read_text(), '{}')
+            self.assertEqual(list(path.parent.iterdir()), [path])
+            self.assertFalse((self.home / 'seats').exists())
+            self.assertEqual(self.calls(), [])
+        finally:
+            path.parent.chmod(0o700)
+
+    def test_claude_permission_errors_name_root_and_remedy_before_split(self):
+        path = Path(self.env['HOME']) / '.claude.json'
+        path.parent.mkdir()
+        path.write_text('{}')
+        for stage in ('trust_lock', 'backup_once', 'atomic_bytes'):
+            for code in (errno.EACCES, errno.EPERM, errno.EROFS):
+                module = load_launcher()
+                args = ['launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
+                        '--root', str(self.root), '--parent', 'super']
+                with patch.dict('os.environ', self.env), patch('sys.argv', args), \
+                        patch.object(module, stage, side_effect=OSError(code, 'denied')), \
+                        patch.object(module, 'herdr') as herdr, contextlib.redirect_stderr(io.StringIO()) as errors:
+                    with self.assertRaises(SystemExit):
+                        module.main()
+                    herdr.assert_not_called()
+                    self.assertEqual(len(errors.getvalue().splitlines()), 1)
+                    self.assertIn(str(self.root), errors.getvalue())
+                    self.assertIn('put seat roots under a folder Claude already trusts', errors.getvalue())
+                self.assertEqual(path.read_text(), '{}')
+
+    def test_prestart_recheck_accepts_newly_trusted_ancestor_without_lock(self):
+        module = load_launcher()
+        original = module.herdr
+        path = Path(self.env['HOME']) / '.claude.json'
+        def checked(args, dry_run):
+            if args[:2] == ['pane', 'rename']:
+                path.write_text(json.dumps({'projects': {str(self.root.parent): {'hasTrustDialogAccepted': True}}}))
+            return original(args, dry_run)
+        args = ['launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
+                '--root', str(self.root), '--parent', 'super']
+        with patch.dict('os.environ', self.env), patch('sys.argv', args), \
+                patch.object(module, 'trust_lock', wraps=module.trust_lock) as lock, \
+                patch.object(module, 'herdr', side_effect=checked):
+            module.main()
+            self.assertEqual(lock.call_count, 1)
+        self.assertTrue(module.trust_flag(path.read_bytes(), str(self.root)))
+        self.assertNotIn(str(self.root), json.loads(path.read_text())['projects'])
 
     def test_claude_pretrust_minimal_merge_and_backup_once(self):
         path = Path(self.env['HOME']) / '.claude.json'
@@ -691,22 +746,19 @@ class LaunchTests(Sandbox, unittest.TestCase):
             self.assertEqual(path.read_text(), source)
             self.assertFalse(path.with_name('.claude.json.bak-kiln').exists())
 
-    def test_dry_run_describes_pretrust_and_backup_without_changes(self):
-        codex = Path(self.env['CODEX_HOME']) / 'config.toml'
-        claude = Path(self.env['HOME']) / '.claude.json'
-        for path, original in ((codex, 'model="gpt-6.1-sol"\n'), (claude, '{"keep":true,"private":"private-canary"}')):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(original)
-        for role, path in (('helper', codex), ('manager', claude)):
-            original = path.read_bytes()
-            result = self.launch('--role', role, '--dry-run')
-            self.assertIn(str(path), result.stdout)
-            self.assertEqual(result.stdout.count('# backup'), 1)
-            self.assertEqual(result.stdout.count('# append' if role == 'helper' else '# set'), 1)
-            self.assertIn('trust_level' if role == 'helper' else 'hasTrustDialogAccepted', result.stdout)
-            self.assertNotIn('private-canary', result.stdout)
-            self.assertEqual(path.read_bytes(), original)
-            self.assertFalse(path.with_name(path.name + '.bak-kiln').exists())
+    def test_dry_run_describes_pretrust_and_backup_once_without_changes(self):
+        path = Path(self.env['HOME']) / '.claude.json'
+        path.parent.mkdir()
+        original = '{"keep":true,"private":"private-canary"}'
+        path.write_text(original)
+        result = self.launch('--dry-run')
+        self.assertIn(str(path), result.stdout)
+        self.assertEqual(result.stdout.count('# backup'), 1)
+        self.assertEqual(result.stdout.count('# set'), 1)
+        self.assertIn('hasTrustDialogAccepted', result.stdout)
+        self.assertNotIn('private-canary', result.stdout)
+        self.assertEqual(path.read_text(), original)
+        self.assertEqual(list(path.parent.iterdir()), [path])
         self.assertEqual(self.calls(), [])
 
     def test_pretrust_is_completed_before_agent_start(self):
@@ -724,100 +776,93 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_pretrust_concurrent_processes_preserve_both_roots(self):
         script = ("import runpy, sys; m = runpy.run_path(sys.argv[1]); "
-                  "sys.stdin.readline(); m['pretrust'](sys.argv[2], sys.argv[3], False)")
-        for family in ('claude', 'codex'):
-            processes = [subprocess.Popen([sys.executable, '-c', script, str(PLUGIN / 'bin/launch'), root, family],
-                         env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         text=True) for root in ('/first', '/second')]
-            try:
-                for process in processes:
-                    process.stdin.write('go\n')
-                    process.stdin.flush()
-                for process in processes:
-                    out, err = process.communicate(timeout=10)
-                    self.assertEqual(process.returncode, 0, out + err)
-            finally:
-                for process in processes:
-                    if process.poll() is None:
-                        process.kill()
-                        process.communicate()
-            path = (Path(self.env['CODEX_HOME']) / 'config.toml' if family == 'codex'
-                    else Path(self.env['HOME']) / '.claude.json')
-            module = load_launcher()
-            for root in ('/first', '/second'):
-                self.assertTrue(module.trust_flag(path.read_bytes(), root, family))
-            self.assertTrue(path.with_name(path.name + '.kiln.lock').exists())
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+              "sys.stdin.readline(); m['pretrust'](sys.argv[2], False)")
+        processes = [subprocess.Popen([sys.executable, '-c', script, str(PLUGIN / 'bin/launch'), root],
+                     env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                     text=True) for root in ('/first', '/second')]
+        try:
+            for process in processes:
+                process.stdin.write('go\n')
+                process.stdin.flush()
+            for process in processes:
+                out, err = process.communicate(timeout=10)
+                self.assertEqual(process.returncode, 0, out + err)
+        finally:
+            for process in processes:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate()
+        path = Path(self.env['HOME']) / '.claude.json'
+        module = load_launcher()
+        for root in ('/first', '/second'):
+            self.assertTrue(module.trust_flag(path.read_bytes(), root))
+        self.assertTrue(path.with_name(path.name + '.kiln.lock').exists())
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_rechecks_and_reapplies_trust_just_before_start(self):
-        for family in ('claude', 'codex'):
-            module = load_launcher()
-            original = module.herdr
-            path = (Path(self.env['CODEX_HOME']) / 'config.toml' if family == 'codex'
-                    else Path(self.env['HOME']) / '.claude.json')
-            calls = []
-            def checked(args, dry_run):
-                calls.append(args[:2])
-                if args[:2] == ['pane', 'rename']:
-                    path.write_text('' if family == 'codex' else '{}')
-                if args[:2] == ['agent', 'start']:
-                    self.assertTrue(module.trust_flag(path.read_bytes(), str(self.root), family))
-                return original(args, dry_run)
-            args = ['launch', '--tab', 'build', '--address', 'build', '--role',
-                    'helper' if family == 'codex' else 'manager', '--root', str(self.root), '--parent', 'super']
-            with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'herdr', side_effect=checked):
-                module.main()
-            self.assertEqual(calls[-1], ['agent', 'start'])
+        module = load_launcher()
+        original = module.herdr
+        path = Path(self.env['HOME']) / '.claude.json'
+        calls = []
+        def checked(args, dry_run):
+            calls.append(args[:2])
+            if args[:2] == ['pane', 'rename']:
+                path.write_text('{}')
+            if args[:2] == ['agent', 'start']:
+                self.assertTrue(module.trust_flag(path.read_bytes(), str(self.root)))
+            return original(args, dry_run)
+        args = ['launch', '--tab', 'build', '--address', 'build', '--role',
+                'manager', '--root', str(self.root), '--parent', 'super']
+        with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'herdr', side_effect=checked):
+            module.main()
+        self.assertEqual(calls[-1], ['agent', 'start'])
 
     def test_post_write_verification_refuses_lost_trust_and_leaves_no_pane(self):
-        for family in ('claude', 'codex'):
-            module = load_launcher()
-            def lost(path, content, mode):
-                path.write_bytes(b'' if family == 'codex' else b'{}')
-            args = ['launch', '--tab', 'build', '--address', 'build', '--role',
-                    'helper' if family == 'codex' else 'manager', '--root', str(self.root), '--parent', 'super']
-            with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'atomic_bytes', side_effect=lost), \
-                    patch.object(module, 'herdr') as herdr, contextlib.redirect_stderr(io.StringIO()) as errors:
-                with self.assertRaises(SystemExit):
-                    module.main()
-                herdr.assert_not_called()
-                self.assertIn('refusing launch', errors.getvalue())
+        module = load_launcher()
+        def lost(path, content, mode):
+            path.write_bytes(b'{}')
+        args = ['launch', '--tab', 'build', '--address', 'build', '--role',
+                'manager', '--root', str(self.root), '--parent', 'super']
+        with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'atomic_bytes', side_effect=lost), \
+                patch.object(module, 'herdr') as herdr, contextlib.redirect_stderr(io.StringIO()) as errors:
+            with self.assertRaises(SystemExit):
+                module.main()
+            herdr.assert_not_called()
+            self.assertIn('refusing launch', errors.getvalue())
 
     def test_failed_last_minute_reapply_refuses_start_after_one_attempt(self):
-        for family in ('claude', 'codex'):
-            module = load_launcher()
-            original_herdr, original_write = module.herdr, module.atomic_bytes
-            path = (Path(self.env['CODEX_HOME']) / 'config.toml' if family == 'codex'
-                    else Path(self.env['HOME']) / '.claude.json')
-            writes = []
-            closed = []
-            seat_path = self.home / 'seats/build.json'
-            seat_path.parent.mkdir(exist_ok=True)
-            previous = {'pane': 'old-pane', 'address': 'build'}
-            seat_path.write_text(json.dumps(previous))
-            def checked(args, dry_run):
-                if args[:2] == ['pane', 'rename']:
-                    path.write_text('' if family == 'codex' else '{}')
-                self.assertNotEqual(args[:2], ['agent', 'start'])
-                if args[:2] == ['pane', 'close']:
-                    closed.append(args)
-                return original_herdr(args, dry_run)
-            def lost_again(target, content, mode):
-                original_write(target, content, mode)
-                writes.append(target)
-                if len(writes) == 2:
-                    target.write_bytes(b'' if family == 'codex' else b'{}')
-            args = ['launch', '--tab', 'build', '--address', 'build', '--role',
-                    'helper' if family == 'codex' else 'manager', '--root', str(self.root), '--parent', 'super']
-            with patch.dict('os.environ', self.env), patch('sys.argv', args), \
-                    patch.object(module, 'atomic_bytes', side_effect=lost_again), \
-                    patch.object(module, 'herdr', side_effect=checked), contextlib.redirect_stderr(io.StringIO()) as errors:
-                with self.assertRaises(SystemExit):
-                    module.main()
-                self.assertIn('after re-apply; refusing launch', errors.getvalue())
-            self.assertEqual(len(writes), 2)
-            self.assertEqual(closed, [['pane', 'close', 'w-test:p3']])
-            self.assertEqual(json.loads(seat_path.read_text()), previous)
+        module = load_launcher()
+        original_herdr, original_write = module.herdr, module.atomic_bytes
+        path = Path(self.env['HOME']) / '.claude.json'
+        writes = []
+        closed = []
+        seat_path = self.home / 'seats/build.json'
+        seat_path.parent.mkdir(exist_ok=True)
+        previous = {'pane': 'old-pane', 'address': 'build'}
+        seat_path.write_text(json.dumps(previous))
+        def checked(args, dry_run):
+            if args[:2] == ['pane', 'rename']:
+                path.write_text('{}')
+            self.assertNotEqual(args[:2], ['agent', 'start'])
+            if args[:2] == ['pane', 'close']:
+                closed.append(args)
+            return original_herdr(args, dry_run)
+        def lost_again(target, content, mode):
+            original_write(target, content, mode)
+            writes.append(target)
+            if len(writes) == 2:
+                target.write_bytes(b'{}')
+        args = ['launch', '--tab', 'build', '--address', 'build', '--role',
+                'manager', '--root', str(self.root), '--parent', 'super']
+        with patch.dict('os.environ', self.env), patch('sys.argv', args), \
+                patch.object(module, 'atomic_bytes', side_effect=lost_again), \
+                patch.object(module, 'herdr', side_effect=checked), contextlib.redirect_stderr(io.StringIO()) as errors:
+            with self.assertRaises(SystemExit):
+                module.main()
+            self.assertIn('after re-apply; refusing launch', errors.getvalue())
+        self.assertEqual(len(writes), 2)
+        self.assertEqual(closed, [['pane', 'close', 'w-test:p3']])
+        self.assertEqual(json.loads(seat_path.read_text()), previous)
 
     def test_atomic_trust_temp_is_private_and_fsynced_before_replace(self):
         module = load_launcher()
