@@ -72,9 +72,12 @@ the highest numbered `status-fix<n>.txt`, otherwise `status.txt`.
 The last nonblank line beginning `HH:MM done:` / `question:` (or without time)
 is terminal. Missing status is unfinished. Persistent children never count.
 
-An armed wait is `waits/<worker>.pid`, containing the live wait process PID;
-zombies/dead/invalid PIDs are unarmed. Stop's command records that PID and waits
-for it to finish. `seat.wait_ms` supplies the Herdr timeout in milliseconds;
+For Claude seats only, an armed wait is `waits/<worker>.pid`, containing the live
+background wait process PID; zombies/dead/invalid PIDs are unarmed. Claude Stop's
+command records that PID and waits for it to finish. Codex Stop never reads wait
+markers: with a live worker it gives a plain foreground wait instruction, since
+sandbox-local PIDs cannot establish host process liveness.
+`seat.wait_ms` supplies the Herdr timeout in milliseconds;
 `wait_ms` is required in the schema; `launch --wait-ms` defaults to 1800000.
 The hook also uses that default for legacy seat files missing wait_ms. Claude must execute the Bash payload with
 `run_in_background: true`; shell `&` alone cannot supply the native completion
@@ -128,7 +131,10 @@ not new live captures; real shell/patch capture remains step 4 acceptance.
 
 Bash rules apply only to director/super/manager/chunkmaster. The hook recognizes
 literal Herdr wait/typing command forms, not a shell program. Unbalanced quoting
-(for example in a heredoc) can make shlex fail: policy fails open and logs an error.
+(for example in a heredoc) can make shlex fail. Such commands are allowed unless
+the raw text names `herdr agent prompt`, `herdr pane send-text`,
+`herdr pane send-keys`, `herdr agent wait` or `herdr pane wait-output`; then the
+fence denies with "could not parse this command; run the herdr call on its own line".
 Wrappers (`env herdr`, `bash -c`), substitutions and global flags before the subcommand
 are not reliably seen. No shell-write parsing or additional typing verbs are claimed.
 The installed Herdr 0.9.5 probes (maestro, 2026-10-29) establish a literal
@@ -187,8 +193,8 @@ fallback; PID reuse by another listener remains a simple-marker limitation.
 
 Step 4 must verify the Codex foreground-wait contract at the tool transport:
 a long shell/unified-exec wait may yield control before its command ends even
-while the wait PID marker remains live. No hook-side change is claimed for this
-unverified behavior. Existing live checks also include Claude completion/wake
+while the command remains live. Codex Stop therefore requires a foreground wait
+for any live worker, regardless of markers. Existing live checks also include Claude completion/wake
 notifications and whether PreToolUse carries scratchpad_dir.
 
 Codex Stop output checked 2026-10-29: the requested

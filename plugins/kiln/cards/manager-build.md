@@ -3,7 +3,7 @@ Own `build.md`, `backlog.md`, slice branches, commits/merges and `build/delivery
 Read the exact integration `branch` and `trunk` values from `$KILN_HOME/team.toml`; never invent them; keep slice/chunk worktrees under `$KILN_HOME/build/`; never write the operator checkout.
 Cut milestone M just in time from plan and built state; make the first a thin end-to-end path through every layer.
 Write `build/slice/<M>/packet.md`: goal, Done-when, pinned plan rows/contracts, architecture/ADR pointers, build state and touching backlog; open its slice branch/worktree from that recorded trunk under `$KILN_HOME/build/slice/<M>/worktree`.
-Launch a fresh `$KILN_PLUGIN/bin/launch --tab build --address build-chunkmaster --role chunkmaster --root $KILN_HOME/build --parent build` per milestone with its packet; close it after milestone done.
+Launch a fresh `$KILN_PLUGIN/bin/launch --tab build --address build-chunkmaster --role chunkmaster --root $KILN_HOME/build --parent build` per milestone with its packet; close it immediately after milestone acceptance with `$KILN_PLUGIN/bin/team close build-chunkmaster --force` (pane included).
 Run v0 chunks serially; let Chunk Master summon workers; never launch the whole worker loop yourself.
 Accept chunk done only with brief, exact-head green gate, reviewed diff, findings checks, fix evidence and no blocking finding open; commit exact files on the slice branch and append `build.md` before the next brief.
 Fold backlog touching the same files into each next brief via Chunk Master; require tidy audit, milestone review and backlog chunk before milestone done.

@@ -174,7 +174,7 @@ class HookTests(unittest.TestCase):
         for family in STOP_INPUTS:
             self.allowed(self.run_hook(family=family))
 
-    def test_worker_without_wait_and_with_live_wait(self):
+    def test_claude_worker_wait_marker_codex_foreground_instruction(self):
         self.child('build-impl')
         for family in STOP_INPUTS:
             reason = self.blocked(self.run_hook(family=family))
@@ -182,10 +182,23 @@ class HookTests(unittest.TestCase):
             self.assertIn('herdr agent wait build-impl --timeout 1800000', reason)
             self.assertEqual('run_in_background: true' in reason, family == 'claude')
             self.assertFalse(reason.endswith('&'))
+            if family == 'codex':
+                self.assertIn('in the foreground: herdr agent wait', reason)
+                self.assertNotIn('wait_pid', reason)
+                self.assertNotIn(str(self.home / 'waits'), reason)
         (self.home / 'waits').mkdir()
         (self.home / 'waits/build-impl.pid').write_text(str(os.getpid()))
-        for family in STOP_INPUTS:
-            self.allowed(self.run_hook(family=family))
+        self.allowed(self.run_hook(family='claude'))
+        self.blocked(self.run_hook(family='codex'))
+
+    def test_codex_stop_never_reads_wait_marker(self):
+        self.save(family='codex')
+        self.child('impl')
+        core = runpy.run_path(str(HOOKS / 'lib/core.py'))
+        with patch.dict(core['stop'].__globals__, live_pid=unittest.mock.Mock(
+                side_effect=AssertionError('Codex must not inspect wait PIDs'))):
+            reason = core['stop'](self.home, self.seat, STOP_INPUTS['codex'], {})
+        self.assertIn('in the foreground: herdr agent wait impl --timeout 1800000', reason)
 
     def test_stale_invalid_nonpositive_wait_pid_is_unarmed(self):
         self.child('w')
@@ -687,11 +700,21 @@ class HookTests(unittest.TestCase):
         for tool, data in (('Write', {'file_path': '/outside'}), ('Bash', {'command': "apply_patch <<'PATCH'\n*** Add File: /outside\nPATCH"})):
             self.allowed(self.fence(tool, data, family='codex'))
 
-    def test_shlex_errors_fail_open_and_wrapped_commands_unseen(self):
+    def test_unparseable_non_herdr_commands_and_wrapped_forms_allowed(self):
         self.allowed(self.fence('Bash', {'command': "echo don't"}))
-        self.assertIn('error ValueError', (self.home / 'hooks.log').read_text())
+        self.allowed(self.fence('Bash', {'command': "cat <<'EOF'\nFred's report\nEOF\n"}))
         for command in ('env herdr agent wait w', "bash -c 'herdr agent wait w'", 'herdr --x agent wait w'):
             self.allowed(self.fence('Bash', {'command': command}))
+
+    def test_unparseable_herdr_typing_and_wait_commands_denied(self):
+        for family in STOP_INPUTS:
+            for subcommand in ('agent prompt', 'pane send-text', 'pane send-keys',
+                               'agent wait', 'pane wait-output'):
+                with self.subTest(family=family, subcommand=subcommand):
+                    reason = self.blocked(self.fence('Bash', {
+                        'command': "herdr " + subcommand + " impl 'unfinished"
+                    }, family=family), 'fence')
+                    self.assertEqual(reason, 'Bash: could not parse this command; run the herdr call on its own line')
 
     def test_missing_plugin_env_is_silent(self):
         env = dict(self.env)

@@ -114,7 +114,9 @@ still win. Explicit routes override the role's bosses override. The `advisor`
 entry selects Argon; agy remains a plain command, so it cannot start a seat.
 `plugins/kiln/bin/kiln route <key>` prints `<model> <effort>` using the same
 active-lane resolver, including team.toml overrides and list indexes. It is a
-read-only lookup and works for `advisor` without launching an agy seat.
+read-only lookup and works for `advisor` without launching an agy seat. A list
+key such as `conceptual` or `operational` prints one model/effort line per entry
+in lane order; `conceptual.0` still selects just the first entry.
 
 The super manager launches each phase manager only when work starts (council
 at the first question), with address equal to the phase. The launcher creates
@@ -156,13 +158,24 @@ Herdr startup uses `agent start <addr> --kind <family> --pane <new-pane>
 --timeout 30000 -- <native-arguments>`. Failed split/start restores the previous
 seat record on a relaunch, or removes the record for a new seat. Corrupt prior
 records produce a warning and are treated as absent. An overwritten address
-with a different pane produces a warning.
+with a different pane produces a warning. After a successful start, if the
+seat has unread ledger rows according to its inbox receipts, launch sends
+one `herdr agent prompt <address> inbox`. A failed prompt is reported without
+retrying or removing the successfully started seat's record.
 
-Codex gets no folder pre-trust: with the seat flags Codex 0.165 shows no
-trust dialog and runs Kiln's reviewed user-level hooks in untrusted folders
-(kernel runs 1–2 and live probe, 2026-10-29). Its sandbox keeps `~/.codex`
-read-only; the earlier pre-trust broke sandboxed launchers in the kernel rerun.
-Codex launches make no profile writes; hook-review diagnostics only read it.
+Codex launches never write profile config. `kiln start`, running unsandboxed,
+resolves the project's main root as the parent of `git -C <project> rev-parse
+--path-format=absolute --git-common-dir`. Under a sidecar flock it parses
+`$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) and, only if that
+root's projects table is absent, appends `[projects."<root>"]` with
+`trust_level = "trusted"`. It preserves existing bytes and tables and makes
+one `config.toml.bak-kiln` from the parsed bytes before changing an existing
+file. New config is 0600; malformed TOML refuses without changing it.
+Codex 0.165 applies in-Git trust to the main repository root, including its
+worktrees; with that root trusted a worktree opens directly (live probes,
+2026-10-29; smoke run 1 stalled without it). Outside Git there is no folder
+trust dialog. Later sandboxed launchers need no profile writes; hook-review
+diagnostics remain read-only.
 
 Before `pane split`, Claude checks `$HOME/.claude.json` read-only for an exact
 resolved root or ancestor key with `hasTrustDialogAccepted` equal to true.
@@ -197,9 +210,14 @@ invoking team. The launcher's owner runs `team close <addr>` when it accepts a
 worker; this removes the seat record and is idempotent. Stop counts only worker
 children whose current status lacks a terminal done/question line; persistent
 children never count. Closing a persistent
-seat requires `team close <addr> --force`; closing does not send Herdr commands.
+seat requires `team close <addr> --force`. Closing removes the seat record,
+then calls `herdr pane close <recorded-pane>` outside the ledger lock. An already
+gone pane or failed close is reported without failing the command; it is not
+retried. Closing an absent seat is a no-op.
 Headlines must be one line; those above 100 characters warn without refusing.
-Launch only records handoff/card paths; it does not widen extra_roots or
+The default handoff is `<root>/handoff-<address>.md`, so shared phase roots
+never share one handoff file; explicit --handoff overrides it. Launch only
+records handoff/card paths; it does not widen extra_roots or
 --add-dir for them. The edit-path rule is defined once in the fence (see hooks.md).
 The required run field records --run for workers (required per worker) and the
 phase root for persistent seats; worker status is read only from its own run.

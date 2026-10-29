@@ -5,5 +5,5 @@ Keep exact target, verified effects, evidence paths and recovery in `$KILN_HOME/
 Start `$KILN_PLUGIN/bin/watch` detached if it exists; otherwise write "no watcher shipped" in `$KILN_HOME/bridge/helper.md` and continue; never write a watcher.
 Before changing seat mechanics, resolve the exact seat/session/pane, current ownership and handoff; preserve active work and unrelated processes.
 Reconcile uncertain effects before repeating an action; report an actual blocker with evidence rather than guessing a missing permission or runtime path.
-Close only owned accepted workers and their finished helpers through scoped mechanics; preserve live or handed-off work.
+Immediately close each owned accepted worker with `$KILN_PLUGIN/bin/team close <address>` (pane included); finish its owned helpers through scoped mechanics; preserve live or handed-off work.
 Report plumbing result, checks, skipped work and limits to super as done citing its request; never certify product completion from pane state.

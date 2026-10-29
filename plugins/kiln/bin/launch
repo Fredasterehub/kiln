@@ -19,6 +19,9 @@ from contextlib import contextmanager
 PLUGIN = Path(__file__).resolve().parents[1]
 CONFIG = PLUGIN / "config"
 HOOKS = PLUGIN / "hooks"
+sys.path.insert(0, str(PLUGIN))
+from lib.ledger import markers, records
+
 SCHEMA = json.loads((CONFIG / "seat.schema.json").read_text())
 
 
@@ -41,7 +44,7 @@ def team_config():
     return tomllib.loads(path.read_text()) if path and path.exists() else {}
 
 
-def routing(args):
+def routing(args, all_entries=False):
     config = tomllib.loads((CONFIG / "routing.toml").read_text())
     team = team_config()
     lane = team.get("lane", config["active"])
@@ -61,12 +64,15 @@ def routing(args):
                 choice = choice[int(part)]
             else:
                 choice = choice[part]
-        if not isinstance(choice, dict) or not {"model", "effort"} <= choice.keys():
+        entries = choice if all_entries and isinstance(choice, list) else [choice]
+        if not all(isinstance(entry, dict) and {"model", "effort"} <= entry.keys() for entry in entries):
             raise ValueError("route must select one model/effort entry")
     except (KeyError, IndexError, TypeError, ValueError) as error:
         raise ValueError(f"invalid routing entry: {route or key}") from error
     if not route and args.role in ("director", "super") and bosses == "gpt":
         choice = config["boss_lanes"]["gpt"][args.role]
+    if all_entries:
+        return [(entry["model"], entry["effort"]) for entry in entries]
     model, effort = args.model or choice["model"], args.effort or choice["effort"]
     if args.family is not None and family(model) != args.family:
         raise ValueError("model family differs from --family; supply --model or change routing.toml")
@@ -414,6 +420,8 @@ def main():
             value = getattr(args, key)
             if value is not None:
                 seat[key] = value if key == "name" else absolute(value)
+        if args.handoff is None:
+            seat["handoff"] = str(Path(root) / f"handoff-{args.address}.md")
         validate(seat)
         config = hooks(args.role, args.family)
         if args.family == "codex":
@@ -473,6 +481,14 @@ def main():
                 raise
         herdr(["agent", "start", args.address, "--kind", args.family, "--pane", seat["pane"],
                "--timeout", "30000", "--", *flags], args.dry_run)
+        try:
+            received = markers(seat)
+            unread = any(row.get("to") == args.address and row.get("id") not in received
+                         for row in records(home))
+            if unread:
+                herdr(["agent", "prompt", args.address, "inbox"], args.dry_run)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+            print(f"launch: seat started; inbox nudge failed: {error}", file=sys.stderr)
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.TimeoutExpired) as error:
         if seat_path is not None and not args.dry_run:
             if previous is not None:

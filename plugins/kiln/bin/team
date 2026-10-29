@@ -193,14 +193,20 @@ def main():
             else:
                 relay(args, home, seat)
             return
-        with locked(home):
-            if args.command == "close":
+        if args.command == "close":
+            with locked(home):
                 path = home / "seats" / f"{address(args.address)}.json"
                 target = read_json(path)
                 if target is not None and target.get("role") != "worker" and not args.force:
                     raise ValueError("closing a persistent seat requires --force")
                 path.unlink(missing_ok=True)
-                return
+            if target and target.get("pane"):
+                try:
+                    herdr("pane", "close", target["pane"])
+                except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+                    print(f"team: seat removed; pane {target['pane']} already gone or could not close: {error}", file=sys.stderr)
+            return
+        with locked(home):
             if args.command == "workers":
                 emit(workers(home, seat))
                 return

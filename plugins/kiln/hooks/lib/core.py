@@ -77,11 +77,12 @@ def stop(home, seat, payload, metrics, outgoing=False):
             reasons.append("Unread rows " + ", ".join(r["id"] for r in new) + f"; run: {TEAM} inbox --mark")
         for child in workers(home, seat):
             worker = child["address"]
-            if live_worker(child) and not live_pid(home / "waits" / f"{worker}.pid"):
-                marker = shlex.quote(str(home / "waits" / f"{worker}.pid"))
-                command = (f"mkdir -p {shlex.quote(str(home / 'waits'))}; "
-                           f"herdr agent wait {shlex.quote(worker)} --timeout {seat.get('wait_ms', 1800000)} & "
-                           f'wait_pid=$!; echo "$wait_pid" > {marker}; wait "$wait_pid"')
+            if live_worker(child) and (seat["family"] != "claude" or not live_pid(home / "waits" / f"{worker}.pid")):
+                command = f"herdr agent wait {shlex.quote(worker)} --timeout {seat.get('wait_ms', 1800000)}"
+                if seat["family"] == "claude":
+                    marker = shlex.quote(str(home / "waits" / f"{worker}.pid"))
+                    command = (f"mkdir -p {shlex.quote(str(home / 'waits'))}; {command} & "
+                               f'wait_pid=$!; echo "$wait_pid" > {marker}; wait "$wait_pid"')
                 how = " with run_in_background: true" if seat["family"] == "claude" else " in the foreground"
                 reasons.append(f"Worker {worker} has no armed wait; run{how}: {command}")
     if owns_rotation:
@@ -133,7 +134,12 @@ def fence(seat, payload, adapter):
     lexer = shlex.shlex(data["command"], posix=True, punctuation_chars=";&|()\n")
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
-    words = list(lexer)
+    try:
+        words = list(lexer)
+    except ValueError:
+        if re.search(r"(?<![\w-])herdr\s+(?:agent\s+(?:prompt|wait)|pane\s+(?:send-text|send-keys|wait-output))(?![\w-])", data["command"]):
+            return "could not parse this command; run the herdr call on its own line"
+        return None
     def boundary(word):
         return bool(word) and all(c in ";&|()\n" for c in word)
     for index, word in enumerate(words):

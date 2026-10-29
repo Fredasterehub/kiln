@@ -319,6 +319,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         (target / 'bin').mkdir(parents=True)
         shutil.copy2(PLUGIN / 'bin/launch', target / 'bin/launch')
         shutil.copytree(PLUGIN / 'config', target / 'config')
+        shutil.copytree(PLUGIN / 'lib', target / 'lib')
         shutil.copytree(PLUGIN / 'cards', target / 'cards')
         return target
 
@@ -982,6 +983,37 @@ class LaunchTests(Sandbox, unittest.TestCase):
         module.backup_once(path, b'later snapshot', 0o640, False)
         self.assertEqual(backup.read_bytes(), b'parsed snapshot')
         self.assertEqual(list(self.base.glob('tmp*')), [])
+
+    def test_handoff_defaults_are_per_address_and_explicit_path_wins(self):
+        self.launch()
+        self.assertEqual(self.seat()['handoff'], str(self.root / 'handoff-build.md'))
+        self.launch('--address', 'second')
+        self.assertEqual(self.seat('second')['handoff'], str(self.root / 'handoff-second.md'))
+        explicit = self.base / 'chosen.md'
+        self.launch('--handoff', str(explicit))
+        self.assertEqual(self.seat()['handoff'], str(explicit))
+        self.assertFalse(explicit.exists())
+
+    def test_start_prompts_unread_rows_once_and_does_not_prompt_received_rows(self):
+        row = {'id': 'existing', 'to': 'build', 'kind': 'request'}
+        (self.home / 'ledger.jsonl').write_text(json.dumps(row) + '\n')
+        self.launch()
+        self.assertEqual(self.calls()[-1], ['agent', 'prompt', 'build', 'inbox'])
+        self.assertEqual(self.calls()[-2][:2], ['agent', 'start'])
+        inbox = self.home / 'inbox/build.json'
+        inbox.parent.mkdir()
+        inbox.write_text(json.dumps({'read': ['existing']}))
+        before = len(self.calls())
+        self.launch()
+        self.assertFalse(any(c[:2] == ['agent', 'prompt'] for c in self.calls()[before:]))
+
+    def test_failed_startup_nudge_is_not_retried_and_seat_stays_started(self):
+        (self.home / 'ledger.jsonl').write_text(json.dumps({'id': 'unread', 'to': 'build'}) + '\n')
+        self.env['FAKE_FAIL'] = 'agent prompt'
+        result = self.launch()
+        self.assertIn('seat started; inbox nudge failed', result.stderr)
+        self.assertEqual(self.seat()['pane'], 'w-test:p3')
+        self.assertEqual(sum(c[:2] == ['agent', 'prompt'] for c in self.calls()), 1)
 
 
 if __name__ == '__main__':

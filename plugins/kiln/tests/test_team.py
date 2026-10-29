@@ -24,6 +24,8 @@ if (os.environ.get('FAKE_FAIL') == ' '.join(args[:2])
     and (not os.environ.get('FAKE_FAIL_SEAT') or args[2:3] == [os.environ['FAKE_FAIL_SEAT']])):
     print('canned failure', file=sys.stderr)
     sys.exit(1)
+if args[:2] == ['pane', 'close'] and os.environ.get('FAKE_CLOSE_SEAT'):
+    assert not pathlib.Path(os.environ['FAKE_CLOSE_SEAT']).exists()
 result = {}
 if args[:2] == ['workspace', 'create']:
     result = {'workspace': {'workspace_id': 'w-test'}, 'tab': {'tab_id': 'w-test:t2'}}
@@ -67,7 +69,7 @@ class Sandbox:
         self.log = self.base / 'argv.jsonl'
         self.env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ['PATH'],
                         KILN_HOME=str(self.home), HERDR_WORKSPACE_ID='w-test', FAKE_LOG=str(self.log))
-        for key in ('FAKE_FAIL', 'FAKE_STATES', 'FAKE_MARK', 'FAKE_BOOTSTRAP', 'FAKE_FAIL_SEAT'):
+        for key in ('FAKE_FAIL', 'FAKE_STATES', 'FAKE_MARK', 'FAKE_BOOTSTRAP', 'FAKE_FAIL_SEAT', 'FAKE_CLOSE_SEAT'):
             self.env.pop(key, None)
 
     def run_tool(self, tool, *args, ok=True):
@@ -514,6 +516,27 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.assertEqual((row['from'], row['via']), ('sender', 'launcher'))
         self.assertEqual(self.calls(), [])
         self.send('question', '--from', 'impostor', ok=False)
+
+    def test_close_removes_record_then_closes_pane_and_is_idempotent(self):
+        self.seat('impl', role='worker', parent='sender')
+        path = self.home / 'seats/impl.json'
+        data = json.loads(path.read_text()) | {'pane': 'worker-pane'}
+        path.write_text(json.dumps(data))
+        self.env['FAKE_CLOSE_SEAT'] = str(path)
+        self.run_tool('team', 'close', 'impl')
+        self.run_tool('team', 'close', 'impl')
+        self.assertFalse(path.exists())
+        self.assertEqual(self.calls(), [['pane', 'close', 'worker-pane']])
+
+    def test_already_gone_pane_is_reported_without_failing_close(self):
+        self.seat('impl', role='worker')
+        path = self.home / 'seats/impl.json'
+        path.write_text(json.dumps(json.loads(path.read_text()) | {'pane': 'gone-pane'}))
+        self.env['FAKE_FAIL'] = 'pane close'
+        result = self.run_tool('team', 'close', 'impl')
+        self.assertIn('already gone or could not close', result.stderr)
+        self.assertFalse(path.exists())
+        self.assertEqual(self.calls(), [['pane', 'close', 'gone-pane']])
 
 
 if __name__ == '__main__':

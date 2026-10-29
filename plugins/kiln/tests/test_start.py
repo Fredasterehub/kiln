@@ -67,7 +67,7 @@ class StartTests(Sandbox, unittest.TestCase):
         for call in calls:
             if call[:2] == ['pane', 'split']:
                 self.assertIn(f'KILN_HOME={self.team}', call)
-        self.assertFalse(Path(self.env['CODEX_HOME']).exists())
+        self.assertTrue((Path(self.env['CODEX_HOME']) / 'config.toml').exists())
 
     def test_lane_and_bosses_apply_to_bootstrap_and_later_launches(self):
         self.start('--lane', 'claude-lean', '--bosses', 'gpt')
@@ -199,13 +199,68 @@ class StartTests(Sandbox, unittest.TestCase):
         (self.home / 'team.toml').write_text('lane="claude-lean"\nbosses="gpt"\n')
         self.assertEqual(self.run_tool('kiln', 'route', 'research_claude').stdout, 'gpt-6.1-sol low\n')
         self.assertEqual(self.run_tool('kiln', 'route', 'conceptual.0').stdout, 'gpt-6-astra medium\n')
-        for key in ('missing', 'conceptual.1', 'conceptual'):
+        for key in ('missing', 'conceptual.1'):
             result = self.run_tool('kiln', 'route', key, ok=False)
             self.assertIn('invalid routing entry', result.stderr)
         self.assertEqual(self.calls(), [])
         self.assertFalse(Path(self.env['HOME']).exists())
         self.assertFalse(self.team.exists())
         self.assertEqual([p.name for p in self.home.iterdir()], ['team.toml'])
+
+    def test_list_routes_print_every_lane_entry(self):
+        self.assertEqual(self.run_tool('kiln', 'route', 'conceptual').stdout.splitlines(),
+                         ['gpt-6-astra medium', 'claude-fable-5-1 medium'])
+        self.assertEqual(self.run_tool('kiln', 'route', 'operational').stdout.splitlines(),
+                         ['gpt-6.1-sol medium', 'claude-opus-5-5 medium'])
+        (self.home / 'team.toml').write_text('lane="claude-lean"\n')
+        self.assertEqual(self.run_tool('kiln', 'route', 'conceptual').stdout, 'gpt-6-astra medium\n')
+        self.assertEqual(self.calls(), [])
+
+    def test_codex_bootstrap_trust_uses_main_root_from_linked_project_and_backup_once(self):
+        main = self.project
+        linked = self.base / 'linked product'
+        subprocess.run(['git', '-C', str(main), 'worktree', 'add', '-qb', 'linked', str(linked)], check=True)
+        self.project = linked
+        config = Path(self.env['CODEX_HOME']) / 'config.toml'
+        config.parent.mkdir()
+        original = b'# preserve all bytes\r\nmodel="gpt-6.1-sol"'
+        config.write_bytes(original)
+        config.chmod(0o640)
+        self.start()
+        self.assertTrue(config.read_bytes().startswith(original))
+        projects = tomllib.loads(config.read_text())['projects']
+        self.assertEqual(projects, {str(main): {'trust_level': 'trusted'}})
+        backup = config.with_name('config.toml.bak-kiln')
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertEqual(config.stat().st_mode & 0o777, 0o640)
+        trusted = config.read_bytes()
+        self.team = self.base / 'second-team'
+        self.start()
+        self.assertEqual(config.read_bytes(), trusted)
+        self.assertEqual(backup.read_bytes(), original)
+
+    def test_codex_existing_project_table_is_untouched_and_bad_config_is_preserved(self):
+        config = Path(self.env['CODEX_HOME']) / 'config.toml'
+        config.parent.mkdir()
+        original = '[projects.' + json.dumps(str(self.project)) + ']\ntrust_level="untrusted"\n'
+        config.write_text(original)
+        self.start()
+        self.assertEqual(config.read_text(), original)
+        self.assertFalse(config.with_name('config.toml.bak-kiln').exists())
+        self.team = self.base / 'bad-config-team'
+        config.write_text('bad = [')
+        before = self.calls()
+        self.start(ok=False)
+        self.assertEqual(config.read_text(), 'bad = [')
+        self.assertEqual(self.calls(), before)
+
+    def test_codex_bootstrap_default_home_config_is_private(self):
+        self.env.pop('CODEX_HOME')
+        self.start()
+        path = Path(self.env['HOME']) / '.codex/config.toml'
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(tomllib.loads(path.read_text())['projects'],
+                         {str(self.project): {'trust_level': 'trusted'}})
 
     def test_help_works_without_kiln_environment(self):
         self.env.pop('KILN_HOME')
