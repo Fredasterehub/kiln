@@ -8,8 +8,8 @@ checked on 2026-10-29. Models use the exact IDs in `routing.toml` and
 | Family / seat | Native arguments |
 | --- | --- |
 | Claude, persistent or worker | `--model <id> --effort <e> --permission-mode acceptEdits --settings <inline-json>` |
-| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <root> -c approval_policy=never -c sandbox_workspace_write.network_access=true` |
-| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <worktree-or-root> -c approval_policy=never --add-dir <run>` (when supplied) |
+| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <root> -c approval_policy=never --dangerously-bypass-hook-trust -c sandbox_workspace_write.network_access=true` |
+| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <worktree-or-root> -c approval_policy=never --dangerously-bypass-hook-trust --add-dir <run>` (when supplied) |
 | agy, advisor only | `-p --model <id> --effort <e> --sandbox --output-format json` |
 
 Claude and Codex also receive one `--add-dir <dir>` per declared extra root.
@@ -22,13 +22,32 @@ root and extra roots. `acceptEdits` accepts writes in the working directories;
 these settings do not claim to sandbox arbitrary shell writes. See the
 [Claude permission contract](https://code.claude.com/docs/en/permissions).
 
-Both Claude and Codex receive Stop → `stop.sh`, PreToolUse → `fence.sh`,
-and, for persistent roles, SessionStart → `start.sh`. Paths point to
-`plugins/kiln/hooks/`; this step does not create those scripts. Claude loads
-hooks via inline settings; Codex merges them into `<root>/.codex/hooks.json`,
-preserving existing entries and avoiding duplicate Kiln entries. agy has no hooks.
-The hook object follows the [Claude hook schema](https://code.claude.com/docs/en/hooks)
-and [Codex hook schema](https://developers.openai.com/codex/config-reference/).
+Claude receives Stop → `stop.sh`, PreToolUse → `fence.sh`, and, for persistent
+roles, SessionStart → `start.sh`, via inline settings only. No Claude user or
+project settings file is written. agy has no hooks.
+
+Install Codex's three events (Stop, SessionStart, PreToolUse) once with
+`plugins/kiln/bin/launch install-hooks --family codex`; remove them with
+`plugins/kiln/bin/launch uninstall-hooks --family codex`. Both accept `--dry-run`.
+The target is `$CODEX_HOME/hooks.json`, or `~/.codex/hooks.json` when unset.
+Installation is idempotent and preserves the bytes and order of non-Kiln
+entries. Uninstall removes only handlers whose command contains `KILN_SEAT`,
+and drops a matcher group only when those removals empty it. Seat launches
+write no Codex hook files; neither setup nor launch edits `config.toml`.
+
+Every Kiln hook command, in both families, has this guard (the plugin root
+is resolved from the launcher's own location; script paths are shell-quoted):
+
+```sh
+sh -c '[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] || exit 0; exec <absolute-plugin-root>/hooks/<script>.sh'
+```
+
+Paths point to `plugins/kiln/hooks/`; this step does not create those scripts.
+The hook object follows the [Claude hook schema](https://code.claude.com/docs/en/hooks.md)
+and [Codex hook schema](https://learn.chatgpt.com/docs/hooks), checked 2026-10-29.
+Both schemas nest event arrays, matcher-group `hooks` arrays, then handlers
+with `"type": "command"` and `"command"` fields. Codex's docs list all three
+event names and user-level hooks; Claude's docs use the same settings structure.
 Codex's `-c` values use its native config override mechanism; help verifies the
 flag, while the pinned values come from SPEC §3 and the config reference.
 
@@ -52,7 +71,10 @@ Herdr responses, never from UI focus. Seat identity is written before agent star
 and commented JSON file writes, using `<workspace>` if no workspace env exists,
 `<tab-pane>` for the pane to split, and `<new-pane>` for the returned pane ID.
 
-Live CLI acceptance, card injection, writes, resumes, and Codex hook trust
-remain integration work for a fresh isolated workspace after step 3. No
-trust bypass is emitted. Herdr describes `agent start` as interactive readiness;
-agy's one-shot `-p` readiness needs that isolated acceptance check as well.
+The installed Codex 0.165.0 `codex exec --help` and `codex --help` confirm
+`--dangerously-bypass-hook-trust`. SPEC §3's isolated probe established that
+user-level hooks plus this flag run unattended in fresh worktrees. The flag
+applies to all enabled hook sources, including preserved non-Kiln hooks.
+Live card/write/resume acceptance remains integration work after step 3.
+Herdr describes `agent start` as interactive readiness; agy's one-shot `-p`
+readiness needs that isolated acceptance check as well.

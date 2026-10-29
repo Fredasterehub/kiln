@@ -42,8 +42,12 @@ def hooks(role):
     events = {"Stop": "stop", "PreToolUse": "fence"}
     if role not in ("worker", "advisor"):
         events["SessionStart"] = "start"
-    return {event: [{"hooks": [{"type": "command", "command": shlex.quote(str(HOOKS / f"{script}.sh"))}]}]
-            for event, script in events.items()}
+    config = {}
+    for event, script in events.items():
+        guard = ('[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] || exit 0; exec '
+                 + shlex.quote(str(HOOKS / f"{script}.sh")))
+        config[event] = [{"hooks": [{"type": "command", "command": "sh -c " + shlex.quote(guard)}]}]
+    return config
 
 
 def native(seat, hook_config):
@@ -56,7 +60,8 @@ def native(seat, hook_config):
                  "--settings", json.dumps(settings, separators=(",", ":"))]
     elif seat["family"] == "codex":
         flags = ["--model", model, "-c", f"model_reasoning_effort={effort}",
-                 "-s", "workspace-write", "-C", root, "-c", "approval_policy=never"]
+                 "-s", "workspace-write", "-C", root, "-c", "approval_policy=never",
+                 "--dangerously-bypass-hook-trust"]
         if seat["role"] != "worker":
             flags += ["-c", "sandbox_workspace_write.network_access=true"]
     else:
@@ -92,15 +97,81 @@ def write_json(path, data, dry_run):
         temporary.replace(path)
 
 
-def install_hooks(root, config, dry_run):
-    path = Path(root) / ".codex/hooks.json"
-    existing = json.loads(path.read_text()) if path.exists() else {}
-    target = existing.setdefault("hooks", {})
-    for event, groups in config.items():
-        for group in groups:
-            if group not in target.setdefault(event, []):
-                target[event].append(group)
-    write_json(path, existing, dry_run)
+def parts(text):
+    """Locate JSON values without reserializing existing hook entries."""
+    decoder = json.JSONDecoder()
+    index = len(text) - len(text.lstrip()) + 1
+    is_object = text.lstrip().startswith("{")
+    while True:
+        while text[index].isspace() or text[index] == ",":
+            index += 1
+        if text[index] in "}]":
+            return
+        key = None
+        if is_object:
+            key, index = decoder.raw_decode(text, index)
+            index = text.index(":", index) + 1
+            while text[index].isspace():
+                index += 1
+        start = index
+        _, index = decoder.raw_decode(text, index)
+        yield key, start, index
+
+
+def member(text, key, transform, default="{}"):
+    for name, start, end in parts(text):
+        if name == key:
+            return text[:start] + transform(text[start:end]) + text[end:]
+    value = transform(default)
+    if value == default:
+        return text
+    end = text.rfind("}")
+    return text[:end] + ("," if json.loads(text) else "") + json.dumps(key) + ":" + value + text[end:]
+
+
+def filter_array(text, transform):
+    old = [text[start:end] for _, start, end in parts(text)]
+    new = [value for item in old if (value := transform(item)) is not None]
+    return text if old == new else "[" + ",".join(new) + "]"
+
+
+def remove_kiln(group):
+    def remove_handlers(array):
+        return filter_array(array, lambda raw: None if "KILN_SEAT" in json.loads(raw).get("command", "") else raw)
+    updated = member(group, "hooks", remove_handlers, "[]")
+    return None if updated != group and not json.loads(updated)["hooks"] else updated
+
+
+def manage_hooks(install, dry_run):
+    path = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "hooks.json"
+    if not install and not path.exists():
+        return
+    original = path.read_bytes().decode("utf-8") if path.exists() else "{}\n"
+    json.loads(original)  # Validate before making any edits.
+
+    def update(events):
+        if install:
+            for event, groups in hooks("manager").items():
+                def append(array):
+                    if groups[0] in json.loads(array):
+                        return array
+                    end = array.rfind("]")
+                    return array[:end] + ("," if json.loads(array) else "") + json.dumps(groups[0]) + array[end:]
+                events = member(events, event, append, "[]")
+        else:
+            for _, start, end in reversed(list(parts(events))):
+                events = events[:start] + filter_array(events[start:end], remove_kiln) + events[end:]
+        return events
+
+    updated = member(original, "hooks", update)
+    if updated != original:
+        if dry_run:
+            print(f"# write {path}: {updated}")
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".tmp")
+            temporary.write_bytes(updated.encode("utf-8"))
+            temporary.replace(path)
 
 
 def herdr(args, dry_run):
@@ -128,7 +199,18 @@ def target_pane(tab, workspace, dry_run):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     epilog="Hook setup: launch {install-hooks,uninstall-hooks} --family codex [--dry-run]")
+    if sys.argv[1:2] in (["install-hooks"], ["uninstall-hooks"]):
+        parser.add_argument("command", choices=("install-hooks", "uninstall-hooks"))
+        parser.add_argument("--family", required=True, choices=("codex",))
+        parser.add_argument("--dry-run", action="store_true")
+        args = parser.parse_args()
+        try:
+            manage_hooks(args.command == "install-hooks", args.dry_run)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            parser.exit(1, f"launch: {error}\n")
+        return
     for key in ("tab", "address", "root", "parent"):
         parser.add_argument(f"--{key}", required=True)
     for key in ("role", "family"):
@@ -164,8 +246,6 @@ def main():
         target = target_pane(args.tab, workspace, args.dry_run)
         seat_path = home / "seats" / f"{args.address}.json"
         write_json(seat_path, seat, args.dry_run)
-        if args.family == "codex":
-            install_hooks(root, config, args.dry_run)
         result = herdr(["pane", "split", target, "--cwd", root, "--no-focus",
                         "--env", f"KILN_SEAT={seat_path}", "--env", f"KILN_HOME={home}"], args.dry_run)
         seat["pane"] = "<new-pane>" if args.dry_run else result["pane"]["pane_id"]
