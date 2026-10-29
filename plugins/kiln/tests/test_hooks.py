@@ -262,6 +262,10 @@ class HookTests(unittest.TestCase):
             output = json.loads(result.stdout)['hookSpecificOutput']
             self.assertEqual(output['hookEventName'], 'SessionStart')
             context = output['additionalContext']
+            common = (HOOKS.parent / 'cards/common.md').read_text().rstrip('\n')
+            self.assertIn(common, context)
+            self.assertLess(context.index(common), context.index(card.read_text()))
+            self.assertLess(context.index(card.read_text()), context.index(handoff.read_text()))
             self.assertIn(card.read_text(), context)
             self.assertIn(handoff.read_text(), context)
             self.assertIn('Pending ids: r1', context)
@@ -274,6 +278,42 @@ class HookTests(unittest.TestCase):
         self.save(card=str(self.home / 'missing'), handoff=str(self.home / 'missing2'))
         context = json.loads(self.run_hook('start').stdout)['hookSpecificOutput']['additionalContext']
         self.assertIn('Pending ids: none', context)
+
+    def test_start_uses_common_from_seat_plugin_only_when_card_present(self):
+        plugin = self.home / 'frozen-plugin'
+        (plugin / 'cards').mkdir(parents=True)
+        (plugin / 'cards/common.md').write_text('FROZEN COMMON RULES\n')
+        card = self.home / 'role.md'
+        card.write_text('FROZEN ROLE\n')
+        for family in STOP_INPUTS:
+            for has_card in (False, True):
+                with self.subTest(family=family, has_card=has_card):
+                    self.save(card=str(card) if has_card else None)
+                    result = self.run_hook('start', family=family,
+                                           env=dict(self.env, KILN_PLUGIN=str(plugin)))
+                    self.assertEqual((result.returncode, result.stderr), (0, ''))
+                    context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
+                    self.assertEqual(context.count('FROZEN COMMON RULES'), int(has_card))
+                    self.assertEqual('FROZEN ROLE' in context, has_card)
+                    if has_card:
+                        self.assertLess(context.index('FROZEN COMMON RULES'), context.index('FROZEN ROLE'))
+
+    def test_shipped_persistent_cards_start_within_budget_without_handoff(self):
+        cards = HOOKS.parent / 'cards'
+        names = ('director', 'super', 'helper', 'chunkmaster', 'manager-research',
+                 'manager-plan', 'manager-build', 'manager-verify', 'manager-deploy', 'manager-council')
+        common = (cards / 'common.md').read_text().rstrip('\n')
+        for family in STOP_INPUTS:
+            for name in names:
+                with self.subTest(family=family, card=name):
+                    card = cards / f'{name}.md'
+                    self.save(card=str(card), role='manager' if name.startswith('manager-') else name)
+                    result = self.run_hook('start', family=family)
+                    self.assertEqual((result.returncode, result.stderr), (0, ''))
+                    context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
+                    self.assertEqual(context.count(common), 1)
+                    self.assertLessEqual(len(context.splitlines()), 40)
+                    self.assertLessEqual(len(card.read_text().splitlines()), 28)
 
     def test_wait_timeout_required_in_both_families(self):
         for family in STOP_INPUTS:

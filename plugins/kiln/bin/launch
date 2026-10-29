@@ -35,14 +35,37 @@ def family(model):
     return "claude" if model.startswith("claude-") else "codex" if model.startswith("gpt-") else "agy"
 
 
+def team_config():
+    home = os.environ.get("KILN_HOME")
+    path = Path(home) / "team.toml" if home else None
+    return tomllib.loads(path.read_text()) if path and path.exists() else {}
+
+
 def routing(args):
     config = tomllib.loads((CONFIG / "routing.toml").read_text())
-    lane = config["active"]
+    team = team_config()
+    lane = team.get("lane", config["active"])
+    bosses = team.get("bosses", config["bosses"])
+    if lane not in config["lanes"] or bosses not in ("claude", "gpt"):
+        raise ValueError("team.toml must select a known lane and bosses claude|gpt")
     key = args.role
     if key == "worker":
         key = "review_of_gpt" if (args.family or (family(args.model) if args.model else None)) == "claude" else "implementer"
-    choice = config["lanes"][lane][key]
-    if args.role in ("director", "super") and config["bosses"] == "gpt":
+    route = getattr(args, "route", None)
+    try:
+        choice = config["lanes"][lane]
+        for part in (route or key).split("."):
+            if isinstance(choice, list):
+                if not part.isdecimal():
+                    raise ValueError("list routes require a nonnegative index")
+                choice = choice[int(part)]
+            else:
+                choice = choice[part]
+        if not isinstance(choice, dict) or not {"model", "effort"} <= choice.keys():
+            raise ValueError("route must select one model/effort entry")
+    except (KeyError, IndexError, TypeError, ValueError) as error:
+        raise ValueError(f"invalid routing entry: {route or key}") from error
+    if not route and args.role in ("director", "super") and bosses == "gpt":
         choice = config["boss_lanes"]["gpt"][args.role]
     model, effort = args.model or choice["model"], args.effort or choice["effort"]
     if args.family is not None and family(model) != args.family:
@@ -305,15 +328,21 @@ def herdr(args, dry_run):
     return json.loads(result.stdout)["result"]
 
 
-def target_pane(tab, workspace, dry_run):
+def target_pane(tab, workspace, root, dry_run):
     tabs = herdr(["tab", "list", "--workspace", workspace], dry_run)
     if not dry_run:
         matches = [t for t in tabs["tabs"] if tab in (t["tab_id"], t["label"])]
+        if not matches:
+            created = herdr(["tab", "create", "--workspace", workspace, "--label", tab,
+                             "--cwd", root, "--no-focus"], False)
+            return created["root_pane"]["pane_id"], created["tab"]["label"]
         if len(matches) != 1:
-            raise ValueError("--tab must identify exactly one tab in HERDR_WORKSPACE_ID")
+            raise ValueError("--tab must identify exactly one tab in the seat workspace")
         tab = matches[0]["tab_id"]
     panes = herdr(["pane", "list", "--workspace", workspace], dry_run)
     if dry_run:
+        print("# if tab is missing: " + shlex.join(["herdr", "tab", "create", "--workspace", workspace,
+                                                   "--label", tab, "--cwd", root, "--no-focus"]))
         return "<tab-pane>", tab
     return next(p["pane_id"] for p in panes["panes"] if p["tab_id"] == tab), matches[0]["label"]
 
@@ -336,6 +365,7 @@ def main():
     parser.add_argument("--role", required=True, choices=SCHEMA["properties"]["role"]["enum"])
     parser.add_argument("--family", choices=SCHEMA["properties"]["family"]["enum"])
     parser.add_argument("--root")
+    parser.add_argument("--route", help="active lane entry, e.g. research_gpt or conceptual.0")
     for key in ("model", "effort"):
         parser.add_argument(f"--{key}", choices=SCHEMA["properties"][key]["enum"])
     for key in ("name", "card", "handoff", "worktree", "run"):
@@ -352,9 +382,19 @@ def main():
         if not home_value and not args.dry_run:
             raise ValueError("KILN_HOME is required")
         home = Path(home_value).resolve() if home_value else Path("<KILN_HOME>")
-        workspace = os.environ.get("HERDR_WORKSPACE_ID", "<workspace>" if args.dry_run else "")
+        if not re.fullmatch(SCHEMA["properties"]["parent"]["pattern"], args.parent):
+            raise ValueError("invalid parent address")
+        workspace = os.environ.get("HERDR_WORKSPACE_ID")
+        if not workspace and args.parent:
+            parent_path = home / "seats" / f"{args.parent}.json"
+            parent = json.loads(parent_path.read_text()) if parent_path.exists() else {}
+            if not isinstance(parent, dict):
+                raise ValueError("parent seat must be an object")
+            workspace = parent.get("workspace")
         if not workspace:
-            raise ValueError("HERDR_WORKSPACE_ID is required")
+            if not args.dry_run:
+                raise ValueError("HERDR_WORKSPACE_ID or a parent seat workspace is required")
+            workspace = "<workspace>"
         lane, model, effort = routing(args)
         args.family = family(model)
         if args.family == "agy":
@@ -376,12 +416,27 @@ def main():
                 seat[key] = value if key == "name" else absolute(value)
         validate(seat)
         config = hooks(args.role, args.family)
-        flags = native(seat, config, home)
         if args.family == "codex":
             warn_missing_hooks()
         if args.family == "claude":
             pretrust(root, args.dry_run)
-        target, seat["tab"] = target_pane(args.tab, workspace, args.dry_run)
+        target, seat["tab"] = target_pane(args.tab, workspace, root, args.dry_run)
+        if args.card is None and args.role != "worker":
+            card = f"manager-{seat['tab']}" if args.role == "manager" else args.role
+            card_path = PLUGIN / "cards" / f"{card}.md"
+            if not card_path.is_file():
+                raise ValueError(f"default card not found: {card_path}")
+            seat["card"] = str(card_path)
+        team = team_config()
+        if args.family == "codex" and seat["tab"] in ("build", "verify", "deploy") and team.get("project"):
+            git = subprocess.run(["git", "-C", team["project"], "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                                 capture_output=True, text=True, timeout=30)
+            if git.returncode:
+                raise ValueError(git.stderr.strip() or "cannot resolve project git common dir")
+            common = git.stdout.strip()
+            if common not in extra_roots:
+                extra_roots.append(common)
+        flags = native(seat, config, home)
         candidate = home / "seats" / f"{args.address}.json"
         if candidate.exists():
             try:

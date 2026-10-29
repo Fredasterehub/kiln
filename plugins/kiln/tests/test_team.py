@@ -20,11 +20,14 @@ args = sys.argv[1:]
 log = pathlib.Path(os.environ['FAKE_LOG'])
 with log.open('a') as f:
     f.write(json.dumps(args) + '\\n')
-if os.environ.get('FAKE_FAIL') == ' '.join(args[:2]):
+if (os.environ.get('FAKE_FAIL') == ' '.join(args[:2])
+    and (not os.environ.get('FAKE_FAIL_SEAT') or args[2:3] == [os.environ['FAKE_FAIL_SEAT']])):
     print('canned failure', file=sys.stderr)
     sys.exit(1)
 result = {}
-if args[:2] == ['agent', 'get']:
+if args[:2] == ['workspace', 'create']:
+    result = {'workspace': {'workspace_id': 'w-test'}, 'tab': {'tab_id': 'w-test:t2'}}
+elif args[:2] == ['agent', 'get']:
     count = sum(json.loads(line)[:2] == ['agent', 'get'] for line in log.read_text().splitlines())
     states = os.environ.get('FAKE_STATES', 'idle').split(',')
     result = {'agent': {'agent_status': states[min(count - 1, len(states) - 1)]}}
@@ -34,6 +37,8 @@ if args[:2] == ['agent', 'get']:
         path = pathlib.Path(json.loads((home / 'seats' / (args[2] + '.json')).read_text())['inbox'])
         path.parent.mkdir(exist_ok=True)
         path.write_text(json.dumps({'read': [row['id']]}))
+elif args[:2] == ['tab', 'create']:
+    result = {'tab': {'tab_id': 'w-test:t3', 'label': args[args.index('--label') + 1]}, 'root_pane': {'pane_id': 'w-test:p-new'}}
 elif args[:2] == ['tab', 'list']:
     result = {'tabs': [{'tab_id': 'w-test:t1', 'label': 'build', 'workspace_id': 'w-test'},
                        {'tab_id': 'w-test:t2', 'label': 'bridge', 'workspace_id': 'w-test'}]}
@@ -41,7 +46,8 @@ elif args[:2] == ['pane', 'list']:
     result = {'panes': [{'pane_id': 'w-test:p1', 'tab_id': 'w-test:t1'},
                         {'pane_id': 'w-test:p2', 'tab_id': 'w-test:t2'}]}
 elif args[:2] == ['pane', 'split']:
-    result = {'pane': {'pane_id': 'w-test:p3'}}
+    number = sum(json.loads(line)[:2] == ['pane', 'split'] for line in log.read_text().splitlines()) if os.environ.get('FAKE_BOOTSTRAP') else 1
+    result = {'pane': {'pane_id': 'w-test:p' + str(number + 2)}}
 print(json.dumps({'result': result}))
 '''
 
@@ -61,7 +67,7 @@ class Sandbox:
         self.log = self.base / 'argv.jsonl'
         self.env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ['PATH'],
                         KILN_HOME=str(self.home), HERDR_WORKSPACE_ID='w-test', FAKE_LOG=str(self.log))
-        for key in ('FAKE_FAIL', 'FAKE_STATES', 'FAKE_MARK'):
+        for key in ('FAKE_FAIL', 'FAKE_STATES', 'FAKE_MARK', 'FAKE_BOOTSTRAP', 'FAKE_FAIL_SEAT'):
             self.env.pop(key, None)
 
     def run_tool(self, tool, *args, ok=True):
@@ -499,6 +505,15 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.assertEqual(self.rows(self.run_tool('team', 'pending')), [])
         self.assertEqual(self.rows(self.run_tool('team', 'ledger')), [question, answer])
         self.assertEqual(self.calls(), [])
+
+    def test_worker_sender_defaults_to_seat_identity(self):
+        self.seat('sender', role='worker', parent='launcher')
+        result = self.run_tool('team', 'send', '--to', 'receiver', '--kind', 'question',
+                               '--task', 't1', '--headline', 'Need a ruling', '--path', '/question.md')
+        row = self.rows(result)[0]
+        self.assertEqual((row['from'], row['via']), ('sender', 'launcher'))
+        self.assertEqual(self.calls(), [])
+        self.send('question', '--from', 'impostor', ok=False)
 
 
 if __name__ == '__main__':

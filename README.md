@@ -6,7 +6,18 @@ Principles, in the operator's words: *the owner answers, the file remembers* (ow
 
 - `docs/SPEC.md` — the agreed design for v0 (source of truth while v0 is built).
 - `docs/fred-protocol.md` — the operator's own statement of how the team works.
-- `docs/handoffs.md` — per-phase hand-off table: artifact, producing seat, accepting seat, completion evidence.
+- [plugin hand-off table](plugins/kiln/handoffs.md) — per-phase hand-off table: artifact, producing seat, accepting seat, completion evidence.
 - Plugin config: [seat schema](plugins/kiln/config/seat.schema.json) defines seat identity; [routing](plugins/kiln/config/routing.toml) defines the balanced lane and bosses override.
 
 Status: v0 under construction on branch `v4` (orphan). Previous Kiln (v3.2.2) lives on `main` until v4 is released.
+
+Start a team from the operator's unsandboxed shell:
+
+```sh
+plugins/kiln/bin/kiln start --team /path/to/team --project /path/to/repo --workspace "My team" --lane claude-lean --bosses claude --names director=Oracle,super=Robin
+```
+
+Add `--dry-run` to inspect the plan without writes or Herdr calls. The three
+bridge seats share `team/bridge`; the super manager starts phase managers as
+work begins. [Family contracts and phase-launch shape](docs/families.md) describe
+routing, role-card defaults, and trust behavior.

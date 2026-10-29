@@ -86,7 +86,7 @@ def mark_read(seat, ids):
 
 def send(args, home, seat):
     sender = address(seat["address"])
-    if args.sender != sender:
+    if args.sender is not None and args.sender != sender:
         raise ValueError("--from must match KILN_SEAT address")
     if "\n" in args.headline or "\r" in args.headline:
         raise ValueError("headline must be one line")
@@ -158,7 +158,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     send_parser = commands.add_parser("send", help="append a row and wake a receiver without an active listener")
-    send_parser.add_argument("--from", dest="sender", required=True)
+    send_parser.add_argument("--from", dest="sender", help="defaults to KILN_SEAT address")
     for key in ("to", "task", "headline"):
         send_parser.add_argument(f"--{key}", required=True)
     send_parser.add_argument("--kind", required=True, choices=("request", "done", "question", "answer", "update"))

@@ -276,17 +276,21 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(marker.read_text(), 'fired')
 
     def test_tab_id_and_bridge_label_resolution(self):
-        self.launch('--tab', 'w-test:t2')
+        self.launch('--tab', 'w-test:t2', '--role', 'helper')
         self.assertEqual(self.calls()[2][2], 'w-test:p2')
         self.assertEqual(self.seat()['tab'], 'bridge')
 
-    def test_missing_tab_and_start_failure_are_not_retried(self):
-        self.launch('--tab', 'missing', ok=False)
-        self.assertFalse((self.home / 'seats').exists())
+    def test_missing_tab_is_created_and_start_failure_is_not_retried(self):
+        self.launch('--tab', 'plan')
+        self.assertIn(['tab', 'create', '--workspace', 'w-test', '--label', 'plan',
+                       '--cwd', str(self.root), '--no-focus'], self.calls())
+        self.assertEqual(self.seat()['tab'], 'plan')
+        self.assertIn(['pane', 'split', 'w-test:p-new'], [c[:3] for c in self.calls()])
+        previous = self.seat()
         self.env['FAKE_FAIL'] = 'agent start'
         self.launch(ok=False)
-        self.assertEqual(sum(c[:2] == ['agent', 'start'] for c in self.calls()), 1)
-        self.assertFalse((self.home / 'seats/build.json').exists())
+        self.assertEqual(sum(c[:2] == ['agent', 'start'] for c in self.calls()), 2)
+        self.assertEqual(self.seat(), previous)
 
     def test_invalid_values_fail_before_herdr(self):
         for extra in [ ['--address', '../escape'], ['--family', 'codex'], ['--model', 'haiku'],
@@ -315,6 +319,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         (target / 'bin').mkdir(parents=True)
         shutil.copy2(PLUGIN / 'bin/launch', target / 'bin/launch')
         shutil.copytree(PLUGIN / 'config', target / 'config')
+        shutil.copytree(PLUGIN / 'cards', target / 'cards')
         return target
 
     def test_installed_copy_has_config_and_infers_gpt_boss_family(self):
@@ -415,6 +420,89 @@ class LaunchTests(Sandbox, unittest.TestCase):
                                     ('super', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6.1-sol')):
                     args = argparse.Namespace(role=role, family=None, model=None, effort=None)
                     self.assertEqual(launch.routing(args), ('claude-lean', model, 'medium'))
+
+    def test_team_routing_overrides_plugin_and_explicit_model_still_wins(self):
+        project = self.base / 'repo'
+        subprocess.run(['git', 'init', '-q', str(project)], check=True)
+        (self.home / 'team.toml').write_text('lane="claude-lean"\nbosses="gpt"\nproject=' + json.dumps(str(project)) + '\n')
+        for role, model in (('manager', 'gpt-6.1-sol'), ('director', 'gpt-6-astra'), ('super', 'gpt-6.1-sol')):
+            self.launch('--role', role)
+            self.assertEqual((self.seat()['lane'], self.seat()['model']), ('claude-lean', model))
+        self.launch('--role', 'director', '--model', 'claude-opus-5-5', '--effort', 'low')
+        self.assertEqual((self.seat()['model'], self.seat()['effort']), ('claude-opus-5-5', 'low'))
+        for content in ('lane="missing"', 'bosses="missing"', 'invalid = ['):
+            (self.home / 'team.toml').write_text(content)
+            before = self.calls()
+            self.launch(ok=False)
+            self.assertEqual(self.calls(), before)
+
+    def test_default_role_cards_resolve_tab_label_and_workers_get_none(self):
+        for role in ('director', 'super', 'helper', 'chunkmaster'):
+            self.launch('--role', role)
+            self.assertEqual(self.seat()['card'], str(PLUGIN / 'cards' / f'{role}.md'))
+        self.launch('--tab', 'w-test:t1')
+        self.assertEqual(self.seat()['card'], str(PLUGIN / 'cards/manager-build.md'))
+        for tab in ('research', 'plan', 'build', 'verify', 'deploy', 'council'):
+            # Dry-run needs no live tab and still maps every shipped manager card.
+            result = self.launch('--tab', tab, '--dry-run')
+            self.assertIn(str(PLUGIN / 'cards' / f'manager-{tab}.md'), result.stdout)
+        self.launch('--role', 'worker')
+        self.assertNotIn('card', self.seat())
+
+    def test_parent_workspace_fallback_and_environment_precedence(self):
+        self.env.pop('HERDR_WORKSPACE_ID')
+        path = self.home / 'seats/super.json'
+        path.parent.mkdir()
+        path.write_text(json.dumps({'workspace': 'parent-workspace'}))
+        self.launch('--tab', 'verify')
+        self.assertEqual(self.seat()['workspace'], 'parent-workspace')
+        self.assertIn(['tab', 'create', '--workspace', 'parent-workspace', '--label', 'verify',
+                       '--cwd', str(self.root), '--no-focus'], self.calls())
+        self.env['HERDR_WORKSPACE_ID'] = 'env-workspace'
+        self.launch()
+        self.assertEqual(self.seat()['workspace'], 'env-workspace')
+
+    def test_missing_default_card_refuses_before_split(self):
+        target = self.copy_plugin()
+        (target / 'cards/director.md').unlink()
+        result = subprocess.run([str(target / 'bin/launch'), '--tab', 'bridge', '--address', 'director',
+                                 '--role', 'director', '--model', 'gpt-6-astra', '--parent', '',
+                                 '--root', str(self.root)], env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('default card not found', result.stderr)
+        self.assertFalse(any(c[:2] == ['pane', 'split'] for c in self.calls()))
+
+    def test_routes_select_lane_entries_and_explicit_overrides(self):
+        for route, model, effort in [('research_gpt', 'gpt-6.1-sol', 'low'),
+                                     ('conceptual.0', 'gpt-6-astra', 'medium'),
+                                     ('conceptual.1', 'claude-fable-5-1', 'medium')]:
+            self.launch('--role', 'worker', '--route', route)
+            self.assertEqual((self.seat()['model'], self.seat()['effort']), (model, effort))
+        self.launch('--role', 'director', '--route', 'research_gpt', '--model', 'gpt-6-astra', '--effort', 'high')
+        self.assertEqual((self.seat()['model'], self.seat()['effort']), ('gpt-6-astra', 'high'))
+        module = load_launcher()
+        args = argparse.Namespace(role='worker', route='advisor', family=None, model=None, effort=None)
+        with patch.dict('os.environ', self.env):
+            self.assertEqual(module.routing(args), ('balanced', 'gemini-4-argon-high', 'high'))
+        self.assertIn('plain command', self.launch('--route', 'advisor', ok=False).stderr)
+        for route in ('missing', 'conceptual', 'conceptual.9', 'conceptual.-1'):
+            before = self.calls()
+            self.launch('--route', route, ok=False)
+            self.assertEqual(self.calls(), before)
+
+    def test_codex_product_tabs_add_git_common_dir_as_root(self):
+        project = self.base / 'repo'
+        subprocess.run(['git', 'init', '-q', str(project)], check=True)
+        (self.home / 'team.toml').write_text('project=' + json.dumps(str(project)) + '\n')
+        common = subprocess.check_output(['git', '-C', str(project), 'rev-parse', '--path-format=absolute',
+                                          '--git-common-dir'], text=True).strip()
+        for tab in ('build', 'verify', 'deploy'):
+            self.launch('--tab', tab, '--role', 'worker')
+            self.assertIn(common, self.seat()['extra_roots'])
+            flags = self.flags()
+            self.assertIn(common, [flags[i + 1] for i, flag in enumerate(flags) if flag == '--add-dir'])
+        self.launch('--tab', 'research', '--role', 'worker')
+        self.assertNotIn(common, self.seat()['extra_roots'])
 
     def test_claude_lean_complete_lane(self):
         import tomllib

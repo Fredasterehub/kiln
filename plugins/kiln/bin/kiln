@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Bootstrap a Kiln team in a new Herdr workspace."""
+import argparse
+import json
+import os
+from pathlib import Path
+import runpy
+import shlex
+import subprocess
+import sys
+import tomllib
+
+PLUGIN = Path(__file__).resolve().parents[1]
+PHASES = ("bridge", "research", "plan", "build", "verify", "deploy", "council")
+
+
+def names(value):
+    result = {}
+    for item in value.split(",") if value else ():
+        role, separator, name = item.partition("=")
+        if role not in ("director", "super") or not separator or not name or role in result:
+            raise argparse.ArgumentTypeError("names must be director=<name>,super=<name>; helper is Gravedigger")
+        result[role] = name
+    return result
+
+
+def git(args, dry_run=False):
+    if dry_run:
+        print(shlex.join(["git", *args]))
+        return
+    result = subprocess.run(["git", *args], capture_output=True, text=True, timeout=60)
+    if result.returncode:
+        raise ValueError(result.stderr.strip() or "Git failed")
+
+
+def launch_commands(team, names):
+    return [[str(PLUGIN / "bin/launch"), "--tab", "bridge", "--address", role,
+             "--role", role, "--root", str(team / "bridge"), "--parent", parent,
+             "--name", "Gravedigger" if role == "helper" else names.get(role, role)]
+            for role, parent in (("director", ""), ("super", "director"), ("helper", "super"))]
+
+
+def printable(command, team, workspace):
+    return shlex.join(["env", f"KILN_HOME={team}", f"HERDR_WORKSPACE_ID={workspace}", *command])
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    start = parser.add_subparsers(dest="command", required=True).add_parser("start")
+    for key in ("team", "project", "workspace"):
+        start.add_argument(f"--{key}", required=True)
+    start.add_argument("--lane", choices=("balanced", "claude-lean"))
+    start.add_argument("--bosses", choices=("claude", "gpt"))
+    start.add_argument("--names", type=names, default={})
+    start.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    configured = False
+    workspace_id, tab_id = "<not-created>", "<not-created>"
+    panes, commands = {}, []
+    try:
+        team, project = Path(args.team).resolve(), Path(args.project).resolve()
+        if not project.is_dir():
+            raise ValueError("--project must be an existing directory")
+        config_path = team / "team.toml"
+        if config_path.exists():
+            raise ValueError(f"team already configured at {config_path}; use launch for later seats")
+        branch = f"kiln/{team.name}"
+        trunk = team / "build/trunk"
+        git(["check-ref-format", "--branch", branch])
+        git(["-C", str(project), "rev-parse", "--verify", "HEAD"])
+        defaults = tomllib.loads((PLUGIN / "config/routing.toml").read_text())
+        config = dict(lane=args.lane or defaults["active"], bosses=args.bosses or defaults["bosses"],
+                      project=str(project), branch=branch, trunk=str(trunk))
+        content = "".join(f"{key} = {json.dumps(value, ensure_ascii=False)}\n" for key, value in config.items())
+        launcher = runpy.run_path(str(PLUGIN / "bin/launch"))
+        for directory in (team, *(team / p for p in (*PHASES, "seats", "inbox"))):
+            if args.dry_run:
+                print(shlex.join(["mkdir", "-p", str(directory)]))
+            else:
+                directory.mkdir(parents=True, exist_ok=True)
+        if args.dry_run:
+            print(f"# create {team / 'ledger.jsonl'} (preserve existing rows)")
+        else:
+            (team / "ledger.jsonl").touch(exist_ok=True)
+        launcher["pretrust"](str(team), args.dry_run)
+        git(["-C", str(project), "worktree", "add", "-b", branch, str(trunk), "HEAD"], args.dry_run)
+        commands = launch_commands(team, args.names)
+        if args.dry_run:
+            print(f"# write {config_path}: {json.dumps(content)}")
+        else:
+            with config_path.open("x") as stream:
+                stream.write(content)
+            configured = True
+        bridge = str(team / "bridge")
+        workspace = launcher["herdr"](["workspace", "create", "--label", args.workspace,
+                                       "--cwd", bridge, "--no-focus"], args.dry_run)
+        workspace_id = "<workspace>" if args.dry_run else workspace["workspace"]["workspace_id"]
+        tab_id = "<bridge-tab>" if args.dry_run else workspace["tab"]["tab_id"]
+        # Workspace creation already supplies a tab; name it instead of adding an empty tab.
+        launcher["herdr"](["tab", "rename", tab_id, "bridge"], args.dry_run)
+        env = dict(os.environ, KILN_HOME=str(team), HERDR_WORKSPACE_ID=workspace_id)
+        for command in commands:
+            role = command[command.index("--address") + 1]
+            if args.dry_run:
+                print(printable(command, team, workspace_id))
+                panes[role] = f"<{role}-pane>"
+            else:
+                result = subprocess.run(command, env=env, stdin=subprocess.DEVNULL)
+                if result.returncode:
+                    raise ValueError(f"launch failed for {role}; team state retained at {team}")
+                panes[role] = json.loads((team / "seats" / f"{role}.json").read_text())["pane"]
+        for role, pane in panes.items():
+            print(f"{role} pane: {pane}")
+        print("director address: director")
+    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+        if configured:
+            print(f"workspace: {workspace_id}; bridge tab: {tab_id}", file=sys.stderr)
+            print("started panes: " + (", ".join(f"{role}={pane}" for role, pane in panes.items()) or "none"), file=sys.stderr)
+            print("remaining launch commands:", file=sys.stderr)
+            for command in commands[len(panes):]:
+                print(printable(command, team, workspace_id), file=sys.stderr)
+        parser.exit(1, f"kiln: {error}\n")
+
+
+if __name__ == "__main__":
+    main()

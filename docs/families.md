@@ -72,6 +72,59 @@ no trust state and does not calculate or validate definition hashes.
 Kiln hook definitions are stable on purpose; changing one costs one review.
 Codex handles review of other project hooks; Kiln adds no foreign-hook guard.
 
+`plugins/kiln/bin/kiln start --team <team-dir> --project <repo>
+--workspace <label> [--lane balanced|claude-lean] [--bosses claude|gpt]
+[--names director=Oracle,super=Robin] [--dry-run]` bootstraps a team.
+It creates ledger.jsonl, seats/, inbox/, and bridge/, research/, plan/, build/,
+verify/, deploy/, council/. It trusts the team folder once for Claude, writes
+team.toml with lane, bosses, project, branch, and trunk paths, creates a Herdr
+workspace, and renames its initial tab to bridge. Director, super (parent
+director), and helper (parent super) all use bridge/ as their root; helper's
+fixed display name is Gravedigger. It prints their pane IDs and director address.
+Unspecified lane/bosses use the plugin routing defaults; unnamed bosses use
+their addresses. Starting a configured team again refuses before any changes.
+Bootstrap creates branch `kiln/<team-folder-name>` from the product HEAD in
+`<team>/build/trunk` with `git -C <project> worktree add -b <branch> <trunk> HEAD`.
+The folder name must form a valid Git branch. Slices and chunks live in worktrees
+under build/; integration merges go to build/trunk. The operator's checkout,
+including dirty files and its checked-out branch, remains unchanged. Delivery
+names the integration branch for the operator to merge.
+A failure after team.toml prints workspace/tab IDs, started panes and the exact
+remaining launch commands; team state is retained with no automatic retry.
+If workspace creation itself failed, the printed IDs remain explicit placeholders.
+Dry-run prints planned layout, trust, config, workspace/tab, and launcher
+commands with placeholder IDs and performs no writes or Herdr calls.
+
+The launcher reads lane and bosses from KILN_HOME/team.toml over the shipped
+routing defaults; explicit --model/--effort still take precedence. When --card
+is absent, persistent roles use the shipped cards/director.md, super.md,
+helper.md, or chunkmaster.md; phase managers use cards/manager-<resolved-tab>.md.
+A missing default card refuses launch before the split. Workers have no default
+seat card: their packets refer to cards/worker.md. The shared hand-off table
+ships at `$KILN_PLUGIN/handoffs.md` ([table](../plugins/kiln/handoffs.md)).
+Cards are referenced directly in the plugin, not copied into the team folder.
+An explicit --card overrides the default.
+`--route <key>` selects an active-lane entry instead of the role default, e.g.
+`research_gpt`, `conceptual.0`, or `operational.1`; explicit --model/--effort
+still win. Explicit routes override the role's bosses override. The `advisor`
+entry selects Argon; agy remains a plain command, so it cannot start a seat.
+
+The super manager launches each phase manager only when work starts (council
+at the first question), with address equal to the phase. The launcher creates
+a missing tab in HERDR_WORKSPACE_ID, falling back to the parent seat's recorded
+workspace when the variable is absent. Use this shape from the super's pane:
+
+```sh
+plugins/kiln/bin/launch --tab build --address build --role manager --root "$KILN_HOME/build" --parent super
+```
+
+Substitute research, plan, verify, deploy, or council for build. Persistent
+roots contain phase artifacts; product edits happen through product worktrees.
+Codex seats on build, verify, and deploy also receive the product's Git common
+dir as an extra root, resolved by `git -C <project> rev-parse
+--path-format=absolute --git-common-dir`, so Git metadata writes work inside
+the native sandbox. The operator's checkout is not added as a writable root.
+
 The active lane supplies model/effort defaults; `balanced` and `claude-lean`
 are available. `claude-lean` keeps director/super on Opus medium; managers,
 helper, chunkmaster, implementer and investigator use Sol medium. Mechanical
@@ -179,3 +232,7 @@ PreToolUse matchers are Claude Bash|Edit|Write|NotebookEdit|MultiEdit and Codex
 Bash|apply_patch. Native patch paths are fenced; patches run through Bash are shell
 writes. Nested CLIs must clear both identifiers: env -u KILN_SEAT -u KILN_PLUGIN.
 Logs retain refusals/errors, skipped-row counts and required start-card metrics.
+
+`team send --from` is optional and defaults to the KILN_SEAT address; an explicit
+value must still match that identity. Workers can send their question with
+--to/--kind/--task/--headline and optional --path, without repeating their address.

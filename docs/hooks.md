@@ -22,6 +22,15 @@ Errors fail open. Logs contain refusals, continued-Stop advisory reports, errors
 skipped-ledger-line counts and the required SessionStart card line count; cards over 40 lines add a warning.
 Ordinary allowed tools, Stops with no report and successful listener wakes are not logged.
 
+SessionStart injects identity, then `cards/common.md` from the seat's
+`KILN_PLUGIN` whenever `seat.card` is set, then the role card, optional handoff,
+pending IDs and the closing instruction. Common rules are stored once; role
+cards contain only role instructions. Trailing newlines are stripped before
+joining sections so each boundary adds one blank line. The shipped persistent
+cards plus common rules and startup fields stay within 40 lines without a
+handoff; tests measure the complete context for both families. A handoff adds
+its full text and can trigger the existing over-budget warning.
+
 ## Shared state and Stop
 
 `plugins/kiln/lib/ledger.py` supplies receipt, pending, child-seat lookup,

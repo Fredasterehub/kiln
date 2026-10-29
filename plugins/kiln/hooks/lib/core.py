@@ -91,10 +91,14 @@ def stop(home, seat, payload, metrics, outgoing=False):
 
 def start(home, seat, metrics):
     parts = [f"Role: {seat['role']}\nRoot: {seat['root']}\nInbox: {seat['inbox']}\nParent: {seat['parent']}"]
-    for key in ("card", "handoff"):
-        path = Path(seat[key]) if seat.get(key) else None
-        if path and path.is_file():
-            parts.append(path.read_text())
+    paths = []
+    if seat.get("card"):
+        plugin = Path(os.environ.get("KILN_PLUGIN", str(PLUGIN)))
+        paths.append(plugin / "cards/common.md")
+    paths.extend(Path(seat[key]) for key in ("card", "handoff") if seat.get(key))
+    for path in paths:
+        if path.is_file():
+            parts.append(path.read_text().rstrip("\n"))
     parts.append("Pending ids: " + (", ".join(r["id"] for r in pending(ledger(home, metrics), seat)) or "none"))
     parts.append(SENTENCE)
     context = "\n\n".join(parts)
