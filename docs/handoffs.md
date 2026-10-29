@@ -1,0 +1,16 @@
+# Per-phase hand-offs (v0)
+
+Written before any code (SPEC §1). One row per phase boundary: what is handed over, who produces it, who accepts it, and the evidence that it is complete. "Accept" = the accepting seat writes a `done` row citing the request and, for files, the exact path. Every seat is addressed by its tab or role (SPEC §1); the display name is the boss's.
+
+| Phase | Artifact handed over | Producing seat | Accepting seat | Completion evidence | Notes |
+|---|---|---|---|---|---|
+| Brainstorm (bridge) | `brief.md`: the agreed brief, Done-when, the operator's post-plan choice (`consult` / `auto`) | director, with the operator | super manager | `brief.md` has a Done-when and the post-plan field; one `request` row director → super | Run one of any project is `auto` |
+| Research | `research/report.md` + `research/sources.md` | research manager (fresh workers, one per family) | super manager | `done` row citing the request; every load-bearing claim has a source line; questions answered or listed | Conceptual council (Astra + Fable, Argon parallel) at brainstorm close |
+| Plan | `plan/plan.md`: capability list in order, pinned contracts/interfaces, Done-when per capability; `plan/decisions.md` (ADRs) | plan manager (architect) | super manager, then the operator if the brief says `consult` | `done` row; conceptual council verdict attached; the operator's go if `consult` | Milestones are **not** cut here; the build manager cuts them just in time (SPEC §5b) |
+| Build + review, per chunk | `build/chunks/<id>/report.md` with brief, gated diff, review findings, findings check, fix rounds, passes counted | Chunk Master | build manager | `done` row; gate green on the exact head; no blocking finding open; manager's commit hash in `build.md` | Three strikes (SPEC §5) |
+| Build + review, per milestone | `build/slice/<M>/report.md`: tidy chunk done, milestone review passed, backlog empty or all deferred | Chunk Master | build manager | `done` row; merge commit of the slice branch; one `done` up to super | Fresh Chunk Master per milestone |
+| Build + review, plan done | `build/delivery.md`: what is built, deferred backlog items, fresh-user trial result | build manager | super manager | `done` row; trial log path | |
+| Verify | `verify/report.md`: Done-when of the brief checked one by one on the delivered build, with evidence per line | verify manager (fresh workers) | super manager | `done` row; every brief Done-when marked pass, or the failing ones routed back as a `question` to build | Verify accepts only with an empty or all-deferred backlog |
+| Deploy | `deploy/receipt.md`: where it runs, how it was started, how to stop or roll back | deploy manager | super manager, then director | `done` row; the running thing reachable as the receipt says | |
+| Council (any phase) | `council/<q>/result.md`: each seat's answer plus the collector's merge, no verdict | council manager (collector) | the asking seat, which owns the ruling | `answer` row citing the `question` | Conceptual or operational mode per SPEC §5 |
+| Delivery to the operator | one line from the director with `deploy/receipt.md` and `build/delivery.md` | director | the operator | the operator's reply | Nobody else talks to the operator |

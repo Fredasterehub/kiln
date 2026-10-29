@@ -1,0 +1,7 @@
+# local workstation state and old-Kiln leftovers, never shipped
+/.claude/
+/.codex/
+/.plans/
+/.archive/
+/release.sh
+/validate.sh
