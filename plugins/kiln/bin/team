@@ -93,6 +93,10 @@ def send(args, home, seat):
     sender = address(seat["address"])
     if args.sender != sender:
         raise ValueError("--from must match KILN_SEAT address")
+    if "\n" in args.headline or "\r" in args.headline:
+        raise ValueError("headline must be one line")
+    if len(args.headline) > 100:
+        print("team: warning: headline exceeds 100 characters", file=sys.stderr)
     if seat["role"] == "worker" and args.kind != "question":
         raise ValueError("workers may send only question")
     if args.cites is not None and args.kind not in ("done", "answer"):
@@ -105,10 +109,10 @@ def send(args, home, seat):
     with locked(home):
         rows = records(home)
         if args.kind in ("done", "answer"):
-            cited = next((r for r in rows if r["id"] == args.cites), None)
-            if cited is None or cited["kind"] not in ("request", "question"):
+            cited = next((r for r in rows if r.get("id") == args.cites), None)
+            if cited is None or cited.get("kind") not in ("request", "question"):
                 raise ValueError("done/answer must cite a request/question id")
-            if cited["to"] != sender or args.to != cited["from"]:
+            if cited.get("to") != sender or args.to != cited.get("from"):
                 raise ValueError("reply must come from the receiver and go to the original asker")
         now = dt.datetime.now(dt.timezone.utc)
         row = dict(id=f"{now:%Y%m%dT%H%M%S%fZ}-{secrets.token_hex(2)}",
@@ -147,6 +151,9 @@ def main():
     commands.add_parser("ledger", help="print ledger rows").add_argument("--tail", type=int)
     commands.add_parser("workers", help="list seats whose parent is this seat")
     commands.add_parser("pending", help="print received rows with no done/answer citation")
+    close_parser = commands.add_parser("close", help="remove an accepted worker's seat record")
+    close_parser.add_argument("address")
+    close_parser.add_argument("--force", action="store_true", help="also allow closing a persistent seat")
     args = parser.parse_args()
     try:
         home = Path(environment("KILN_HOME")).resolve()
@@ -161,6 +168,13 @@ def main():
             send(args, home, seat)
             return
         with locked(home):
+            if args.command == "close":
+                path = home / "seats" / f"{address(args.address)}.json"
+                target = read_json(path)
+                if target is not None and target.get("role") != "worker" and not args.force:
+                    raise ValueError("closing a persistent seat requires --force")
+                path.unlink(missing_ok=True)
+                return
             if args.command == "workers":
                 emit(workers(home, seat))
                 return
@@ -171,7 +185,7 @@ def main():
                 if args.command == "pending":
                     emit(pending(rows, seat))
                     return
-                rows = [r for r in rows if r["to"] == addr and r["id"] not in read]
+                rows = [r for r in rows if r.get("to") == addr and r.get("id") not in read]
                 emit(rows)
                 sys.stdout.flush()
                 if args.mark:
@@ -184,9 +198,9 @@ def main():
                     temp.replace(path)
                 return
             if args.command == "overdue":
-                completed = {r["cites"] for r in rows if r["kind"] in ("done", "answer")}
+                completed = {r.get("cites") for r in rows if r.get("kind") in ("done", "answer")}
                 cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=args.minutes)
-                rows = [r for r in rows if r["kind"] in ("request", "question") and r["id"] not in completed
+                rows = [r for r in rows if r.get("kind") in ("request", "question") and r.get("id") not in completed
                         and dt.datetime.fromisoformat(r["time"]) <= cutoff]
             elif args.tail is not None:
                 if args.tail < 0:

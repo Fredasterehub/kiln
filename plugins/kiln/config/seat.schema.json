@@ -43,8 +43,7 @@
       "type": "string",
       "enum": [
         "claude",
-        "codex",
-        "agy"
+        "codex"
       ]
     },
     "tab": {
@@ -78,8 +77,7 @@
         "claude-fable-5-1",
         "claude-sonnet-5-5",
         "gpt-6.1-sol",
-        "gpt-6-astra",
-        "gemini-4-argon-high"
+        "gpt-6-astra"
       ]
     },
     "effort": {

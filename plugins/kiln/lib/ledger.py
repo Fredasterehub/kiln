@@ -14,14 +14,15 @@ def markers(seat):
 
 def pending(rows, seat):
     received = markers(seat)
-    completed = {r.get("cites") for r in rows if r["kind"] in ("done", "answer")}
-    return [r for r in rows if r["to"] == seat["address"]
-            and r["id"] in received and r["id"] not in completed]
+    completed = {r.get("cites") for r in rows if r.get("kind") in ("done", "answer")}
+    return [r for r in rows if r.get("to") == seat["address"]
+            and r.get("kind") in ("request", "question")
+            and r.get("id") in received and r.get("id") not in completed]
 
 
 def workers(home, seat):
     return [child for path in sorted((home / "seats").glob("*.json"))
-            if (child := read_json(path))["parent"] == seat["address"]]
+            if isinstance(child := read_json(path), dict) and child.get("parent") == seat["address"]]
 
 
 def live_pid(path):

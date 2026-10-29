@@ -42,6 +42,7 @@ then appends the current copy's handlers. Uninstall removes only those handlers
 and drops groups emptied by those removals. Non-Kiln content and order remain;
 JSON formatting is normalized with indent 2. Parse and shape checks happen
 before writing, and writes follow a symlink to its resolved target.
+When installation or removal leaves the parsed content unchanged, no write occurs.
 Seat launches write no hook files and never edit Codex `config.toml`.
 Missing installed Kiln hooks produce a warning and never refuse a launch.
 Codex installs SessionStart for all seats; `start.sh` exits for workers.
@@ -80,13 +81,20 @@ splits its first listed pane, and stores the resolved tab label. Labels use
 `<name-or-address> · <role-text> · <short-model>`; role text is `director`,
 `super manager`, `<tab> manager`, `helper`, `chunk master`, or `worker`.
 Herdr startup uses `agent start <addr> --kind <family> --pane <new-pane>
---timeout 30000 -- <native-arguments>`. Failed split/start removes the seat
-record; an overwritten address with a different pane produces a warning.
+--timeout 30000 -- <native-arguments>`. Failed split/start restores the previous
+seat record on a relaunch, or removes the record for a new seat. Corrupt prior
+records produce a warning and are treated as absent. An overwritten address
+with a different pane produces a warning.
 Workers and pending rows are derived via `team workers` and `team pending`;
 `seat.json` stores neither. Hooks and team share `plugins/kiln/lib/ledger.py`:
 children are seat files whose parent matches this address, regardless of role;
-pending rows are addressed here, received in `seat.inbox`, and not cited by any
-done/answer. The hook reads this state directly, without invoking team.
+pending rows are requests or questions addressed here, received in `seat.inbox`,
+and not cited by any done/answer. The hook reads this state directly, without
+invoking team. The launcher's owner runs `team close <addr>` when it accepts a
+worker; this removes the seat record and is idempotent. The stop hook treats
+every listed child as live until that record is removed. Closing a persistent
+seat requires `team close <addr> --force`; closing does not send Herdr commands.
+Headlines must be one line; those above 100 characters warn without refusing.
 
 A Claude listener publishes `KILN_HOME/listeners/<address>.pid` while alive,
 and removes its own marker on exit. `team send` leaves a live listener to wake

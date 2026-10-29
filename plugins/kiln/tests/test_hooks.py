@@ -238,7 +238,8 @@ class HookTests(unittest.TestCase):
         handoff.write_text('HANDOFF open item')
         self.save(card=str(card), handoff=str(handoff))
         self.rows(self.row(), self.row('unread'), self.row('complete'),
-                  self.row('d1', kind='answer', to='super', cites='complete'), read=['r1', 'complete'])
+                  self.row('d1', kind='answer', to='super', cites='complete'),
+                  self.row('update-id', kind='update'), read=['r1', 'complete', 'update-id'])
         for family in STOP_INPUTS:
             result = self.run_hook('start', family=family)
             self.assertEqual((result.returncode, result.stderr), (0, ''))
@@ -250,6 +251,7 @@ class HookTests(unittest.TestCase):
             self.assertIn('Pending ids: r1', context)
             self.assertNotIn('unread', context)
             self.assertNotIn('complete', context)
+            self.assertNotIn('update-id', context)
             self.assertIn('this is enough; read rules, ledger and panes only where an item points you', context)
 
     def test_start_missing_optional_files(self):
@@ -435,7 +437,7 @@ class HookTests(unittest.TestCase):
         result = subprocess.run([str(HOOKS.parent / 'bin/team'), 'pending'], env=self.env,
                                 capture_output=True, text=True, check=True)
         ids = [json.loads(line)['id'] for line in result.stdout.splitlines()]
-        self.assertEqual(ids, ['r1', 'question', 'update'])
+        self.assertEqual(ids, ['r1', 'question'])
         for family in STOP_INPUTS:
             context = json.loads(self.run_hook('start', family=family).stdout)['hookSpecificOutput']['additionalContext']
             self.assertIn('Pending ids: ' + ', '.join(ids), context)

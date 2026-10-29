@@ -94,7 +94,7 @@ class TeamTests(Sandbox, unittest.TestCase):
 
     def send(self, kind='request', *extra, ok=True):
         return self.run_tool('team', 'send', '--from', 'sender', '--to', 'receiver',
-                             '--kind', kind, '--task', 't1', '--headline', 'hello\n世界',
+                             '--kind', kind, '--task', 't1', '--headline', 'hello 世界',
                              '--recheck-seconds', '0', *extra, ok=ok)
 
     def rows(self, result):
@@ -112,7 +112,7 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.assertEqual(set(row), {'id', 'from', 'to', 'kind', 'task', 'headline', 'path', 'time', 'cites'})
         self.assertRegex(row['id'], r'^\d{8}T\d{12}Z-[0-9a-f]{4}$')
         self.assertEqual(row['from'], 'sender')
-        self.assertEqual(row['headline'], 'hello\n世界')
+        self.assertEqual(row['headline'], 'hello 世界')
         self.assertIsNone(row['path'])
         self.assertEqual(self.calls(), [])
 
@@ -328,7 +328,7 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.env['KILN_SEAT'] = str(self.home / 'seats/receiver.json')
         self.assertEqual(self.rows(self.run_tool('team', 'pending')), [question])
         self.run_tool('team', 'inbox', '--mark')
-        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [question, update])
+        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [question])
 
     def test_workers_are_seats_with_matching_parent(self):
         self.seat('impl', role='worker', parent='sender')
@@ -361,6 +361,48 @@ class TeamTests(Sandbox, unittest.TestCase):
     def test_help_without_environment(self):
         self.env.pop('KILN_HOME')
         self.run_tool('team', '--help')
+
+    def test_close_worker_is_idempotent_and_persistent_requires_force(self):
+        self.seat('impl', role='worker', parent='sender')
+        self.run_tool('team', 'close', 'impl')
+        self.run_tool('team', 'close', 'impl')
+        self.assertEqual(self.rows(self.run_tool('team', 'workers')), [])
+        self.assertFalse((self.home / 'seats/impl.json').exists())
+        self.run_tool('team', 'close', 'receiver', ok=False)
+        self.assertTrue((self.home / 'seats/receiver.json').exists())
+        self.run_tool('team', 'close', 'receiver', '--force')
+        self.assertFalse((self.home / 'seats/receiver.json').exists())
+        self.run_tool('team', 'close', '../sender', '--force', ok=False)
+        self.assertTrue((self.home / 'seats/sender.json').exists())
+        self.assertEqual(self.calls(), [])
+
+    def test_workers_tolerate_a_missing_parent(self):
+        self.seat('impl', role='worker', parent='sender')
+        path = self.home / 'seats/receiver.json'
+        data = json.loads(path.read_text())
+        del data['parent']
+        path.write_text(json.dumps(data))
+        self.assertEqual([row['address'] for row in self.rows(self.run_tool('team', 'workers'))], ['impl'])
+
+    def test_headlines_are_one_line_and_length_only_warns(self):
+        for headline in ('two\nlines', 'two\rlines', 'trailing\n'):
+            self.send('request', '--headline', headline, ok=False)
+        self.assertFalse((self.home / 'ledger.jsonl').exists())
+        self.assertNotIn('warning', self.send('request', '--headline', 'x' * 100).stderr)
+        result = self.send('request', '--headline', 'x' * 101)
+        self.assertIn('warning', result.stderr)
+        self.assertEqual(self.rows(result)[0]['headline'], 'x' * 101)
+
+    def test_filters_tolerate_missing_row_keys(self):
+        rows = [dict(id='no-to', kind='question', time='2026-10-29T00:00:00+00:00'),
+                dict(id='no-kind', to='receiver'), dict(id='no-cites', kind='done', to='receiver'), {}]
+        (self.home / 'ledger.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        self.assertEqual(self.rows(self.run_tool('team', 'overdue')), [rows[0]])
+        self.env['KILN_SEAT'] = str(self.home / 'seats/receiver.json')
+        self.assertEqual(self.rows(self.run_tool('team', 'inbox', '--mark')), rows[1:3])
+        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [])
+        self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
+        self.send()
 
 
 if __name__ == '__main__':

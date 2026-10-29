@@ -441,6 +441,48 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.run_tool('launch', 'install-hooks', '--family', 'codex')
         self.assertNotIn('not installed', self.launch('--role', 'helper').stderr)
 
+    def test_failed_relaunch_restores_the_previous_record(self):
+        self.launch()
+        path = self.home / 'seats/build.json'
+        previous = self.seat() | {'pane': 'previous-pane'}
+        for failure in ('pane split', 'agent start'):
+            path.write_text(json.dumps(previous))
+            self.env['FAKE_FAIL'] = failure
+            self.launch(ok=False)
+            self.assertEqual(self.seat(), previous)
+
+    def test_corrupt_previous_record_warns_and_does_not_block_launch(self):
+        path = self.home / 'seats/build.json'
+        path.parent.mkdir()
+        for corrupt in ('broken json', '[]'):
+            path.write_text(corrupt)
+            result = self.launch()
+            self.assertIn('previous seat', result.stderr)
+            self.assertIn('warning', result.stderr)
+            self.assertEqual(self.seat()['pane'], 'w-test:p3')
+
+    def test_hook_setup_skips_unchanged_writes(self):
+        launch = load_launcher()
+        path = self.base / 'hooks.json'
+        path.write_text('{ "description" : "foreign" }\n')
+        original = path.read_bytes()
+        with patch.object(launch, 'hooks_path', return_value=path):
+            launch.manage_hooks(False, False)
+            self.assertEqual(path.read_bytes(), original)
+            launch.manage_hooks(True, False)
+            with patch.object(launch, 'write_json') as write:
+                launch.manage_hooks(True, False)
+                write.assert_not_called()
+            launch.manage_hooks(False, False)
+            with patch.object(launch, 'write_json') as write:
+                launch.manage_hooks(False, False)
+                write.assert_not_called()
+
+    def test_schema_excludes_agy_and_argon_seats(self):
+        schema = load_launcher().SCHEMA
+        self.assertNotIn('agy', schema['properties']['family']['enum'])
+        self.assertNotIn('gemini-4-argon-high', schema['properties']['model']['enum'])
+
 
 if __name__ == '__main__':
     unittest.main()

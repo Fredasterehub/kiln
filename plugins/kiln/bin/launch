@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Launch a Kiln seat using its pinned native family contract."""
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
 import re
+import runpy
 import shlex
 import subprocess
 import sys
@@ -54,7 +56,7 @@ def hooks(role):
 def native(seat, hook_config, home):
     model, effort, root = seat["model"], seat["effort"], seat["root"]
     if seat["family"] == "claude":
-        hook_config = __import__("runpy").run_path(str(HOOKS / "lib/claude.py"))["with_listener"](hook_config, seat["role"])
+        hook_config = runpy.run_path(str(HOOKS / "lib/claude.py"))["with_listener"](hook_config, seat["role"])
         roots = [root, *seat["extra_roots"]]
         settings = dict(fallbackModel=[], switchModelsOnFlag=False, hooks=hook_config,
                         permissions={"allow": [f"Edit(/{p.rstrip('/')}/**)" for p in roots]})
@@ -66,8 +68,6 @@ def native(seat, hook_config, home):
                  "--dangerously-bypass-hook-trust", "--add-dir", str(home)]
         if seat["role"] != "worker":
             flags += ["-c", "sandbox_workspace_write.network_access=true"]
-    else:
-        raise ValueError("agy runs as a plain command, not a seat")
     for directory in seat["extra_roots"]:
         flags += ["--add-dir", directory]
     return flags
@@ -126,6 +126,7 @@ def manage_hooks(install, dry_run):
     if not install and not path.exists():
         return
     data, events = hook_events(path)
+    original = copy.deepcopy(data)
     for event, groups in events.items():
         if not isinstance(groups, list):
             raise ValueError(f"hooks.{event} must be an array")
@@ -143,8 +144,10 @@ def manage_hooks(install, dry_run):
     if install:
         for event, groups in hooks("manager").items():
             events.setdefault(event, []).extend(groups)
-    data["hooks"] = events
-    write_json(path, data, dry_run)
+    if install or "hooks" in data:
+        data["hooks"] = events
+    if data != original:
+        write_json(path, data, dry_run)
 
 
 def warn_missing_hooks():
@@ -209,6 +212,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="print commands and file contents without side effects")
     args = parser.parse_args()
     seat_path = None
+    previous = None
     try:
         home_value = os.environ.get("KILN_HOME")
         if not home_value and not args.dry_run:
@@ -240,7 +244,14 @@ def main():
             warn_missing_hooks()
         target, seat["tab"] = target_pane(args.tab, workspace, args.dry_run)
         candidate = home / "seats" / f"{args.address}.json"
-        previous = json.loads(candidate.read_text()) if candidate.exists() else None
+        if candidate.exists():
+            try:
+                previous = json.loads(candidate.read_text())
+                if not isinstance(previous, dict):
+                    raise ValueError("expected a seat object")
+            except ValueError as error:
+                previous = None
+                print(f"launch: warning: ignoring corrupt previous seat {args.address}: {error}", file=sys.stderr)
         write_json(candidate, seat, args.dry_run)
         seat_path = candidate
         result = herdr(["pane", "split", target, "--cwd", root, "--no-focus",
@@ -259,7 +270,10 @@ def main():
                "--timeout", "30000", "--", *flags], args.dry_run)
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.TimeoutExpired) as error:
         if seat_path is not None and not args.dry_run:
-            seat_path.unlink(missing_ok=True)
+            if previous is not None:
+                write_json(seat_path, previous, False)
+            else:
+                seat_path.unlink(missing_ok=True)
         parser.exit(1, f"launch: {error}\n")
 
 
