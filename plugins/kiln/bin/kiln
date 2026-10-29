@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import re
 import shlex
 import subprocess
 import sys
@@ -46,7 +47,11 @@ def printable(command, team, workspace):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    start = parser.add_subparsers(dest="command", required=True).add_parser("start")
+    commands_parser = parser.add_subparsers(dest="command", required=True)
+    route = commands_parser.add_parser("route", help="print the active lane's model and effort for a routing key")
+    route.add_argument("key")
+    start = commands_parser.add_parser("start", epilog="Branch: kiln/<slug>; characters outside [A-Za-z0-9._-] "
+                                       "in the team folder name become '-', hyphen runs collapse; Git validates the result.")
     for key in ("team", "project", "workspace"):
         start.add_argument(f"--{key}", required=True)
     start.add_argument("--lane", choices=("balanced", "claude-lean"))
@@ -55,16 +60,24 @@ def main():
     start.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     configured = False
+    worktree_created = False
     workspace_id, tab_id = "<not-created>", "<not-created>"
     panes, commands = {}, []
     try:
+        if args.command == "route":
+            launcher = runpy.run_path(str(PLUGIN / "bin/launch"))
+            _, model, effort = launcher["routing"](argparse.Namespace(
+                role="worker", route=args.key, family=None, model=None, effort=None))
+            print(f"{model} {effort}")
+            return
         team, project = Path(args.team).resolve(), Path(args.project).resolve()
         if not project.is_dir():
             raise ValueError("--project must be an existing directory")
         config_path = team / "team.toml"
         if config_path.exists():
             raise ValueError(f"team already configured at {config_path}; use launch for later seats")
-        branch = f"kiln/{team.name}"
+        slug = re.sub("-+", "-", re.sub(r"[^A-Za-z0-9._-]", "-", team.name))
+        branch = f"kiln/{slug}"
         trunk = team / "build/trunk"
         git(["check-ref-format", "--branch", branch])
         git(["-C", str(project), "rev-parse", "--verify", "HEAD"])
@@ -73,7 +86,7 @@ def main():
                       project=str(project), branch=branch, trunk=str(trunk))
         content = "".join(f"{key} = {json.dumps(value, ensure_ascii=False)}\n" for key, value in config.items())
         launcher = runpy.run_path(str(PLUGIN / "bin/launch"))
-        for directory in (team, *(team / p for p in (*PHASES, "seats", "inbox"))):
+        for directory in (team, *(team / p for p in (*PHASES, "seats", "inbox", "waits", "listeners"))):
             if args.dry_run:
                 print(shlex.join(["mkdir", "-p", str(directory)]))
             else:
@@ -83,17 +96,18 @@ def main():
         else:
             (team / "ledger.jsonl").touch(exist_ok=True)
         launcher["pretrust"](str(team), args.dry_run)
-        git(["-C", str(project), "worktree", "add", "-b", branch, str(trunk), "HEAD"], args.dry_run)
         commands = launch_commands(team, args.names)
+        bridge = str(team / "bridge")
+        create_command = ["workspace", "create", "--label", args.workspace, "--cwd", bridge, "--no-focus"]
+        git(["-C", str(project), "worktree", "add", "-b", branch, str(trunk), "HEAD"], args.dry_run)
+        worktree_created = not args.dry_run
         if args.dry_run:
             print(f"# write {config_path}: {json.dumps(content)}")
         else:
             with config_path.open("x") as stream:
                 stream.write(content)
             configured = True
-        bridge = str(team / "bridge")
-        workspace = launcher["herdr"](["workspace", "create", "--label", args.workspace,
-                                       "--cwd", bridge, "--no-focus"], args.dry_run)
+        workspace = launcher["herdr"](create_command, args.dry_run)
         workspace_id = "<workspace>" if args.dry_run else workspace["workspace"]["workspace_id"]
         tab_id = "<bridge-tab>" if args.dry_run else workspace["tab"]["tab_id"]
         # Workspace creation already supplies a tab; name it instead of adding an empty tab.
@@ -113,12 +127,20 @@ def main():
             print(f"{role} pane: {pane}")
         print("director address: director")
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
-        if configured:
+        if configured or worktree_created:
             print(f"workspace: {workspace_id}; bridge tab: {tab_id}", file=sys.stderr)
             print("started panes: " + (", ".join(f"{role}={pane}" for role, pane in panes.items()) or "none"), file=sys.stderr)
+            if workspace_id == "<not-created>":
+                print("create workspace and replace placeholder IDs with its result:", file=sys.stderr)
+                print(shlex.join(["herdr", *create_command]), file=sys.stderr)
+                print(shlex.join(["herdr", "tab", "rename", "<bridge-tab>", "bridge"]), file=sys.stderr)
             print("remaining launch commands:", file=sys.stderr)
             for command in commands[len(panes):]:
                 print(printable(command, team, workspace_id), file=sys.stderr)
+        if worktree_created:
+            print("worktree cleanup (if abandoning this start):", file=sys.stderr)
+            print(shlex.join(["git", "-C", str(project), "worktree", "remove", str(trunk)]), file=sys.stderr)
+            print(shlex.join(["git", "-C", str(project), "branch", "-D", branch]), file=sys.stderr)
         parser.exit(1, f"kiln: {error}\n")
 
 

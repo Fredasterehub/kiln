@@ -95,7 +95,8 @@ def start(home, seat, metrics):
     if seat.get("card"):
         plugin = Path(os.environ.get("KILN_PLUGIN", str(PLUGIN)))
         paths.append(plugin / "cards/common.md")
-    paths.extend(Path(seat[key]) for key in ("card", "handoff") if seat.get(key))
+    if seat.get("card"):
+        paths.append(Path(seat["card"]))
     for path in paths:
         if path.is_file():
             parts.append(path.read_text().rstrip("\n"))
@@ -105,7 +106,10 @@ def start(home, seat, metrics):
     metrics["card_lines"] = len(context.splitlines())
     if metrics["card_lines"] > 40:
         metrics["warning"] = "card exceeds 40 lines"
-    return context
+    handoff = Path(seat["handoff"]) if seat.get("handoff") else None
+    if handoff and handoff.is_file():
+        parts.insert(-2, handoff.read_text().rstrip("\n"))
+    return "\n\n".join(parts)
 
 
 def fence(seat, payload, adapter):

@@ -76,22 +76,26 @@ Codex handles review of other project hooks; Kiln adds no foreign-hook guard.
 --workspace <label> [--lane balanced|claude-lean] [--bosses claude|gpt]
 [--names director=Oracle,super=Robin] [--dry-run]` bootstraps a team.
 It creates ledger.jsonl, seats/, inbox/, and bridge/, research/, plan/, build/,
-verify/, deploy/, council/. It trusts the team folder once for Claude, writes
+verify/, deploy/, council/, waits/, listeners/. It trusts the team folder once for Claude, writes
 team.toml with lane, bosses, project, branch, and trunk paths, creates a Herdr
 workspace, and renames its initial tab to bridge. Director, super (parent
 director), and helper (parent super) all use bridge/ as their root; helper's
 fixed display name is Gravedigger. It prints their pane IDs and director address.
 Unspecified lane/bosses use the plugin routing defaults; unnamed bosses use
 their addresses. Starting a configured team again refuses before any changes.
-Bootstrap creates branch `kiln/<team-folder-name>` from the product HEAD in
+Bootstrap creates branch `kiln/<slug>` from the product HEAD in
 `<team>/build/trunk` with `git -C <project> worktree add -b <branch> <trunk> HEAD`.
-The folder name must form a valid Git branch. Slices and chunks live in worktrees
+The slug replaces every character outside `[A-Za-z0-9._-]` in the team folder
+name with `-` and collapses hyphen runs, then Git validates the branch. Slices and chunks live in worktrees
 under build/; integration merges go to build/trunk. The operator's checkout,
 including dirty files and its checked-out branch, remains unchanged. Delivery
 names the integration branch for the operator to merge.
 A failure after team.toml prints workspace/tab IDs, started panes and the exact
 remaining launch commands; team state is retained with no automatic retry.
-If workspace creation itself failed, the printed IDs remain explicit placeholders.
+If workspace creation itself failed, workspace-create and tab-rename commands
+print before the launch commands; replace placeholder IDs with the create result.
+Any failure after worktree creation also prints exact worktree-remove and
+branch-delete commands for an operator abandoning the start; no cleanup runs automatically.
 Dry-run prints planned layout, trust, config, workspace/tab, and launcher
 commands with placeholder IDs and performs no writes or Herdr calls.
 
@@ -108,6 +112,9 @@ An explicit --card overrides the default.
 `research_gpt`, `conceptual.0`, or `operational.1`; explicit --model/--effort
 still win. Explicit routes override the role's bosses override. The `advisor`
 entry selects Argon; agy remains a plain command, so it cannot start a seat.
+`plugins/kiln/bin/kiln route <key>` prints `<model> <effort>` using the same
+active-lane resolver, including team.toml overrides and list indexes. It is a
+read-only lookup and works for `advisor` without launching an agy seat.
 
 The super manager launches each phase manager only when work starts (council
 at the first question), with address equal to the phase. The launcher creates

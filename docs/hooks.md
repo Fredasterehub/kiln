@@ -19,7 +19,8 @@ the fence and Stop also accept `old_pane` from the rotation receipt. Such a Stop
 is outgoing and checks only rotation ownership, never inbox rows or workers.
 Other events from that replaced pane exit silently. Unrelated panes never run hook policy.
 Errors fail open. Logs contain refusals, continued-Stop advisory reports, errors,
-skipped-ledger-line counts and the required SessionStart card line count; cards over 40 lines add a warning.
+skipped-ledger-line counts and the required SessionStart card line count excluding
+the handoff; start text over 40 lines adds a warning.
 Ordinary allowed tools, Stops with no report and successful listener wakes are not logged.
 
 SessionStart injects identity, then `cards/common.md` from the seat's
@@ -28,8 +29,9 @@ pending IDs and the closing instruction. Common rules are stored once; role
 cards contain only role instructions. Trailing newlines are stripped before
 joining sections so each boundary adds one blank line. The shipped persistent
 cards plus common rules and startup fields stay within 40 lines without a
-handoff; tests measure the complete context for both families. A handoff adds
-its full text and can trigger the existing over-budget warning.
+handoff; tests measure that context for both families. The handoff is injected
+in full but excluded from `card_lines` and the 40-line warning; it has its own
+60-line budget (spec §2b). Tests cover 40/41-line starts with a 60-line handoff.
 
 ## Shared state and Stop
 

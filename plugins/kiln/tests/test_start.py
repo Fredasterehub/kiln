@@ -1,9 +1,13 @@
 import json
+import contextlib
+import io
+import runpy
 import shlex
 import subprocess
 from pathlib import Path
 import tomllib
 import unittest
+from unittest.mock import patch
 
 try:
     from .test_team import PLUGIN, Sandbox
@@ -35,7 +39,7 @@ class StartTests(Sandbox, unittest.TestCase):
 
     def test_layout_bootstrap_trust_names_and_only_three_bridge_seats(self):
         result = self.start('--names', 'director=Oracle,super=Robin')
-        for name in ('bridge', 'research', 'plan', 'build', 'verify', 'deploy', 'council', 'seats', 'inbox'):
+        for name in ('bridge', 'research', 'plan', 'build', 'verify', 'deploy', 'council', 'seats', 'inbox', 'waits', 'listeners'):
             self.assertTrue((self.team / name).is_dir())
         self.assertEqual((self.team / 'ledger.jsonl').read_bytes(), b'')
         config = tomllib.loads((self.team / 'team.toml').read_text())
@@ -147,8 +151,61 @@ class StartTests(Sandbox, unittest.TestCase):
         result = self.start(ok=False)
         self.assertIn('workspace: <not-created>; bridge tab: <not-created>', result.stderr)
         self.assertIn('started panes: none', result.stderr)
+        create = shlex.join(['herdr', 'workspace', 'create', '--label', 'Kiln example', '--cwd', str(self.team / 'bridge'), '--no-focus'])
+        rename = shlex.join(['herdr', 'tab', 'rename', '<bridge-tab>', 'bridge'])
+        self.assertLess(result.stderr.index(create), result.stderr.index(rename))
+        self.assertLess(result.stderr.index(rename), result.stderr.index('remaining launch commands:'))
+        self.assertIn(shlex.join(['git', '-C', str(self.project), 'worktree', 'remove', str(self.team / 'build/trunk')]), result.stderr)
+        self.assertIn(shlex.join(['git', '-C', str(self.project), 'branch', '-D', 'kiln/team-example']), result.stderr)
         for role in ('director', 'super', 'helper'):
             self.assertIn(f'--address {role}', result.stderr)
+
+    def test_team_name_with_spaces_uses_collapsed_slug(self):
+        self.team = self.base / 'team  with---spaces!@more'
+        self.start()
+        config = tomllib.loads((self.team / 'team.toml').read_text())
+        self.assertEqual(config['branch'], 'kiln/team-with-spaces-more')
+        subprocess.run(['git', 'check-ref-format', '--branch', config['branch']], check=True, capture_output=True)
+        branch = subprocess.check_output(['git', '-C', str(self.team / 'build/trunk'), 'branch', '--show-current'], text=True).strip()
+        self.assertEqual(branch, config['branch'])
+        self.assertIn('[A-Za-z0-9._-]', self.run_tool('kiln', 'start', '--help').stdout)
+
+    def test_failure_after_worktree_before_config_prints_cleanup(self):
+        module = runpy.run_path(str(PLUGIN / 'bin/kiln'))
+        original_open = Path.open
+        def denied(path, *args, **kwargs):
+            if path == self.team / 'team.toml' and args[:1] == ('x',):
+                raise PermissionError('test config write denied')
+            return original_open(path, *args, **kwargs)
+        argv = ['kiln', 'start', '--team', str(self.team), '--project', str(self.project), '--workspace', 'Kiln example']
+        with patch.dict('os.environ', self.env), patch('sys.argv', argv), patch.object(Path, 'open', new=denied), \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            with self.assertRaises(SystemExit):
+                module['main']()
+        self.assertTrue((self.team / 'build/trunk/.git').is_file())
+        self.assertFalse((self.team / 'team.toml').exists())
+        self.assertEqual(self.calls(), [])
+        for command in (['git', '-C', str(self.project), 'worktree', 'remove', str(self.team / 'build/trunk')],
+                        ['git', '-C', str(self.project), 'branch', '-D', 'kiln/team-example']):
+            self.assertIn(shlex.join(command), errors.getvalue())
+        self.assertIn('herdr workspace create', errors.getvalue())
+        self.assertIn('remaining launch commands:', errors.getvalue())
+
+    def test_route_lookup_uses_shared_resolver_and_team_lane_without_writes(self):
+        for key, expected in (('advisor', 'gemini-4-argon-high high'),
+                              ('conceptual.0', 'gpt-6-astra medium'),
+                              ('research_claude', 'claude-sonnet-5-5 medium')):
+            self.assertEqual(self.run_tool('kiln', 'route', key).stdout, expected + '\n')
+        (self.home / 'team.toml').write_text('lane="claude-lean"\nbosses="gpt"\n')
+        self.assertEqual(self.run_tool('kiln', 'route', 'research_claude').stdout, 'gpt-6.1-sol low\n')
+        self.assertEqual(self.run_tool('kiln', 'route', 'conceptual.0').stdout, 'gpt-6-astra medium\n')
+        for key in ('missing', 'conceptual.1', 'conceptual'):
+            result = self.run_tool('kiln', 'route', key, ok=False)
+            self.assertIn('invalid routing entry', result.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assertFalse(Path(self.env['HOME']).exists())
+        self.assertFalse(self.team.exists())
+        self.assertEqual([p.name for p in self.home.iterdir()], ['team.toml'])
 
     def test_help_works_without_kiln_environment(self):
         self.env.pop('KILN_HOME')

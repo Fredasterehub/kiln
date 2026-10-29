@@ -315,6 +315,28 @@ class HookTests(unittest.TestCase):
                     self.assertLessEqual(len(context.splitlines()), 40)
                     self.assertLessEqual(len(card.read_text().splitlines()), 28)
 
+    def test_start_warning_excludes_handoff_but_counts_all_other_sections(self):
+        card, handoff = self.home / 'card.md', self.home / 'handoff.md'
+        handoff.write_text(''.join(f'HANDOFF item {i}\n' for i in range(60)))
+        for family in STOP_INPUTS:
+            card.write_text('ROLE\n')
+            self.save(card=str(card), handoff=None)
+            baseline = json.loads(self.run_hook('start', family=family).stdout)
+            baseline_lines = len(baseline['hookSpecificOutput']['additionalContext'].splitlines())
+            for budget in (40, 41):
+                with self.subTest(family=family, budget=budget):
+                    card.write_text('ROLE\n' * (1 + budget - baseline_lines))
+                    self.save(handoff=str(handoff))
+                    result = self.run_hook('start', family=family)
+                    self.assertEqual((result.returncode, result.stderr), (0, ''))
+                    context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
+                    self.assertIn(handoff.read_text().rstrip('\n'), context)
+                    self.assertLess(context.index('HANDOFF item 0'), context.index('Pending ids:'))
+                    self.assertGreater(len(context.splitlines()), budget)
+                    record = json.loads((self.home / 'hooks.log').read_text().splitlines()[-1])
+                    self.assertEqual(record['card_lines'], budget)
+                    self.assertEqual(record.get('warning'), 'card exceeds 40 lines' if budget > 40 else None)
+
     def test_wait_timeout_required_in_both_families(self):
         for family in STOP_INPUTS:
             for command in ('herdr agent wait w', 'herdr pane wait-output p'):
