@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""Launch a Kiln seat using its pinned native family contract."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import subprocess
+import sys
+import tomllib
+
+REPO = Path(__file__).resolve().parents[3]
+HOOKS = Path(__file__).resolve().parents[1] / "hooks"
+SCHEMA = json.loads((REPO / "docs/seat.schema.json").read_text())
+
+
+def absolute(value):
+    return str(Path(value).resolve())
+
+
+def family(model):
+    return "claude" if model.startswith("claude-") else "codex" if model.startswith("gpt-") else "agy"
+
+
+def routing(args):
+    config = tomllib.loads((REPO / "routing.toml").read_text())
+    lane = config["active"]
+    key = args.role
+    if key == "worker":
+        key = "review_of_gpt" if args.family == "claude" else "implementer"
+    choice = config["lanes"][lane][key]
+    if args.role in ("director", "super") and config["bosses"] == "gpt":
+        choice = config["boss_lanes"]["gpt"][args.role]
+    model, effort = args.model or choice["model"], args.effort or choice["effort"]
+    if family(model) != args.family:
+        raise ValueError("model family differs from --family; supply --model or change routing.toml")
+    return lane, model, effort
+
+
+def hooks(role):
+    events = {"Stop": "stop", "PreToolUse": "fence"}
+    if role not in ("worker", "advisor"):
+        events["SessionStart"] = "start"
+    return {event: [{"hooks": [{"type": "command", "command": shlex.quote(str(HOOKS / f"{script}.sh"))}]}]
+            for event, script in events.items()}
+
+
+def native(seat, hook_config):
+    model, effort, root = seat["model"], seat["effort"], seat["root"]
+    if seat["family"] == "claude":
+        roots = [root, *seat["extra_roots"]]
+        settings = dict(fallbackModel=[], switchModelsOnFlag=False, hooks=hook_config,
+                        permissions={"allow": [f"Edit(/{p.rstrip('/')}/**)" for p in roots]})
+        flags = ["--model", model, "--effort", effort, "--permission-mode", "acceptEdits",
+                 "--settings", json.dumps(settings, separators=(",", ":"))]
+    elif seat["family"] == "codex":
+        flags = ["--model", model, "-c", f"model_reasoning_effort={effort}",
+                 "-s", "workspace-write", "-C", root, "-c", "approval_policy=never"]
+        if seat["role"] != "worker":
+            flags += ["-c", "sandbox_workspace_write.network_access=true"]
+    else:
+        return ["-p", "--model", model, "--effort", effort, "--sandbox", "--output-format", "json"]
+    for directory in seat["extra_roots"]:
+        flags += ["--add-dir", directory]
+    return flags
+
+
+def validate(seat):
+    """The seat schema is a flat object with string and string-array fields."""
+    if set(SCHEMA["required"]) - seat.keys() or seat.keys() - SCHEMA["properties"].keys():
+        raise ValueError("seat fields do not match schema")
+    for key, value in seat.items():
+        prop = SCHEMA["properties"][key]
+        if prop["type"] == "string" and not isinstance(value, str):
+            raise ValueError(f"{key} must be a string")
+        if prop["type"] == "array" and (not isinstance(value, list) or any(not isinstance(v, str) for v in value)):
+            raise ValueError(f"{key} must be a string array")
+        if "enum" in prop and value not in prop["enum"]:
+            raise ValueError(f"invalid {key}: {value}")
+        if "pattern" in prop and not re.fullmatch(prop["pattern"], value):
+            raise ValueError(f"invalid {key}: {value}")
+
+
+def write_json(path, data, dry_run):
+    if dry_run:
+        print(f"# write {path}: {json.dumps(data, ensure_ascii=False)}")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        temporary.replace(path)
+
+
+def install_hooks(root, config, dry_run):
+    path = Path(root) / ".codex/hooks.json"
+    existing = json.loads(path.read_text()) if path.exists() else {}
+    target = existing.setdefault("hooks", {})
+    for event, groups in config.items():
+        for group in groups:
+            if group not in target.setdefault(event, []):
+                target[event].append(group)
+    write_json(path, existing, dry_run)
+
+
+def herdr(args, dry_run):
+    if dry_run:
+        print(shlex.join(["herdr", *args]))
+        return None
+    result = subprocess.run(["herdr", *args], capture_output=True, text=True,
+                            stdin=subprocess.DEVNULL, timeout=35)
+    if result.returncode:
+        raise ValueError(result.stderr.strip() or "Herdr failed")
+    return json.loads(result.stdout)["result"]
+
+
+def target_pane(tab, workspace, dry_run):
+    tabs = herdr(["tab", "list", "--workspace", workspace], dry_run)
+    if not dry_run:
+        matches = [t for t in tabs["tabs"] if tab in (t["tab_id"], t["label"])]
+        if len(matches) != 1:
+            raise ValueError("--tab must identify exactly one tab in HERDR_WORKSPACE_ID")
+        tab = matches[0]["tab_id"]
+    panes = herdr(["pane", "list", "--workspace", workspace], dry_run)
+    if dry_run:
+        return "<tab-pane>"
+    return next(p["pane_id"] for p in panes["panes"] if p["tab_id"] == tab)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for key in ("tab", "address", "root", "parent"):
+        parser.add_argument(f"--{key}", required=True)
+    for key in ("role", "family"):
+        parser.add_argument(f"--{key}", required=True, choices=SCHEMA["properties"][key]["enum"])
+    for key in ("model", "effort"):
+        parser.add_argument(f"--{key}", choices=SCHEMA["properties"][key]["enum"])
+    for key in ("name", "card", "handoff", "worktree", "run"):
+        parser.add_argument(f"--{key}")
+    parser.add_argument("--extra-root", action="append", default=[])
+    parser.add_argument("--dry-run", action="store_true", help="print commands and file contents without side effects")
+    args = parser.parse_args()
+    try:
+        home = Path(os.environ["KILN_HOME"]).resolve()
+        workspace = os.environ.get("HERDR_WORKSPACE_ID", "<workspace>" if args.dry_run else "")
+        if not workspace:
+            raise ValueError("HERDR_WORKSPACE_ID is required")
+        lane, model, effort = routing(args)
+        if args.family == "agy" and args.role != "advisor":
+            raise ValueError("agy is a one-shot advisor only")
+        root = absolute(args.worktree or args.root)
+        extra_roots = list(dict.fromkeys(absolute(p) for p in args.extra_root + ([args.run] if args.run else [])))
+        seat = dict(address=args.address, role=args.role, family=args.family, tab=args.tab,
+                    root=root, extra_roots=extra_roots, parent=args.parent, model=model,
+                    effort=effort, lane=lane, workers=[], pending=[], pane="", workspace=workspace,
+                    inbox="" if args.role == "worker" else str(home / "inbox" / f"{args.address}.json"))
+        for key in ("name", "card", "handoff"):
+            value = getattr(args, key)
+            if value is not None:
+                seat[key] = value if key == "name" else absolute(value)
+        validate(seat)
+        config = {} if args.family == "agy" else hooks(args.role)
+        flags = native(seat, config)
+        target = target_pane(args.tab, workspace, args.dry_run)
+        seat_path = home / "seats" / f"{args.address}.json"
+        write_json(seat_path, seat, args.dry_run)
+        if args.family == "codex":
+            install_hooks(root, config, args.dry_run)
+        result = herdr(["pane", "split", target, "--cwd", root, "--no-focus",
+                        "--env", f"KILN_SEAT={seat_path}", "--env", f"KILN_HOME={home}"], args.dry_run)
+        seat["pane"] = "<new-pane>" if args.dry_run else result["pane"]["pane_id"]
+        write_json(seat_path, seat, args.dry_run)
+        short = {"claude-opus-5-5": "opus-5.5", "claude-fable-5-1": "fable-5.1",
+                 "claude-sonnet-5-5": "sonnet-5.5", "gpt-6.1-sol": "sol-6.1",
+                 "gpt-6-astra": "astra", "gemini-4-argon-high": "argon-high"}[model]
+        label = f"{args.name or args.address} · {args.role} · {short}"
+        herdr(["pane", "rename", seat["pane"], label], args.dry_run)
+        herdr(["agent", "start", args.address, "--kind", args.family, "--pane", seat["pane"],
+               "--timeout", "30000", "--", *flags], args.dry_run)
+    except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.TimeoutExpired) as error:
+        parser.exit(1, f"launch: {error}\n")
+
+
+if __name__ == "__main__":
+    main()
