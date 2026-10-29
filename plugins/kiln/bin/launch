@@ -2,6 +2,7 @@
 """Launch a Kiln seat using its pinned native family contract."""
 import argparse
 import copy
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,8 @@ import shlex
 import subprocess
 import sys
 import tomllib
+import tempfile
+from contextlib import contextmanager
 
 PLUGIN = Path(__file__).resolve().parents[1]
 CONFIG = PLUGIN / "config"
@@ -199,6 +202,99 @@ def warn_missing_hooks():
         print("launch: warning: " + "; ".join(warnings), file=sys.stderr)
 
 
+def atomic_bytes(path, content, mode):
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def backup_once(path, original, mode, dry_run):
+    backup = path.with_name(path.name + ".bak-kiln")
+    if not path.exists() or backup.exists():
+        return
+    if dry_run:
+        print(f"# backup {path} -> {backup}")
+        return
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(original)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, backup)
+        except FileExistsError:
+            pass
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+@contextmanager
+def trust_lock(path, dry_run):
+    if dry_run:
+        yield
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_name(path.name + ".kiln.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def trust_flag(content, root, family):
+    data = tomllib.loads(content.decode("utf-8")) if family == "codex" else json.loads(content)
+    if not isinstance(data, dict):
+        raise ValueError("project trust config must be an object/table")
+    projects = data.get("projects", {})
+    if not isinstance(projects, dict):
+        raise ValueError("project trust records must be an object/table")
+    project = projects.get(root, {})
+    key, value = ("trust_level", "trusted") if family == "codex" else ("hasTrustDialogAccepted", True)
+    return isinstance(project, dict) and type(project.get(key)) is type(value) and project.get(key) == value
+
+
+def pretrust(root, family, dry_run):
+    path = (codex_home() / "config.toml" if family == "codex" else Path.home() / ".claude.json").resolve()
+    with trust_lock(path, dry_run):
+        exists = path.exists()
+        original = path.read_bytes() if exists else (b"" if family == "codex" else b"{}")
+        mode = path.stat().st_mode & 0o777 if exists else 0o600
+        if trust_flag(original, root, family):
+            return
+        if family == "codex":
+            projects = tomllib.loads(original.decode("utf-8")).get("projects", {})
+            if root in projects:
+                raise ValueError(f"existing Codex project {root} is not trusted; cannot replace its table by appending")
+            addition = f'\n[projects.{json.dumps(root, ensure_ascii=False)}]\ntrust_level = "trusted"\n'
+            updated = original + addition.encode("utf-8")
+            description = f"append {path}: {json.dumps(addition)}"
+        else:
+            data = json.loads(original)
+            project = data.setdefault("projects", {}).setdefault(root, {})
+            if not isinstance(project, dict):
+                raise ValueError("Claude project state must be an object")
+            project["hasTrustDialogAccepted"] = True
+            updated = (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+            description = f"set {path}: projects[{json.dumps(root)}].hasTrustDialogAccepted = true"
+        if not trust_flag(updated, root, family):
+            raise ValueError(f"{family} folder trust is missing for {root}; refusing launch")
+        backup_once(path, original, mode, dry_run)
+        if dry_run:
+            print(f"# {description}")
+        else:
+            atomic_bytes(path, updated, mode)
+            # The CLI may write independently of our lock; confirm the installed record.
+            if not trust_flag(path.read_bytes(), root, family):
+                raise ValueError(f"{family} folder trust is missing for {root} after re-apply; refusing launch")
+
+
 def herdr(args, dry_run):
     if dry_run:
         print(shlex.join(["herdr", *args]))
@@ -246,6 +342,7 @@ def main():
     for key in ("name", "card", "handoff", "worktree", "run"):
         parser.add_argument(f"--{key}")
     parser.add_argument("--wait-ms", type=int, default=1800000)
+    parser.add_argument("--direction", choices=("right", "down"), default="down")
     parser.add_argument("--extra-root", action="append", default=[])
     parser.add_argument("--dry-run", action="store_true", help="print commands and file contents without side effects")
     args = parser.parse_args()
@@ -283,6 +380,7 @@ def main():
         flags = native(seat, config, home)
         if args.family == "codex":
             warn_missing_hooks()
+        pretrust(root, args.family, args.dry_run)
         target, seat["tab"] = target_pane(args.tab, workspace, args.dry_run)
         candidate = home / "seats" / f"{args.address}.json"
         if candidate.exists():
@@ -295,7 +393,7 @@ def main():
                 print(f"launch: warning: ignoring corrupt previous seat {args.address}: {error}", file=sys.stderr)
         write_json(candidate, seat, args.dry_run)
         seat_path = candidate
-        result = herdr(["pane", "split", target, "--cwd", root, "--no-focus",
+        result = herdr(["pane", "split", target, "--direction", args.direction, "--cwd", root, "--no-focus",
                         "--env", f"KILN_SEAT={seat_path}", "--env", f"KILN_HOME={home}",
                         "--env", f"KILN_PLUGIN={PLUGIN}"], args.dry_run)
         seat["pane"] = "<new-pane>" if args.dry_run else result["pane"]["pane_id"]
@@ -308,6 +406,8 @@ def main():
         role_text = {"super": "super manager", "manager": f"{seat['tab']} manager", "chunkmaster": "chunk master"}.get(args.role, args.role)
         label = f"{args.name or args.address} · {role_text} · {short}"
         herdr(["pane", "rename", seat["pane"], label], args.dry_run)
+        # Re-read immediately before start and re-apply once if the flag disappeared.
+        pretrust(root, args.family, args.dry_run)
         herdr(["agent", "start", args.address, "--kind", args.family, "--pane", seat["pane"],
                "--timeout", "30000", "--", *flags], args.dry_run)
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.TimeoutExpired) as error:

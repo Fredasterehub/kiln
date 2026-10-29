@@ -177,7 +177,7 @@ class TeamTests(Sandbox, unittest.TestCase):
 
     def test_identity_and_worker_rules(self):
         self.send('update', '--from', 'impostor', ok=False)
-        self.seat('sender', role='worker')
+        self.seat('sender', role='worker', parent='launcher')
         for kind in ('request', 'done', 'answer', 'update'):
             self.send(kind, ok=False)
         self.send('question')
@@ -414,6 +414,77 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.assertEqual(self.rows(self.run_tool('team', 'pending')), [])
         self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
         self.send()
+
+    def test_answer_to_worker_question_goes_to_its_parent(self):
+        self.seat('sender', role='worker', parent='launcher')
+        self.seat('launcher')
+        question = self.rows(self.send('question'))[0]
+        self.assertEqual(question['via'], 'launcher')
+        # Closing or reparenting the worker must not change this row's route.
+        self.seat('sender', role='worker', parent='other')
+        (self.home / 'seats/sender.json').unlink()
+        self.reply(question, 'answer', '--to', 'launcher')
+        self.reply(question, 'answer', '--to', 'sender', ok=False)
+        self.seat('other')
+        self.reply(question, 'answer', '--to', 'other', ok=False)
+        self.seat('impostor')
+        self.env['KILN_SEAT'] = str(self.home / 'seats/impostor.json')
+        self.send('answer', '--from', 'impostor', '--to', 'launcher', '--cites', question['id'], ok=False)
+        rows = self.rows(self.run_tool('team', 'ledger'))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual((rows[-1]['to'], rows[-1]['cites']), ('launcher', question['id']))
+
+    def test_worker_send_never_contacts_herdr_or_reports_nudge_failure(self):
+        self.seat('sender', role='worker', parent='launcher')
+        self.seat('receiver', family='codex')
+        self.env['FAKE_FAIL'] = 'agent get'
+        result = self.send('question')
+        self.assertEqual(result.stderr, '')
+        self.assertEqual(len(self.rows(result)), 1)
+        self.assertEqual(self.calls(), [])
+
+    def worker_question(self, to='receiver'):
+        self.seat('sender', role='worker', parent='launcher')
+        self.seat('launcher')
+        question = self.rows(self.send('question', '--to', to))[0]
+        self.env['KILN_SEAT'] = str(self.home / 'seats/launcher.json')
+        return question
+
+    def test_relay_uses_stored_launcher_and_nudges_once_without_appending(self):
+        self.seat('receiver', family='codex')
+        question = self.worker_question()
+        (self.home / 'seats/sender.json').unlink()
+        self.env['FAKE_STATES'] = 'working,idle'
+        self.run_tool('team', 'relay', question['id'], '--recheck-seconds', '0')
+        self.assertEqual(self.calls(), [['agent', 'get', 'receiver'], ['agent', 'get', 'receiver'],
+                                       ['agent', 'prompt', 'receiver', 'inbox']])
+        self.assertEqual(self.rows(self.run_tool('team', 'ledger')), [question])
+
+    def test_relay_to_self_is_noop_and_wrong_caller_or_row_is_refused(self):
+        question = self.worker_question(to='launcher')
+        self.assertIn('no relay needed', self.run_tool('team', 'relay', question['id']).stdout)
+        self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
+        self.assertIn('workers may not relay', self.run_tool('team', 'relay', question['id'], ok=False).stderr)
+        self.env['KILN_SEAT'] = str(self.home / 'seats/receiver.json')
+        self.run_tool('team', 'relay', question['id'], ok=False)
+        self.env['KILN_SEAT'] = str(self.home / 'seats/launcher.json')
+        self.run_tool('team', 'relay', 'missing', ok=False)
+        self.run_tool('team', 'relay', question['id'], '--recheck-seconds', '-1', ok=False)
+        self.assertEqual(self.calls(), [])
+
+    def test_relay_respects_receipts_and_reports_failed_nudge_once(self):
+        self.seat('receiver', family='codex')
+        question = self.worker_question()
+        self.env['FAKE_FAIL'] = 'agent prompt'
+        result = self.run_tool('team', 'relay', question['id'])
+        self.assertIn('nudge failed', result.stderr)
+        self.assertEqual(len(self.calls()), 2)
+        inbox = self.home / 'inbox/receiver.json'
+        inbox.parent.mkdir(exist_ok=True)
+        inbox.write_text(json.dumps({'read': [question['id']]}))
+        self.run_tool('team', 'relay', question['id'])
+        self.assertEqual(self.calls()[-1], ['agent', 'get', 'receiver'])
+        self.assertEqual(len(self.calls()), 3)
 
 
 if __name__ == '__main__':

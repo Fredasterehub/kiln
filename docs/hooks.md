@@ -18,9 +18,9 @@ The Python guard accepts `seat.pane == HERDR_PANE_ID`. During an unacked rotatio
 the fence and Stop also accept `old_pane` from the rotation receipt. Such a Stop
 is outgoing and checks only rotation ownership, never inbox rows or workers.
 Other events from that replaced pane exit silently. Unrelated panes never run hook policy.
-Errors fail open. Logs contain refusals, errors, skipped-ledger-line counts,
-and the required SessionStart card line count; cards over 40 lines add a warning.
-Ordinary allowed tools, allowed Stops and successful listener wakes are not logged.
+Errors fail open. Logs contain refusals, continued-Stop advisory reports, errors,
+skipped-ledger-line counts and the required SessionStart card line count; cards over 40 lines add a warning.
+Ordinary allowed tools, Stops with no report and successful listener wakes are not logged.
 
 ## Shared state and Stop
 
@@ -35,8 +35,18 @@ Received updates/done/answers are not obligations. Nothing marks rows implicitly
 Workers and pending IDs are derived, never stored in seat.json.
 
 Stop refuses only unread rows, a live worker without an armed wait, or an unacked
-rotation owned by this session. `stop_hook_active` allows the continued Stop;
-workers always stop. Request completion and sending done remain card rules.
+rotation owned by this session. `stop_hook_active` suppresses blocking, not
+policy evaluation: a continued Claude Stop returns a reason naming unread row
+IDs and other obligations, but omits decision:block and exits 0. A nonblocking
+Codex Stop emits nothing: the docs do not specify a reason-only advisory shape.
+Unread rows stay unread; the hook does not mark receipt or completion. A Codex
+seat ending a continued Stop with unread rows waits for the next nudge or
+`team relay`; this hook does not guarantee an immediate wake. Claude's continued
+listener ignores the initial unread IDs and wakes only for new unread rows.
+An empty reason produces no output. Outgoing sessions still check only rotation,
+never replacement inbox/workers. Workers always stop. Completion and sending
+done remain card rules.
+
 Remediation commands use the absolute path of this plugin's `bin/team`.
 
 `team workers` lists all children by parent. Stop considers only role `worker`:
@@ -109,7 +119,16 @@ literal Herdr wait/typing command forms, not a shell program. Unbalanced quoting
 (for example in a heredoc) can make shlex fail: policy fails open and logs an error.
 Wrappers (`env herdr`, `bash -c`), substitutions and global flags before the subcommand
 are not reliably seen. No shell-write parsing or additional typing verbs are claimed.
-Typing permits child addresses/panes except the director and this seat's address.
+The installed Herdr 0.9.5 probes (maestro, 2026-10-29) establish a literal
+first argument after the subcommand as target. Help is exempt only when that
+slot is -h/--help, such as `herdr agent prompt -h`. An invocation with nothing
+after the subcommand is left to Herdr's usage validation. An existing argument,
+even an empty string, option-looking value or `--`, is checked literally. Later -h/--help is never
+a fence exemption: `pane send-keys X a -h` sends keys;
+`pane send-text X --help` sends text. `agent prompt X hi -h` fails native option validation, but
+still undergoes the target check. Child addresses/panes are allowed except
+the director and this seat's address; help cannot exempt a separate command.
+
 
 Claude shell writes have **no native directory scope**; no Edit allow rules are
 installed or claimed as a boundary. Codex shell writes use its native sandbox,
@@ -127,6 +146,10 @@ example on a broken child record), the listener arms normally and wakes on the
 unread rows; the diagnostic is logged. It does not assume that finding unread
 rows means the rest of the synchronous policy succeeded. Other listeners scan the initial ledger once, then read only appended bytes at their
 last offset every 1 s; receipt files are checked without consuming rows.
+On stop_hook_active, the initial unread ID set is excluded for that listener's
+whole lifetime, including its final expiry check. Existing unread rows cannot
+repeatedly trigger asyncRewake; new unread IDs still wake the seat. Exclusion
+never marks the old rows read or completed.
 
 Each listener publishes listeners/<address>.pid under its generation lock and
 removes only its own marker on wake, error, termination or supersession. On expiry
@@ -146,3 +169,11 @@ a long shell/unified-exec wait may yield control before its command ends even
 while the wait PID marker remains live. No hook-side change is claimed for this
 unverified behavior. Existing live checks also include Claude completion/wake
 notifications and whether PreToolUse carries scratchpad_dir.
+
+Codex Stop output checked 2026-10-29: the requested
+[developers.openai.com/codex/hooks](https://developers.openai.com/codex/hooks#stop)
+redirects to [the release reference](https://learn.chatgpt.com/docs/hooks#stop).
+It says “To keep Codex going, return:” and shows decision:block with reason.
+Common output fields are continue, stopReason, systemMessage and suppressOutput;
+no reason-only advisory is documented. Silence on a nonblocking Codex Stop is
+our conservative implementation choice, not a claim that Codex rejects that shape.

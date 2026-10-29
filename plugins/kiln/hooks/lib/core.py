@@ -65,8 +65,6 @@ def listener_outgoing(home, seat, session, metrics):
 
 
 def stop(home, seat, payload, metrics, outgoing=False):
-    if payload.get("stop_hook_active"):
-        return None
     rotation = home / "rotations" / f'{seat["address"]}.json'
     state = read_json(rotation, {})
     owns_rotation = outgoing_session(state, payload.get("session_id"))
@@ -75,7 +73,7 @@ def stop(home, seat, payload, metrics, outgoing=False):
     if not outgoing:
         new = unread(seat, ledger(home, metrics))
         if new:
-            metrics["unread_refusal"] = True
+            metrics["unread_refusal"] = not payload.get("stop_hook_active", False)
             reasons.append("Unread rows " + ", ".join(r["id"] for r in new) + f"; run: {TEAM} inbox --mark")
         for child in workers(home, seat):
             worker = child["address"]
@@ -135,13 +133,17 @@ def fence(seat, payload, adapter):
             continue
         end = next((i for i in range(index + 1, len(words)) if boundary(words[i])), len(words))
         tail = words[index + 1:end]
+        if len(tail) > 2 and tail[2] in ("--help", "-h"):
+            continue  # Herdr handles help only in the target position.
         if tail[:2] in (["agent", "wait"], ["pane", "wait-output"]):
             if not any(w == "--timeout" or w.startswith("--timeout=") for w in tail[2:]):
                 return "Herdr waits require --timeout; use the seat's wait_ms"
             if seat["family"] == "claude" and data.get("run_in_background") is not True:
                 return "Claude waits require Bash run_in_background: true"
         if tail[:2] in (["agent", "prompt"], ["pane", "send-text"], ["pane", "send-keys"]):
-            target = tail[2] if len(tail) > 2 else ""
+            if len(tail) <= 2:
+                continue  # No target argument: leave the usage error to Herdr.
+            target = tail[2]  # Literal target, including options, empty strings and --.
             home = Path(os.environ["KILN_HOME"])
             children = workers(home, seat)
             addresses = {c["address"] for c in children} - {"director", seat["address"]}
@@ -173,10 +175,11 @@ def listen(home, seat, payload, metrics):
             else:
                 if reason and probe.get("unread_refusal"):
                     return 0
-        return listen_armed(home, seat, metrics, stream, rows, session)
+        ignore_ids = {r["id"] for r in rows} if payload.get("stop_hook_active") else set()
+        return listen_armed(home, seat, metrics, stream, rows, session, ignore_ids)
 
 
-def listen_armed(home, seat, metrics, stream, rows, session):
+def listen_armed(home, seat, metrics, stream, rows, session, ignore_ids):
     directory = home / "listeners"
     directory.mkdir(exist_ok=True)
     marker = directory / f'{seat["address"]}.json'
@@ -190,6 +193,8 @@ def listen_armed(home, seat, metrics, stream, rows, session):
                 pid_marker.unlink()
     def terminate(signum, frame):
         raise SystemExit(0)
+    def fresh_unread(items):
+        return [r for r in unread(seat, items) if r["id"] not in ignore_ids]
     def wake(items):
         if items:
             print("Unread rows " + ", ".join(r["id"] for r in items) + f"; run: {TEAM} inbox --mark", file=sys.stderr)
@@ -209,14 +214,14 @@ def listen_armed(home, seat, metrics, stream, rows, session):
                 return 0
             if read_json(marker, {}).get("token") != token or listener_outgoing(home, seat, session, metrics):
                 return 0
-            rows = unread(seat, rows + ledger(home, metrics, stream))
+            rows = fresh_unread(rows + ledger(home, metrics, stream))
             if rows:
                 return wake(rows)
             time.sleep(1)
         retire()
         if listener_outgoing(home, seat, session, metrics):
             return 0
-        return wake(unread(seat, rows + ledger(home, metrics, stream)))
+        return wake(fresh_unread(rows + ledger(home, metrics, stream)))
     finally:
         try:
             retire()
@@ -251,7 +256,9 @@ def main():
         if event == "stop":
             reason = stop(home, seat, payload, metrics, outgoing=outgoing)
             if reason:
-                outcome, output = "refuse", adapter.stop(reason)
+                block = not payload.get("stop_hook_active", False)
+                outcome = "refuse" if block else "report"
+                output = adapter.stop(reason, block=block)
         elif event == "start":
             output = adapter.start(start(home, seat, metrics))
         elif event == "fence":

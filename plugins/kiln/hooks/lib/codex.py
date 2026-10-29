@@ -1,5 +1,7 @@
 """Codex 0.165.0 hook wire format; Bash/apply_patch use command."""
-def stop(reason):
+def stop(reason, block=True):
+    if not block:
+        return None  # Reason-only Stop advisories are not in the documented contract.
     return {"decision": "block", "reason": reason}
 
 

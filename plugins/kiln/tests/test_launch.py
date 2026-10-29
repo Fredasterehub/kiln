@@ -1,11 +1,16 @@
 import argparse
+import contextlib
 import importlib.machinery
 import importlib.util
 import json
+import io
+import os
+import sys
 from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -143,7 +148,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertNotIn('sandbox_workspace_write.network_access=true', flags)
         self.assertEqual(config.read_bytes(), original_bytes)
         self.assertFalse((self.root / '.codex').exists())
-        self.assertFalse(Path(self.env['CODEX_HOME']).exists())
+        self.assertFalse((Path(self.env['CODEX_HOME']) / 'hooks.json').exists())
 
     def test_codex_manager_and_explicit_effort(self):
         self.launch('--family', 'codex', '--model', 'gpt-6-astra', '--effort', 'high')
@@ -570,8 +575,10 @@ class LaunchTests(Sandbox, unittest.TestCase):
                     config.unlink(missing_ok=True)
                 else:
                     config.write_text(source)
-                result = self.launch('--role', 'helper')
-                warnings = [line for line in result.stderr.splitlines() if 'need /hooks review' in line]
+                errors = io.StringIO()
+                with patch.dict('os.environ', self.env), contextlib.redirect_stderr(errors):
+                    load_launcher().warn_missing_hooks()
+                warnings = [line for line in errors.getvalue().splitlines() if 'need /hooks review' in line]
                 if source == cases[-2]:
                     self.assertEqual(warnings, [])
                 else:
@@ -579,7 +586,6 @@ class LaunchTests(Sandbox, unittest.TestCase):
                     expected = keys[-1:] if source == cases[-1] else keys
                     for key in expected:
                         self.assertIn(key, warnings[0])
-                self.assertFalse(any('bypass-hook-trust' in flag for flag in self.flags()))
                 if source is None:
                     self.assertFalse(config.exists())
                 else:
@@ -598,6 +604,241 @@ class LaunchTests(Sandbox, unittest.TestCase):
         config.write_text(''.join('[hooks.state.' + json.dumps(key) + ']\ntrusted_hash = "sha256:reviewed"\n' for key in keys))
         self.assertNotIn('need /hooks review', self.launch('--role', 'helper').stderr)
         self.assertTrue(path.is_symlink())
+
+    def test_split_direction_defaults_down_and_accepts_right(self):
+        self.launch()
+        split = self.calls()[2]
+        self.assertEqual(split[split.index('--direction') + 1], 'down')
+        self.launch('--direction', 'right')
+        split = self.calls()[-3]
+        self.assertEqual(split[split.index('--direction') + 1], 'right')
+        self.launch('--direction', 'left', ok=False)
+
+    def test_codex_pretrust_appends_preserves_content_and_backs_up_once(self):
+        config = Path(self.env['CODEX_HOME']) / 'config.toml'
+        config.parent.mkdir()
+        original = b'# keep comments\r\nmodel = "gpt-6.1-sol"\r\n[notice]\r\nhide = true # no final newline'
+        config.write_bytes(original)
+        config.chmod(0o600)
+        self.launch('--role', 'helper')
+        backup = config.with_name('config.toml.bak-kiln')
+        self.assertEqual(backup.read_bytes(), original)
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+        self.assertTrue(config.read_bytes().startswith(original))
+        self.assertEqual(tomllib.loads(config.read_text())['projects'][str(self.root)]['trust_level'], 'trusted')
+        trusted = config.read_bytes()
+        self.launch('--role', 'helper')
+        self.assertEqual(config.read_bytes(), trusted)
+        second = self.base / 'quoted " root 😀'
+        self.launch('--role', 'helper', '--root', str(second))
+        self.assertTrue(config.read_bytes().startswith(trusted))
+        self.assertEqual(tomllib.loads(config.read_text())['projects'][str(second)]['trust_level'], 'trusted')
+        self.assertEqual(backup.read_bytes(), original)
+
+    def test_codex_already_trusted_is_untouched_and_default_home_is_used(self):
+        del self.env['CODEX_HOME']
+        config = Path(self.env['HOME']) / '.codex/config.toml'
+        config.parent.mkdir(parents=True)
+        original = '[projects.' + json.dumps(str(self.root)) + ']\ntrust_level="trusted" # keep\n'
+        config.write_text(original)
+        self.launch('--role', 'helper')
+        self.assertEqual(config.read_text(), original)
+        self.assertFalse(config.with_name('config.toml.bak-kiln').exists())
+
+    def test_unappendable_codex_config_is_preserved_without_start(self):
+        config = Path(self.env['CODEX_HOME']) / 'config.toml'
+        config.parent.mkdir()
+        sources = ['broken = [', 'projects = []',
+                   '[projects.' + json.dumps(str(self.root)) + ']\ntrust_level="untrusted"\n']
+        for source in sources:
+            config.write_text(source)
+            before = len(self.calls())
+            result = self.launch('--role', 'helper', ok=False)
+            self.assertNotIn('Traceback', result.stderr)
+            self.assertEqual(config.read_text(), source)
+            self.assertFalse(config.with_name('config.toml.bak-kiln').exists())
+            self.assertFalse(any(call[:2] in (['pane', 'split'], ['agent', 'start']) for call in self.calls()[before:]))
+
+    def test_claude_pretrust_minimal_merge_and_backup_once(self):
+        path = Path(self.env['HOME']) / '.claude.json'
+        path.parent.mkdir()
+        original = {'account': 'keep', 'projects': {'/existing': {'hasTrustDialogAccepted': True},
+                    str(self.root): {'hasTrustDialogAccepted': False, 'allowedTools': ['keep']}}}
+        path.write_text(json.dumps(original))
+        path.chmod(0o600)
+        preimage = path.read_bytes()
+        self.launch()
+        expected = json.loads(preimage)
+        expected['projects'][str(self.root)]['hasTrustDialogAccepted'] = True
+        self.assertEqual(json.loads(path.read_text()), expected)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        backup = path.with_name('.claude.json.bak-kiln')
+        self.assertEqual(backup.read_bytes(), preimage)
+        trusted = path.read_bytes()
+        self.launch()
+        self.assertEqual(path.read_bytes(), trusted)
+        self.launch('--root', str(self.base / 'second'))
+        self.assertEqual(backup.read_bytes(), preimage)
+
+    def test_claude_new_state_and_corrupt_state_preservation(self):
+        path = Path(self.env['HOME']) / '.claude.json'
+        self.launch()
+        self.assertTrue(json.loads(path.read_text())['projects'][str(self.root)]['hasTrustDialogAccepted'])
+        self.assertFalse(path.with_name('.claude.json.bak-kiln').exists())
+        for source in ('invalid', '{"projects":[]}'):
+            path.write_text(source)
+            self.launch(ok=False)
+            self.assertEqual(path.read_text(), source)
+            self.assertFalse(path.with_name('.claude.json.bak-kiln').exists())
+
+    def test_dry_run_describes_pretrust_and_backup_without_changes(self):
+        codex = Path(self.env['CODEX_HOME']) / 'config.toml'
+        claude = Path(self.env['HOME']) / '.claude.json'
+        for path, original in ((codex, 'model="gpt-6.1-sol"\n'), (claude, '{"keep":true,"private":"private-canary"}')):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(original)
+        for role, path in (('helper', codex), ('manager', claude)):
+            original = path.read_bytes()
+            result = self.launch('--role', role, '--dry-run')
+            self.assertIn(str(path), result.stdout)
+            self.assertIn('# backup', result.stdout)
+            self.assertIn('trust_level' if role == 'helper' else 'hasTrustDialogAccepted', result.stdout)
+            self.assertNotIn('private-canary', result.stdout)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertFalse(path.with_name(path.name + '.bak-kiln').exists())
+        self.assertEqual(self.calls(), [])
+
+    def test_pretrust_is_completed_before_agent_start(self):
+        module = load_launcher()
+        original = module.herdr
+        def checked(args, dry_run):
+            if args[:2] in (['pane', 'split'], ['agent', 'start']):
+                data = json.loads((Path(self.env['HOME']) / '.claude.json').read_text())
+                self.assertTrue(data['projects'][str(self.root)]['hasTrustDialogAccepted'])
+            return original(args, dry_run)
+        args = ['launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
+                '--root', str(self.root), '--parent', 'super']
+        with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'herdr', side_effect=checked):
+            module.main()
+
+    def test_pretrust_concurrent_processes_preserve_both_roots(self):
+        script = ("import runpy, sys; m = runpy.run_path(sys.argv[1]); "
+                  "sys.stdin.readline(); m['pretrust'](sys.argv[2], sys.argv[3], False)")
+        for family in ('claude', 'codex'):
+            processes = [subprocess.Popen([sys.executable, '-c', script, str(PLUGIN / 'bin/launch'), root, family],
+                         env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True) for root in ('/first', '/second')]
+            try:
+                for process in processes:
+                    process.stdin.write('go\n')
+                    process.stdin.flush()
+                for process in processes:
+                    out, err = process.communicate(timeout=10)
+                    self.assertEqual(process.returncode, 0, out + err)
+            finally:
+                for process in processes:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate()
+            path = (Path(self.env['CODEX_HOME']) / 'config.toml' if family == 'codex'
+                    else Path(self.env['HOME']) / '.claude.json')
+            module = load_launcher()
+            for root in ('/first', '/second'):
+                self.assertTrue(module.trust_flag(path.read_bytes(), root, family))
+            self.assertTrue(path.with_name(path.name + '.kiln.lock').exists())
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_rechecks_and_reapplies_trust_just_before_start(self):
+        for family in ('claude', 'codex'):
+            module = load_launcher()
+            original = module.herdr
+            path = (Path(self.env['CODEX_HOME']) / 'config.toml' if family == 'codex'
+                    else Path(self.env['HOME']) / '.claude.json')
+            calls = []
+            def checked(args, dry_run):
+                calls.append(args[:2])
+                if args[:2] == ['pane', 'rename']:
+                    path.write_text('' if family == 'codex' else '{}')
+                if args[:2] == ['agent', 'start']:
+                    self.assertTrue(module.trust_flag(path.read_bytes(), str(self.root), family))
+                return original(args, dry_run)
+            args = ['launch', '--tab', 'build', '--address', 'build', '--role',
+                    'helper' if family == 'codex' else 'manager', '--root', str(self.root), '--parent', 'super']
+            with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'herdr', side_effect=checked):
+                module.main()
+            self.assertEqual(calls[-1], ['agent', 'start'])
+
+    def test_post_write_verification_refuses_lost_trust_and_leaves_no_pane(self):
+        for family in ('claude', 'codex'):
+            module = load_launcher()
+            def lost(path, content, mode):
+                path.write_bytes(b'' if family == 'codex' else b'{}')
+            args = ['launch', '--tab', 'build', '--address', 'build', '--role',
+                    'helper' if family == 'codex' else 'manager', '--root', str(self.root), '--parent', 'super']
+            with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'atomic_bytes', side_effect=lost), \
+                    patch.object(module, 'herdr') as herdr, contextlib.redirect_stderr(io.StringIO()) as errors:
+                with self.assertRaises(SystemExit):
+                    module.main()
+                herdr.assert_not_called()
+                self.assertIn('refusing launch', errors.getvalue())
+
+    def test_failed_last_minute_reapply_refuses_start_after_one_attempt(self):
+        for family in ('claude', 'codex'):
+            module = load_launcher()
+            original_herdr, original_write = module.herdr, module.atomic_bytes
+            path = (Path(self.env['CODEX_HOME']) / 'config.toml' if family == 'codex'
+                    else Path(self.env['HOME']) / '.claude.json')
+            writes = []
+            def checked(args, dry_run):
+                if args[:2] == ['pane', 'rename']:
+                    path.write_text('' if family == 'codex' else '{}')
+                self.assertNotEqual(args[:2], ['agent', 'start'])
+                return original_herdr(args, dry_run)
+            def lost_again(target, content, mode):
+                original_write(target, content, mode)
+                writes.append(target)
+                if len(writes) == 2:
+                    target.write_bytes(b'' if family == 'codex' else b'{}')
+            args = ['launch', '--tab', 'build', '--address', 'build', '--role',
+                    'helper' if family == 'codex' else 'manager', '--root', str(self.root), '--parent', 'super']
+            with patch.dict('os.environ', self.env), patch('sys.argv', args), \
+                    patch.object(module, 'atomic_bytes', side_effect=lost_again), \
+                    patch.object(module, 'herdr', side_effect=checked), contextlib.redirect_stderr(io.StringIO()) as errors:
+                with self.assertRaises(SystemExit):
+                    module.main()
+                self.assertIn('after re-apply; refusing launch', errors.getvalue())
+            self.assertEqual(len(writes), 2)
+
+    def test_atomic_trust_temp_is_private_and_fsynced_before_replace(self):
+        module = load_launcher()
+        path = self.base / 'private.json'
+        real_replace = os.replace
+        def checked(source, target):
+            self.assertEqual(Path(source).parent, path.parent)
+            self.assertEqual(Path(source).stat().st_mode & 0o777, 0o600)
+            fsync.assert_called_once()
+            real_replace(source, target)
+        with patch.object(module.os, 'fsync', wraps=os.fsync) as fsync, patch.object(module.os, 'replace', side_effect=checked):
+            module.atomic_bytes(path, b'private', 0o600)
+        self.assertEqual(path.read_bytes(), b'private')
+        self.assertEqual(list(self.base.glob('tmp*')), [])
+
+    def test_backup_uses_parsed_snapshot_and_publishes_only_complete_bytes(self):
+        module = load_launcher()
+        path = self.base / 'config'
+        path.write_bytes(b'changed after read')
+        backup = path.with_name(path.name + '.bak-kiln')
+        original_link = os.link
+        def checked(source, target):
+            self.assertFalse(backup.exists())
+            self.assertEqual(Path(source).read_bytes(), b'parsed snapshot')
+            self.assertEqual(Path(source).stat().st_mode & 0o777, 0o640)
+            original_link(source, target)
+        with patch.object(module.os, 'link', side_effect=checked):
+            module.backup_once(path, b'parsed snapshot', 0o640, False)
+        module.backup_once(path, b'later snapshot', 0o640, False)
+        self.assertEqual(backup.read_bytes(), b'parsed snapshot')
+        self.assertEqual(list(self.base.glob('tmp*')), [])
 
 
 if __name__ == '__main__':

@@ -1,6 +1,9 @@
 """Claude Code 2.1.312 hook wire format; no CLI calls."""
-def stop(reason):
-    return {"decision": "block", "reason": reason}
+def stop(reason, block=True):
+    output = {"reason": reason}
+    if block:
+        output["decision"] = "block"
+    return output
 
 
 def start(context):

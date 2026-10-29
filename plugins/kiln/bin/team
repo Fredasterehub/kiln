@@ -96,12 +96,17 @@ def send(args, home, seat):
             cited = next((r for r in rows if r.get("id") == args.cites), None)
             if cited is None or cited.get("kind") not in ("request", "question"):
                 raise ValueError("done/answer must cite a request/question id")
-            if cited.get("to") != sender or args.to != cited.get("from"):
-                raise ValueError("reply must come from the receiver and go to the original asker")
+            destination = cited.get("from")
+            if args.kind == "answer" and cited.get("kind") == "question":
+                destination = cited.get("via", destination)
+            if cited.get("to") != sender or args.to != destination:
+                raise ValueError("reply must come from the receiver and go to the asker or its worker launcher")
         now = dt.datetime.now(dt.timezone.utc)
         row = dict(id=f"{now:%Y%m%dT%H%M%S%fZ}-{secrets.token_hex(2)}",
                    **{"from": sender}, to=args.to, kind=args.kind, task=args.task,
                    headline=args.headline, path=args.path, time=now.isoformat(), cites=args.cites)
+        if seat["role"] == "worker":
+            row["via"] = address(seat["parent"])
         with (home / "ledger.jsonl").open("a") as stream:
             # Separate a torn final line from the next complete row.
             path = home / "ledger.jsonl"
@@ -115,6 +120,23 @@ def send(args, home, seat):
             os.fsync(stream.fileno())
     emit([row])
     sys.stdout.flush()
+    if seat["role"] != "worker":
+        nudge(home, receiver, row, args.recheck_seconds)
+
+
+def relay(args, home, seat):
+    if seat["role"] == "worker":
+        raise ValueError("workers may not relay questions")
+    with locked(home):
+        row = next((r for r in records(home) if r.get("id") == args.question_id), None)
+        if row is None or row.get("kind") != "question" or row.get("via") != seat["address"]:
+            raise ValueError("relay requires a worker question routed via this launcher")
+        if row.get("to") == seat["address"]:
+            print("team: question is addressed to this launcher; no relay needed")
+            return
+        receiver = read_json(home / "seats" / f"{address(row['to'])}.json")
+        if receiver is None or receiver.get("role") == "worker":
+            raise ValueError("question receiver must be a persistent seat")
     nudge(home, receiver, row, args.recheck_seconds)
 
 
@@ -130,6 +152,9 @@ def main():
     send_parser.add_argument("--cites")
     send_parser.add_argument("--recheck-seconds", type=float, default=5,
                              help="one busy receiver recheck delay (default: 5)")
+    relay_parser = commands.add_parser("relay", help="wake the receiver of a worker question routed via this launcher")
+    relay_parser.add_argument("question_id")
+    relay_parser.add_argument("--recheck-seconds", type=float, default=5)
     commands.add_parser("inbox", help="print unread rows").add_argument("--mark", action="store_true")
     commands.add_parser("overdue", help="print uncompleted requests").add_argument("--minutes", type=float, default=0)
     commands.add_parser("ledger", help="print ledger rows").add_argument("--tail", type=int)
@@ -142,14 +167,17 @@ def main():
     try:
         home = Path(environment("KILN_HOME")).resolve()
         seat = None
-        if args.command in ("send", "inbox", "workers", "pending"):
+        if args.command in ("send", "relay", "inbox", "workers", "pending"):
             seat = read_json(Path(environment("KILN_SEAT")))
             if seat is None:
                 raise ValueError("KILN_SEAT file not found")
-        if args.command == "send":
+        if args.command in ("send", "relay"):
             if args.recheck_seconds < 0:
                 raise ValueError("recheck seconds must be nonnegative")
-            send(args, home, seat)
+            if args.command == "send":
+                send(args, home, seat)
+            else:
+                relay(args, home, seat)
             return
         with locked(home):
             if args.command == "close":

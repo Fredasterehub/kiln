@@ -93,6 +93,14 @@ class HookTests(unittest.TestCase):
         self.assertEqual(specific['permissionDecision'], 'deny')
         return specific['permissionDecisionReason']
 
+    def advisory(self, result):
+        self.assertEqual((result.returncode, result.stderr), (0, ''))
+        data = json.loads(result.stdout)
+        self.assertNotIn('decision', data)
+        self.assertNotIn('continue', data)
+        self.assertNotIn('hookSpecificOutput', data)
+        return data['reason']
+
     def fence(self, tool, data, **kw):
         return self.run_hook('fence', payload=dict(tool_name=tool, tool_input=data), **kw)
 
@@ -128,13 +136,22 @@ class HookTests(unittest.TestCase):
 
     def test_stop_hook_active_never_refuses_twice(self):
         self.rows(self.row())
+        marker = self.home / 'inbox/build.json'
+        before = marker.read_bytes()
         for family in STOP_INPUTS:
-            self.allowed(self.run_hook(family=family, payload={'stop_hook_active': True}))
+            result = self.run_hook(family=family, payload={'stop_hook_active': True})
+            if family == 'codex':
+                self.allowed(result)
+            else:
+                reason = self.advisory(result)
+                self.assertIn('Unread rows r1', reason)
+                self.assertIn('inbox --mark', reason)
+            self.assertEqual(marker.read_bytes(), before)
 
     def test_workers_always_stop_and_never_start_or_listen(self):
         self.rows(self.row())
         for family in STOP_INPUTS:
-            for role in ('worker'):
+            for role in ('worker',):
                 self.save(role=role)
                 self.child('w')
                 for event in ('stop', 'start', 'listen'):
@@ -371,10 +388,10 @@ class HookTests(unittest.TestCase):
         self.assertEqual(json.loads((self.home / 'inbox/build.json').read_text()), {'read': []})
         self.assertFalse((self.home / 'hooks.log').exists())
 
-    def listener_process(self):
+    def listener_process(self, payload=None):
         process = subprocess.Popen(['sh', str(HOOKS / 'listen.sh')], env=self.env,
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        process.stdin.write(json.dumps(STOP_INPUTS['claude']))
+        process.stdin.write(json.dumps(STOP_INPUTS['claude'] | (payload or {})))
         process.stdin.close()
         process.stdin = None
         def cleanup():
@@ -639,7 +656,14 @@ class HookTests(unittest.TestCase):
             self.assertNotIn('Unread', reason)
             self.assertNotIn('worker', reason.lower())
             self.assertNotIn('inbox --mark', reason)
-            self.allowed(self.run_hook(env=env, payload={'session_id': 'old-session', 'stop_hook_active': True}))
+            continued = self.run_hook(env=env, payload={'session_id': 'old-session', 'stop_hook_active': True})
+            if family == 'codex':
+                self.allowed(continued)
+            else:
+                reason = self.advisory(continued)
+                self.assertIn('Rotation of session old-session', reason)
+                self.assertNotIn('Unread', reason)
+                self.assertNotIn('Worker', reason)
             replacement = self.blocked(self.run_hook(payload={'session_id': 'new-session'}))
             self.assertIn('replacement-row', replacement)
             self.assertNotIn('Rotation', replacement)
@@ -719,6 +743,110 @@ class HookTests(unittest.TestCase):
         result = self.run_hook('listen')
         self.assertEqual(result.returncode, 2)
         self.assertIn('Unread rows r1', result.stderr)
+
+    def test_herdr_help_is_discovery_for_both_families(self):
+        for family in STOP_INPUTS:
+            for command in ('herdr --help', 'herdr -h agent prompt',
+                            'herdr agent prompt --help', 'herdr agent prompt -h',
+                            'herdr pane send-text --help', 'herdr pane send-keys -h',
+                            'herdr agent wait -h', 'herdr pane wait-output --help'):
+                with self.subTest(family=family, command=command):
+                    self.allowed(self.fence('Bash', {'command': command}, family=family))
+
+    def test_typing_fence_requires_a_real_target(self):
+        self.child('impl', pane='impl-pane')
+        for family in STOP_INPUTS:
+            for command in ('herdr agent prompt', 'herdr pane send-text', 'herdr pane send-keys'):
+                self.allowed(self.fence('Bash', {'command': command}, family=family))
+            self.allowed(self.fence('Bash', {'command': 'herdr agent prompt impl hello'}, family=family))
+            for command in ('herdr agent prompt director hi', 'herdr pane send-text unowned hi',
+                            'herdr pane send-keys unowned Enter', 'herdr agent prompt director --helpful',
+                            'herdr agent prompt --unknown-option', 'herdr agent prompt ""',
+                            'herdr agent prompt -- impl hello'):
+                self.blocked(self.fence('Bash', {'command': command}, family=family), 'fence')
+
+    def test_help_does_not_exempt_another_herdr_command(self):
+        for family in STOP_INPUTS:
+            for command in ('herdr agent prompt --help; herdr agent prompt director hi',
+                            'echo --help; herdr pane send-keys unowned Enter',
+                            'herdr agent wait impl; herdr agent prompt --help'):
+                self.blocked(self.fence('Bash', {'command': command}, family=family), 'fence')
+
+    def test_continued_stop_reports_worker_policy_but_allows(self):
+        self.child('impl')
+        self.rows(self.row())
+        for family in STOP_INPUTS:
+            result = self.run_hook(family=family, payload={'stop_hook_active': True})
+            if family == 'codex':
+                self.allowed(result)
+            else:
+                reason = self.advisory(result)
+                self.assertIn('Unread rows r1', reason)
+                self.assertIn('Worker impl', reason)
+            log = json.loads((self.home / 'hooks.log').read_text().splitlines()[-1])
+            self.assertEqual(log['outcome'], 'report')
+            self.assertFalse(log['unread_refusal'])
+
+    def test_continued_stop_with_no_obligations_is_silent(self):
+        for family in STOP_INPUTS:
+            self.allowed(self.run_hook(family=family, payload={'stop_hook_active': True}))
+
+    def test_continued_stop_listener_wakes_only_for_new_unread_ids(self):
+        self.rows(self.row('initial-id'))
+        self.advisory(self.run_hook(payload={'stop_hook_active': True}))
+        process = self.listener_process({'stop_hook_active': True})
+        with (self.home / 'ledger.jsonl').open('a') as stream:
+            stream.write(json.dumps(self.row('new-id')) + '\n')
+        out, err = process.communicate(timeout=3)
+        self.assertEqual((process.returncode, out), (2, ''))
+        self.assertIn('Unread rows new-id', err)
+        self.assertNotIn('initial-id', err)
+        self.assertEqual(json.loads((self.home / 'inbox/build.json').read_text()), {'read': []})
+
+    def test_continued_listener_expiry_does_not_rewake_initial_unread(self):
+        ns = runpy.run_path(str(HOOKS / 'lib/core.py'))
+        self.rows(self.row('initial-id'))
+        with patch.object(time, 'monotonic', side_effect=[0, 281]):
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                result = ns['listen'](self.home, self.seat, {'hook_event_name': 'Stop', 'stop_hook_active': True}, {})
+        self.assertEqual(result, 0)
+        self.assertEqual(err.getvalue(), '')
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
+
+    def test_continued_listener_expiry_wakes_new_ids_only(self):
+        ns = runpy.run_path(str(HOOKS / 'lib/core.py'))
+        self.rows(self.row('initial-id'))
+        ticks = iter([0, 281])
+        def clock():
+            now = next(ticks)
+            if now == 281:
+                with (self.home / 'ledger.jsonl').open('a') as stream:
+                    stream.write(json.dumps(self.row('initial-id')) + '\n')
+                    stream.write(json.dumps(self.row('new-id')) + '\n')
+            return now
+        with patch.object(time, 'monotonic', side_effect=clock):
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                result = ns['listen'](self.home, self.seat, {'hook_event_name': 'Stop', 'stop_hook_active': True}, {})
+        self.assertEqual(result, 2)
+        self.assertIn('new-id', err.getvalue())
+        self.assertNotIn('initial-id', err.getvalue())
+
+    def test_herdr_probe_target_is_literal_and_later_help_is_not_exempt(self):
+        for family in STOP_INPUTS:
+            for command, target in (('herdr pane send-keys --timeout 5 X a', '--timeout'),
+                                    ('herdr agent prompt --timeout 5 X hi', '--timeout'),
+                                    ('herdr pane send-keys X a -h', 'X'),
+                                    ('herdr pane send-text X --help', 'X'),
+                                    ('herdr agent prompt X hi -h', 'X'),
+                                    ('herdr pane send-keys director -- C-c -h', 'director')):
+                with self.subTest(family=family, command=command):
+                    reason = self.blocked(self.fence('Bash', {'command': command}, family=family), 'fence')
+                    self.assertIn('target ' + target + ' is outside my workers', reason)
+            self.child('impl', pane='X')
+            self.allowed(self.fence('Bash', {'command': 'herdr pane send-keys X a -h'}, family=family))
+            self.allowed(self.fence('Bash', {'command': 'herdr pane send-text X --help'}, family=family))
+            (self.home / 'seats/impl.json').unlink()
+
 
     def test_launcher_registers_claude_listener_only(self):
         from test_launch import load_launcher
