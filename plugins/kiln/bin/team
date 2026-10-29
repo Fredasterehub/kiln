@@ -13,15 +13,14 @@ import sys
 import time
 from contextlib import contextmanager
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.ledger import live_pid, markers, pending, read_json, workers
+
 
 def address(value):
     if not re.fullmatch(r"[a-z][a-z0-9-]*", value):
         raise ValueError(f"invalid address: {value}")
     return value
-
-
-def read_json(path, default=None):
-    return json.loads(path.read_text()) if path.exists() else default
 
 
 @contextmanager
@@ -48,10 +47,6 @@ def records(home):
     return rows
 
 
-def markers(seat):
-    return set(read_json(Path(seat["inbox"]), {"read": []})["read"]) if seat["inbox"] else set()
-
-
 def environment(name):
     value = os.environ.get(name)
     if not value:
@@ -74,17 +69,21 @@ def herdr(*args):
 
 def nudge(home, receiver, row, delay):
     """At most one prompt; the delayed status check closes the busy/idle gap."""
-    if receiver["family"] != "codex":
+    if receiver["family"] not in ("claude", "codex"):
         return
     try:
         addr = receiver["address"]
+        listener = home / "listeners" / f"{addr}.pid"
+        if receiver["family"] == "claude" and live_pid(listener):
+            return
         state = herdr("agent", "get", addr)["agent"]["agent_status"]
         if state == "working":
             time.sleep(delay)
             state = herdr("agent", "get", addr)["agent"]["agent_status"]
         with locked(home):
             unread = row["id"] not in markers(receiver)
-        if unread and state in ("idle", "done"):
+        if (unread and state in ("idle", "done")
+                and not (receiver["family"] == "claude" and live_pid(listener))):
             herdr("agent", "prompt", addr, "inbox")
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         print(f"team: row {row['id']} saved; nudge failed: {error}", file=sys.stderr)
@@ -134,7 +133,7 @@ def send(args, home, seat):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    send_parser = commands.add_parser("send", help="append a row and wake a Codex receiver")
+    send_parser = commands.add_parser("send", help="append a row and wake a receiver without an active listener")
     send_parser.add_argument("--from", dest="sender", required=True)
     for key in ("to", "task", "headline"):
         send_parser.add_argument(f"--{key}", required=True)
@@ -163,16 +162,14 @@ def main():
             return
         with locked(home):
             if args.command == "workers":
-                emit([child for path in sorted((home / "seats").glob("*.json"))
-                      if (child := read_json(path))["parent"] == seat["address"]])
+                emit(workers(home, seat))
                 return
             rows = records(home)
             if args.command in ("inbox", "pending"):
                 addr = address(seat["address"])
                 read = markers(seat)
                 if args.command == "pending":
-                    completed = {r.get("cites") for r in rows if r["kind"] in ("done", "answer")}
-                    emit([r for r in rows if r["to"] == addr and r["id"] in read and r["id"] not in completed])
+                    emit(pending(rows, seat))
                     return
                 rows = [r for r in rows if r["to"] == addr and r["id"] not in read]
                 emit(rows)

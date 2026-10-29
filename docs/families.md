@@ -28,7 +28,9 @@ verified 2026-10-29: lines 425 and 767 name `fallbackModel` and
 
 Claude receives Stop → `stop.sh`, PreToolUse → `fence.sh`, and, for persistent
 roles, SessionStart → `start.sh`, via inline settings only. The existing
-Claude adapter adds the persistent seat's asynchronous inbox listener.
+Claude adapter registers `listen.sh` at SessionStart and Stop with
+`asyncRewake: true` and a 300-second timeout. Its 280-second lifetime is
+covered by the fallback described below.
 No Claude user or project settings file is written.
 
 Install Codex's three events (Stop, SessionStart, PreToolUse) once with
@@ -58,8 +60,15 @@ Installed Codex 0.165.0 help verifies `--dangerously-bypass-hook-trust`;
 SPEC §3's isolated probe established unattended user hooks in fresh worktrees.
 The flag applies to all enabled sources, including non-Kiln hooks.
 
-The active lane supplies model/effort defaults; `bosses="gpt"` overrides
-`director` and `super`. Explicit model/effort override independently.
+The active lane supplies model/effort defaults; `balanced` and `claude-lean`
+are available. `claude-lean` keeps director/super on Opus medium; managers,
+helper, chunkmaster, implementer and investigator use Sol medium. Mechanical
+and both research slots use Sol low. Review of GPT uses Opus medium and review
+of Claude uses Astra medium. Conceptual is Astra medium (Argon is the advisor);
+operational is Sol medium + Opus medium. UI plan/build/review are respectively
+Astra/Sol/Opus medium; advisor is Argon high. Adding this lane does not change
+the active selection. `bosses="gpt"` applies on top of either lane, overriding
+only director (Astra medium) and super (Sol medium). Explicit model/effort override independently.
 Family is derived from the final model; optional `--family` checks a caller's
 explicit choice. Generic workers default to `implementer`, or `review_of_gpt`
 when Claude is selected. No advisor seat exists: Argon runs as a plain
@@ -73,7 +82,19 @@ splits its first listed pane, and stores the resolved tab label. Labels use
 Herdr startup uses `agent start <addr> --kind <family> --pane <new-pane>
 --timeout 30000 -- <native-arguments>`. Failed split/start removes the seat
 record; an overwritten address with a different pane produces a warning.
-Workers and pending rows are derived via `team workers` and `team pending`.
+Workers and pending rows are derived via `team workers` and `team pending`;
+`seat.json` stores neither. Hooks and team share `plugins/kiln/lib/ledger.py`:
+children are seat files whose parent matches this address, regardless of role;
+pending rows are addressed here, received in `seat.inbox`, and not cited by any
+done/answer. The hook reads this state directly, without invoking team.
+
+A Claude listener publishes `KILN_HOME/listeners/<address>.pid` while alive,
+and removes its own marker on exit. `team send` leaves a live listener to wake
+Claude; absent/dead markers use the same fallback as Codex: an idle/done status
+gets one `herdr agent prompt <address> inbox`, with one delayed status re-check
+if working, and no retry. This closes the listener-expiry idle gap. A forced
+kill may leave a stale PID marker, which is treated as dead. See [hooks.md](hooks.md)
+for marker ownership, wait and receipt interfaces.
 
 `--dry-run` writes no files and makes no Herdr calls. It prints commands and
 commented JSON writes, using placeholders for unavailable pane/workspace IDs

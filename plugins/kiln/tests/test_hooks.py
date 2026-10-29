@@ -6,11 +6,13 @@ replaced). SessionStart/PreToolUse extend them with the documented event fields.
 import inspect
 import json
 import os
+import runpy
 from pathlib import Path
 import subprocess
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 HOOKS = Path(__file__).resolve().parents[1] / 'hooks'
 STOP_INPUTS = {
@@ -37,7 +39,7 @@ class HookTests(unittest.TestCase):
         (self.home / 'seats').mkdir()
         self.seatpath = self.home / 'seats/build.json'
         self.seat = dict(address='build', role='manager', family='claude', pane='w4:p1',
-                         root=str(self.root), extra_roots=[str(self.extra)], workers=[], pending=[],
+                         root=str(self.root), extra_roots=[str(self.extra)],
                          inbox=str(self.home / 'inbox/build.json'), tab='build', parent='super',
                          workspace='w4', model='claude-opus-5-5', effort='medium')
         self.env = dict(os.environ, KILN_HOME=str(self.home), KILN_SEAT=str(self.seatpath), HERDR_PANE_ID='w4:p1')
@@ -46,6 +48,11 @@ class HookTests(unittest.TestCase):
     def save(self, **updates):
         self.seat.update(updates)
         self.seatpath.write_text(json.dumps(self.seat))
+
+    def child(self, address, parent='build', pane=None, role='worker'):
+        child = self.seat | dict(address=address, parent=parent, pane=pane or address + '-pane',
+                                 role=role, inbox='')
+        (self.home / 'seats' / f'{address}.json').write_text(json.dumps(child))
 
     def row(self, id='r1', kind='request', to='build', **updates):
         return dict(id=id, kind=kind, to=to, **{'from': 'super'}, task='task',
@@ -123,7 +130,8 @@ class HookTests(unittest.TestCase):
         self.rows(self.row())
         for family in STOP_INPUTS:
             for role in ('worker', 'advisor'):
-                self.save(role=role, workers=['w'])
+                self.save(role=role)
+                self.child('w')
                 for event in ('stop', 'start', 'listen'):
                     self.allowed(self.run_hook(event, family=family))
         self.assertFalse((self.home / 'listeners').exists())
@@ -145,7 +153,7 @@ class HookTests(unittest.TestCase):
             self.allowed(self.run_hook(family=family))
 
     def test_worker_without_wait_and_with_live_wait(self):
-        self.save(workers=['build-impl'])
+        self.child('build-impl')
         for family in STOP_INPUTS:
             reason = self.blocked(self.run_hook(family=family))
             self.assertIn('build-impl', reason)
@@ -157,14 +165,14 @@ class HookTests(unittest.TestCase):
             self.allowed(self.run_hook(family=family))
 
     def test_stale_invalid_nonpositive_wait_pid_is_unarmed(self):
-        self.save(workers=['w'])
+        self.child('w')
         (self.home / 'waits').mkdir()
         for value in ('2147483647', 'garbage', '0', '-1'):
             (self.home / 'waits/w.pid').write_text(value)
             self.assertIn('Worker w', self.blocked(self.run_hook()))
 
     def test_exited_wait_no_longer_armed(self):
-        self.save(workers=['w'])
+        self.child('w')
         (self.home / 'waits').mkdir()
         process = subprocess.Popen(['sh', '-c', 'exit 0'])
         self.addCleanup(lambda: process.wait())
@@ -228,7 +236,7 @@ class HookTests(unittest.TestCase):
         card, handoff = self.home / 'card.md', self.home / 'handoff.md'
         card.write_text('ROLE CARD: build root inbox parent')
         handoff.write_text('HANDOFF open item')
-        self.save(card=str(card), handoff=str(handoff), pending=['inherited'])
+        self.save(card=str(card), handoff=str(handoff))
         self.rows(self.row(), self.row('unread'), self.row('complete'),
                   self.row('d1', kind='answer', to='super', cites='complete'), read=['r1', 'complete'])
         for family in STOP_INPUTS:
@@ -239,7 +247,7 @@ class HookTests(unittest.TestCase):
             context = output['additionalContext']
             self.assertIn(card.read_text(), context)
             self.assertIn(handoff.read_text(), context)
-            self.assertIn('Pending requests: inherited, r1', context)
+            self.assertIn('Pending ids: r1', context)
             self.assertNotIn('unread', context)
             self.assertNotIn('complete', context)
             self.assertIn('this is enough; read rules, ledger and panes only where an item points you', context)
@@ -247,7 +255,7 @@ class HookTests(unittest.TestCase):
     def test_start_missing_optional_files(self):
         self.save(card=str(self.home / 'missing'), handoff=str(self.home / 'missing2'))
         context = json.loads(self.run_hook('start').stdout)['hookSpecificOutput']['additionalContext']
-        self.assertIn('Pending requests: none', context)
+        self.assertIn('Pending ids: none', context)
 
     def test_wait_timeout_required_in_both_families(self):
         for family in STOP_INPUTS:
@@ -273,9 +281,8 @@ class HookTests(unittest.TestCase):
                 self.blocked(result, 'fence')
 
     def test_typing_only_to_workers_and_never_director(self):
-        self.save(workers=['build-impl', 'director'])
-        (self.home / 'seats/build-impl.json').write_text(json.dumps(dict(pane='w4:p3')))
-        (self.home / 'seats/director.json').write_text(json.dumps(dict(pane='w4:p9')))
+        self.child('build-impl', pane='w4:p3')
+        self.child('director', pane='w4:p9')
         for family in STOP_INPUTS:
             for prefix, good, bad in (('herdr agent prompt', 'build-impl', 'director'),
                                        ('herdr pane send-text', 'w4:p3', 'w4:p9'),
@@ -347,6 +354,7 @@ class HookTests(unittest.TestCase):
         result = self.run_hook('listen')
         self.assertEqual((result.returncode, result.stdout), (2, ''))
         self.assertIn('r1', result.stderr)
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
         self.assertEqual(json.loads((self.home / 'inbox/build.json').read_text()), {'read': []})
         self.assertEqual(len((self.home / 'hooks.log').read_text().splitlines()), 1)
 
@@ -356,11 +364,18 @@ class HookTests(unittest.TestCase):
         process.stdin.write(json.dumps(STOP_INPUTS['claude']))
         process.stdin.close()
         process.stdin = None
-        self.addCleanup(lambda: process.poll() is None and process.kill())
+        def cleanup():
+            if process.poll() is None:
+                process.terminate()
+            process.communicate(timeout=3)
+        self.addCleanup(cleanup)
         deadline = time.monotonic() + 3
-        while not (self.home / 'listeners/build.json').exists() and time.monotonic() < deadline:
+        marker = self.home / 'listeners/build.pid'
+        while time.monotonic() < deadline:
+            if marker.exists() and marker.read_text().strip() == str(process.pid):
+                break
             time.sleep(0.01)
-        self.assertTrue((self.home / 'listeners/build.json').exists())
+        self.assertEqual((self.home / 'listeners/build.pid').read_text().strip(), str(process.pid))
         return process
 
     def test_listener_catches_row_arriving_after_arm(self):
@@ -375,6 +390,7 @@ class HookTests(unittest.TestCase):
         self.save(pane='replacement')
         out, err = process.communicate(timeout=3)
         self.assertEqual((process.returncode, out, err), (0, '', ''))
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
 
     def test_rearm_retires_older_listener(self):
         first = self.listener_process()
@@ -385,6 +401,7 @@ class HookTests(unittest.TestCase):
             time.sleep(0.01)
         out, err = first.communicate(timeout=3)
         self.assertEqual((first.returncode, out, err), (0, '', ''))
+        self.assertEqual((self.home / 'listeners/build.pid').read_text().strip(), str(second.pid))
         self.rows(self.row())
         out, err = second.communicate(timeout=3)
         self.assertEqual((second.returncode, out), (2, ''))
@@ -393,6 +410,54 @@ class HookTests(unittest.TestCase):
     def test_codex_listener_is_noop(self):
         self.allowed(self.run_hook('listen', family='codex'))
         self.assertFalse((self.home / 'listeners').exists())
+
+    def test_workers_derived_by_parent_for_stop_and_typing(self):
+        self.child('helper', role='helper', pane='helper-pane')
+        self.child('unrelated', parent='plan', pane='other-pane')
+        for family in STOP_INPUTS:
+            reason = self.blocked(self.run_hook(family=family))
+            self.assertIn('Worker helper', reason)
+            self.assertNotIn('unrelated', reason)
+            self.allowed(self.fence('Bash', {'command': 'herdr pane send-text helper-pane hi'}))
+            self.blocked(self.fence('Bash', {'command': 'herdr agent prompt unrelated hi'}), 'fence')
+        (self.home / 'seats/helper.json').unlink()
+        self.allowed(self.run_hook())
+        self.blocked(self.fence('Bash', {'command': 'herdr pane send-text helper-pane hi'}), 'fence')
+
+    def test_custom_receipt_pending_matches_team_for_all_row_kinds(self):
+        custom = self.home / 'custom.json'
+        self.save(inbox=str(custom))
+        self.rows(self.row(), self.row('question', kind='question'), self.row('update', kind='update'),
+                  self.row('unread'), self.row('complete'),
+                  self.row('answer', kind='answer', to='super', cites='complete'),
+                  self.row('elsewhere', to='plan'), read=['unread'])
+        custom.write_text(json.dumps({'read': ['r1', 'question', 'update', 'complete', 'elsewhere']}))
+        result = subprocess.run([str(HOOKS.parent / 'bin/team'), 'pending'], env=self.env,
+                                capture_output=True, text=True, check=True)
+        ids = [json.loads(line)['id'] for line in result.stdout.splitlines()]
+        self.assertEqual(ids, ['r1', 'question', 'update'])
+        for family in STOP_INPUTS:
+            context = json.loads(self.run_hook('start', family=family).stdout)['hookSpecificOutput']['additionalContext']
+            self.assertIn('Pending ids: ' + ', '.join(ids), context)
+            self.assertIn('Unread rows unread', self.blocked(self.run_hook()))
+
+    def test_listener_expiry_removes_pid(self):
+        listen = runpy.run_path(str(HOOKS / 'lib/core.py'))['listen']
+        with patch.object(time, 'monotonic', side_effect=[0, 281]):
+            self.assertEqual(listen(self.home, self.seat), 0)
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
+
+    def test_listener_error_removes_pid_and_fails_open(self):
+        (self.home / 'ledger.jsonl').write_text('{broken')
+        self.allowed(self.run_hook('listen'))
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
+
+    def test_listener_termination_removes_pid(self):
+        process = self.listener_process()
+        process.terminate()
+        out, err = process.communicate(timeout=3)
+        self.assertEqual((process.returncode, out, err), (0, '', ''))
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
 
     def test_launcher_registers_claude_listener_only(self):
         from test_launch import load_launcher

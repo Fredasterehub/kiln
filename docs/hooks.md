@@ -10,18 +10,26 @@ command is executed by a hook. Hooks never mark inbox rows read.
 
 ## State interfaces
 
-- Receipt uses `$KILN_HOME/inbox/<address>.json`, `{"read":["row-id"]}`, exactly
-  as `team inbox --mark` writes it. SessionStart includes received, uncompleted
-  request IDs plus `seat.pending` inherited at rotation, minus done/answer cites.
-- `seat.workers` is the owner's authoritative roster of live workers (per the
-  seat schema); the owner removes a worker when its lifecycle ends. An armed
-  wait is `$KILN_HOME/waits/<worker>.pid` containing the positive decimal PID
+- `plugins/kiln/lib/ledger.py` is imported by both `team` and the hooks. It
+  owns receipt, pending-row and worker lookup plus PID-marker liveness, without
+  loading the team command-line parser or shelling out on a hook's hot path.
+- Receipt uses `seat.inbox`, normally `$KILN_HOME/inbox/<address>.json`, with
+  `{"read":["row-id"]}` as `team inbox --mark` writes it. SessionStart lists
+  pending IDs exactly as `team pending`: rows addressed to this seat, marked
+  received, with no done/answer citation. This includes questions and updates;
+  there is no stored `pending` field. Rotation inherits the same receipt file.
+- Workers are derived from `$KILN_HOME/seats/*.json`: each child whose `parent`
+  equals this seat's address, regardless of role, exactly as `team workers`.
+  There is no stored `workers` field. These seat records are the live roster;
+  their owner removes a record when its lifecycle ends. Stop checks each child
+  and the typing fence permits its address/pane, excluding the director.
+  An armed wait is `$KILN_HOME/waits/<worker>.pid` containing the positive PID
   of the live **wait process**, not a shell that already returned. `kill(pid,0)`
   establishes liveness; Linux zombies are not live. The waiter/owner writes
   the marker on launch and may unlink it on exit; a dead PID is unarmed even
-  if its marker remains. PID reuse is a limitation of this deliberately simple
-  interface. The Stop reason supplies a command that records the wait PID;
-  Claude runs that command as a background group ending in `&`.
+  if its marker remains. PID reuse is a limitation of this simple interface.
+  The Stop reason supplies a command recording the wait PID; Claude runs that
+  command as a background group ending in `&`.
 - A finished request is an incoming `request` marked received, with no `done`
   row citing its ID, whose `path` names a result file or task directory. Check
   that file and its sibling `status.txt` (directory: its `status.txt` only).
@@ -34,6 +42,10 @@ command is executed by a hook. Hooks never mark inbox rows read.
   Write receipts atomically. Only the old owning pane is refused; replacement
   inbox work is independent. The refusal names the receipt and `cat` command
   to inspect it; publishing the ack belongs to rotate, never to the new seat.
+
+The selectable `claude-lean` routing lane keeps Claude bridge bosses and uses
+Sol for managers/workers, with the specified cross-family review/UI roles;
+see [families.md](families.md). The GPT boss override affects only director/super.
 
 ## Native adapters and listener
 
@@ -66,10 +78,17 @@ never consumes a row, and times out after 280 seconds (before Claude's 300 s
 handler timeout). This is detached file monitoring, not an agent polling loop.
 Every re-arm replaces a generation token under `listeners/<address>.lock`;
 older listeners retire, as do listeners whose seat pane changed. Rows already
-present at re-arm are checked immediately. Idle beyond 280 s needs a new
-SessionStart/Stop to arm again; extending this proven timeout needs live
-kernel acceptance. Codex has no idle asyncRewake equivalent: its documented
-background output waits for the next user turn; `team` owns the inbox nudge.
+present at re-arm are checked immediately. Each listener atomically publishes
+`$KILN_HOME/listeners/<address>.pid` under that lock. On wake, expiry, error,
+SIGTERM or SIGINT it removes only its own marker; an older listener cannot
+remove a replacement's PID. SIGKILL may leave a dead marker, which is harmless.
+`team send` skips a Claude nudge while this PID is live. When absent or dead,
+it uses the Codex fallback: check Herdr state, re-check once if working, and
+prompt `inbox` once if still unread and idle/done. A listener armed during
+that re-check suppresses the fallback. There is no prompt retry. This covers
+idle seats after listener expiry without extending the proven hook timeout.
+Codex has no idle asyncRewake equivalent: its documented background output
+waits for the next user turn, so `team` always handles its inbox nudge.
 
 Official contracts retrieved **2026-10-29** (installed CLI versions verified:
 Claude Code 2.1.312, Codex 0.165.0). Relevant exact quotes:

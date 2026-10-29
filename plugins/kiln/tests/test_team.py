@@ -81,6 +81,8 @@ class TeamTests(Sandbox, unittest.TestCase):
         super().setUp()
         self.seat('sender')
         self.seat('receiver')
+        (self.home / 'listeners').mkdir()
+        (self.home / 'listeners/receiver.pid').write_text(str(os.getpid()))
         self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
 
     def seat(self, addr, role='manager', family='claude', parent='', inbox=None):
@@ -105,7 +107,7 @@ class TeamTests(Sandbox, unittest.TestCase):
         finally:
             self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
 
-    def test_row_format_and_claude_no_nudge(self):
+    def test_row_format_and_live_claude_listener_no_nudge(self):
         row = self.rows(self.send())[0]
         self.assertEqual(set(row), {'id', 'from', 'to', 'kind', 'task', 'headline', 'path', 'time', 'cites'})
         self.assertRegex(row['id'], r'^\d{8}T\d{12}Z-[0-9a-f]{4}$')
@@ -113,6 +115,54 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.assertEqual(row['headline'], 'hello\n世界')
         self.assertIsNone(row['path'])
         self.assertEqual(self.calls(), [])
+
+    def test_claude_absent_or_dead_listener_nudges_once(self):
+        marker = self.home / 'listeners/receiver.pid'
+        for value, state in ((None, 'idle'), ('2147483647', 'done'), ('invalid', 'idle')):
+            with self.subTest(value=value):
+                if value is None:
+                    marker.unlink()
+                else:
+                    marker.write_text(value)
+                self.env['FAKE_STATES'] = state
+                before = len(self.calls())
+                self.send()
+                self.assertEqual(self.calls()[before:], [['agent', 'get', 'receiver'],
+                                                         ['agent', 'prompt', 'receiver', 'inbox']])
+
+    def test_claude_expired_listener_busy_recheck_and_receipt(self):
+        (self.home / 'listeners/receiver.pid').unlink()
+        self.env['FAKE_STATES'] = 'working,idle'
+        self.send()
+        self.assertEqual(self.calls(), [['agent', 'get', 'receiver']] * 2 +
+                                      [['agent', 'prompt', 'receiver', 'inbox']])
+        self.log.unlink()
+        self.env['FAKE_MARK'] = '1'
+        self.send()
+        self.assertEqual(self.calls(), [['agent', 'get', 'receiver']] * 2)
+
+    def test_claude_missing_listener_nudge_failure_never_retried(self):
+        (self.home / 'listeners/receiver.pid').unlink()
+        self.env['FAKE_FAIL'] = 'agent prompt'
+        self.assertIn('nudge failed', self.send().stderr)
+        self.assertEqual(self.calls(), [['agent', 'get', 'receiver'], ['agent', 'prompt', 'receiver', 'inbox']])
+        self.assertEqual(len(self.rows(self.run_tool('team', 'ledger'))), 1)
+
+    def test_claude_listener_armed_during_busy_recheck_suppresses_nudge(self):
+        loader = importlib.machinery.SourceFileLoader('kiln_team', str(PLUGIN / 'bin/team'))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        marker = self.home / 'listeners/receiver.pid'
+        marker.unlink()
+        receiver = dict(address='receiver', family='claude', inbox=str(self.base / 'marker.json'))
+        def arm(_):
+            marker.write_text(str(os.getpid()))
+        with patch.object(module, 'herdr', side_effect=[{'agent': {'agent_status': 'working'}},
+                                                      {'agent': {'agent_status': 'idle'}}]) as herdr:
+            with patch.object(module.time, 'sleep', side_effect=arm):
+                module.nudge(self.home, receiver, {'id': 'row'}, 0)
+        self.assertEqual(herdr.call_count, 2)
 
     def test_identity_and_worker_rules(self):
         self.send('update', '--from', 'impostor', ok=False)

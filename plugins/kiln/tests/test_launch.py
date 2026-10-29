@@ -387,6 +387,35 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(self.calls(), before)
         self.assertTrue((self.home / 'seats/impl.json').exists())
 
+    def test_claude_lean_routing_and_boss_override(self):
+        launch = load_launcher()
+        routing = (PLUGIN / 'config/routing.toml').read_text().replace('active = "balanced"', 'active = "claude-lean"')
+        for bosses in ('claude', 'gpt'):
+            (self.base / 'routing.toml').write_text(routing.replace('bosses = "claude"', f'bosses = "{bosses}"'))
+            with patch.object(launch, 'CONFIG', self.base):
+                for role, model in (('manager', 'gpt-6.1-sol'),
+                                    ('director', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6-astra'),
+                                    ('super', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6.1-sol')):
+                    args = argparse.Namespace(role=role, family=None, model=None, effort=None)
+                    self.assertEqual(launch.routing(args), ('claude-lean', model, 'medium'))
+
+    def test_claude_lean_complete_lane(self):
+        import tomllib
+        config = tomllib.loads((PLUGIN / 'config/routing.toml').read_text())
+        lane = config['lanes']['claude-lean']
+        self.assertEqual(set(lane), set(config['lanes']['balanced']))
+        for role in ('manager', 'helper', 'chunkmaster', 'implementer', 'investigator'):
+            self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='medium'))
+        for role in ('mechanical', 'research_gpt', 'research_claude'):
+            self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='low'))
+        for role, model in (('review_of_gpt', 'claude-opus-5-5'), ('review_of_claude', 'gpt-6-astra'),
+                            ('ui_plan', 'gpt-6-astra'), ('ui_build', 'gpt-6.1-sol'), ('ui_review', 'claude-opus-5-5')):
+            self.assertEqual(lane[role], dict(model=model, effort='medium'))
+        self.assertEqual(lane['conceptual'], [dict(model='gpt-6-astra', effort='medium')])
+        self.assertEqual(lane['operational'], [dict(model='gpt-6.1-sol', effort='medium'),
+                                               dict(model='claude-opus-5-5', effort='medium')])
+        self.assertEqual(lane['advisor'], dict(model='gemini-4-argon-high', effort='high'))
+
     def test_routing_defaults_and_pane_role_words(self):
         launch = load_launcher()
         for role, model in [('manager', 'claude-opus-5-5'), ('helper', 'gpt-6.1-sol'),

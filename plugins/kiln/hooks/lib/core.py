@@ -6,17 +6,17 @@ import os
 from pathlib import Path
 import re
 import shlex
+import signal
 import sys
 import time
 import uuid
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from lib.ledger import live_pid, markers, pending, read_json, workers
+
 PERSISTENT = {"director", "super", "manager", "helper", "chunkmaster"}
 BOSSES = {"director", "super", "manager", "chunkmaster"}
 SENTENCE = "this is enough; read rules, ledger and panes only where an item points you"
-
-
-def read_json(path, default):
-    return json.loads(path.read_text()) if path.exists() else default
 
 
 def ledger(home):
@@ -27,45 +27,9 @@ def ledger(home):
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
 
-def receipt(home, seat):
-    return set(read_json(home / "inbox" / f'{seat["address"]}.json', {"read": []})["read"])
-
-
 def unread(home, seat, rows):
-    marked = receipt(home, seat)
+    marked = markers(seat)
     return [r for r in rows if r["to"] == seat["address"] and r["id"] not in marked]
-
-
-def pending(home, seat, rows):
-    completed = {r["cites"] for r in rows if r["kind"] in ("done", "answer")}
-    marked = receipt(home, seat)
-    inherited = set(seat.get("pending", []))
-    return sorted((inherited | {r["id"] for r in rows if r["kind"] == "request"
-                   and r["to"] == seat["address"] and r["id"] in marked}) - completed)
-
-
-def armed(home, worker):
-    path = home / "waits" / f"{worker}.pid"
-    if not path.exists():
-        return False
-    try:
-        pid = int(path.read_text().strip())
-    except (ValueError, FileNotFoundError):
-        return False
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        pass  # Existing process owned by another uid is still live.
-    # kill(0) also succeeds for zombies: those are no longer waiting.
-    stat = Path(f"/proc/{pid}/stat")
-    try:
-        return stat.read_text().rsplit(")", 1)[1].split()[0] != "Z"
-    except FileNotFoundError:
-        return False
 
 
 def finished(row):
@@ -90,8 +54,9 @@ def stop(home, seat, payload):
     new = unread(home, seat, rows)
     if new:
         reasons.append("Unread rows " + ", ".join(r["id"] for r in new) + "; run: team inbox --mark")
-    for worker in seat.get("workers", []):
-        if not armed(home, worker):
+    for child in workers(home, seat):
+        worker = child["address"]
+        if not live_pid(home / "waits" / f"{worker}.pid"):
             command = f"herdr agent wait {shlex.quote(worker)} --timeout 30000"
             marker = shlex.quote(str(home / "waits" / f"{worker}.pid"))
             # The Claude native tool must finish its Bash call with '&'.
@@ -100,7 +65,7 @@ def stop(home, seat, payload):
             if seat["family"] == "claude":
                 command = f"( {command} ) &"
             reasons.append(f"Worker {worker} has no armed wait; run: {command}")
-    marked = receipt(home, seat)
+    marked = markers(seat)
     done = {r["cites"] for r in rows if r["kind"] == "done"}
     for row in rows:
         if (row["kind"] == "request" and row["to"] == seat["address"]
@@ -122,7 +87,7 @@ def start(home, seat):
         path = Path(seat[key]) if seat.get(key) else None
         if path and path.is_file():
             parts.append(path.read_text())
-    parts.append("Pending requests: " + (", ".join(pending(home, seat, ledger(home))) or "none"))
+    parts.append("Pending ids: " + (", ".join(r["id"] for r in pending(ledger(home), seat)) or "none"))
     parts.append(SENTENCE)
     return "\n\n".join(parts)
 
@@ -157,12 +122,12 @@ def fence(seat, payload, adapter):
                 return "Claude Herdr agent waits must end in &; run the wait in the background"
         if tail[:2] in (["agent", "prompt"], ["pane", "send-text"], ["pane", "send-keys"]):
             target = tail[2] if len(tail) > 2 else ""
-            workers = set(seat.get("workers", [])) - {"director", seat["pane"]}
-            # Agent addresses are canonical; pane targets are resolved from those workers' seats.
             home = Path(os.environ["KILN_HOME"])
-            panes = {read_json(home / "seats" / f"{w}.json", {}).get("pane") for w in workers}
+            children = workers(home, seat)
+            addresses = {c["address"] for c in children} - {"director", seat["pane"]}
+            panes = {c["pane"] for c in children if c["address"] in addresses}
             director = read_json(home / "seats/director.json", {}).get("pane")
-            allowed = workers - {director} if tail[0] == "agent" else panes - {director, None}
+            allowed = addresses - {director} if tail[0] == "agent" else panes - {director, None}
             if target not in allowed:
                 return f"target {target} is outside my workers; use a worker target (never the director's pane)"
     return None
@@ -174,22 +139,40 @@ def listen(home, seat):
     directory.mkdir(exist_ok=True)
     marker = directory / f'{seat["address"]}.json'
     token = uuid.uuid4().hex
-    # Serialize listener generations. Old generations retire without killing any process.
-    with (directory / f'{seat["address"]}.lock').open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        marker.write_text(json.dumps({"pane": seat["pane"], "token": token}))
-    deadline = time.monotonic() + 280
-    while time.monotonic() < deadline:
-        if read_json(Path(os.environ["KILN_SEAT"]), {}).get("pane") != seat["pane"]:
-            return 0
-        if read_json(marker, {}).get("token") != token:
-            return 0
-        rows = unread(home, seat, ledger(home))
-        if rows:
-            print("Unread rows " + ", ".join(r["id"] for r in rows) + "; run: team inbox --mark", file=sys.stderr)
-            return 2
-        time.sleep(0.25)
-    return 0
+    pid_marker = directory / f'{seat["address"]}.pid'
+    lock_path = directory / f'{seat["address"]}.lock'
+    def terminate(signum, frame):
+        raise SystemExit(0)
+    handlers = {sig: signal.signal(sig, terminate) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        # Serialize listener generations; publish a complete PID marker atomically.
+        with lock_path.open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            marker.write_text(json.dumps({"pane": seat["pane"], "token": token}))
+            temporary = pid_marker.with_suffix(".tmp")
+            temporary.write_text(str(os.getpid()) + "\n")
+            temporary.replace(pid_marker)
+        deadline = time.monotonic() + 280
+        while time.monotonic() < deadline:
+            if read_json(Path(os.environ["KILN_SEAT"]), {}).get("pane") != seat["pane"]:
+                return 0
+            if read_json(marker, {}).get("token") != token:
+                return 0
+            rows = unread(home, seat, ledger(home))
+            if rows:
+                print("Unread rows " + ", ".join(r["id"] for r in rows) + "; run: team inbox --mark", file=sys.stderr)
+                return 2
+            time.sleep(0.25)
+        return 0
+    finally:
+        try:
+            with lock_path.open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                if pid_marker.exists() and pid_marker.read_text().strip() == str(os.getpid()):
+                    pid_marker.unlink()
+        finally:
+            for sig, handler in handlers.items():
+                signal.signal(sig, handler)
 
 
 def main():
