@@ -8,8 +8,8 @@ launcher's location, so a copied plugin needs no repository-level config.
 | Family / seat | Native arguments |
 | --- | --- |
 | Claude | `--model <id> --effort <e> --settings <inline-json>` |
-| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <root> -c approval_policy=never --dangerously-bypass-hook-trust --add-dir <KILN_HOME> -c sandbox_workspace_write.network_access=true` |
-| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <worktree-or-root> -c approval_policy=never --dangerously-bypass-hook-trust --add-dir <KILN_HOME>` |
+| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <root> -c approval_policy=never --add-dir <KILN_HOME> -c sandbox_workspace_write.network_access=true` |
+| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <worktree-or-root> -c approval_policy=never --add-dir <KILN_HOME>` |
 
 Both families receive one `--add-dir <dir>` per declared extra root; `--run`
 adds its directory to that list. `--worktree` supplies the writable root and
@@ -55,9 +55,21 @@ sh -c '[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] && [ -n "$KILN_PLUGIN" ] || ex
 Both the [Claude hooks](https://code.claude.com/docs/en/hooks.md) and
 [Codex hooks](https://learn.chatgpt.com/docs/hooks) schemas use event arrays,
 matcher-group `hooks` arrays, and command handlers with `type` and `command`.
-Installed Codex 0.165.0 help verifies `--dangerously-bypass-hook-trust`;
-SPEC §3's isolated probe established unattended user hooks in fresh worktrees.
-The flag applies to all enabled sources, including non-Kiln hooks.
+SPEC §3's second isolated probe established that one Codex TUI review covers
+stable user-level definitions across fresh worktrees and plain folders.
+Kiln launches preserve Codex's normal hook review. After installing, follow
+the printed one-time instructions: launch Codex from an empty plain folder,
+open `/hooks`, inspect and trust the Kiln entries, then Esc and Ctrl-D.
+Installation prints the exact `hooks.state` key for each Kiln handler:
+`<absolute-hooks.json>:<event>:<group-index>:<handler-index>`; events are
+`stop`, `pre_tool_use`, and `session_start`, and indexes include non-Kiln entries.
+Codex persists review in `$CODEX_HOME/config.toml`; Kiln only reads that file.
+Missing keys, absent `trusted_hash` values, or unreadable/malformed config
+produce one warning naming the affected Kiln entries and never refuse a launch.
+This observed state format is diagnostic, not a provisioning API: Kiln writes
+no trust state and does not calculate or validate definition hashes.
+Kiln hook definitions are stable on purpose; changing one costs one review.
+Codex handles review of other project hooks; Kiln adds no foreign-hook guard.
 
 The active lane supplies model/effort defaults; `balanced` and `claude-lean`
 are available. `claude-lean` keeps director/super on Opus medium; managers,

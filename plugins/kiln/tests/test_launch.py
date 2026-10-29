@@ -133,7 +133,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertIn('model_reasoning_effort=medium', flags)
         self.assertIn('approval_policy=never', flags)
         self.assertIn(str(self.home), [flags[i + 1] for i, flag in enumerate(flags) if flag == '--add-dir'])
-        self.assertIn('--dangerously-bypass-hook-trust', flags)
+        self.assertFalse(any('bypass-hook-trust' in flag for flag in flags))
         self.assertEqual(flags[flags.index('-s') + 1], 'workspace-write')
         self.assertEqual(flags[flags.index('-C') + 1], str(worktree))
         self.assertEqual(flags[-2:], ['--add-dir', str(run)])
@@ -148,7 +148,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertIn('sandbox_workspace_write.network_access=true', flags)
         self.assertIn('approval_policy=never', flags)
         self.assertIn(str(self.home), [flags[i + 1] for i, flag in enumerate(flags) if flag == '--add-dir'])
-        self.assertIn('--dangerously-bypass-hook-trust', flags)
+        self.assertFalse(any('bypass-hook-trust' in flag for flag in flags))
         self.assertIn('model_reasoning_effort=high', flags)
         self.assertEqual(self.seat()['model'], 'gpt-6-astra')
 
@@ -167,7 +167,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
             self.assertIn('--env', lines[2])
             self.assertIn('--settings' if not extra else '--add-dir', lines[-1])
             if extra:
-                self.assertIn('--dangerously-bypass-hook-trust', lines[-1])
+                self.assertFalse(any('bypass-hook-trust' in flag for flag in lines[-1]))
             else:
                 settings = json.loads(lines[-1][lines[-1].index('--settings') + 1])
                 self.assertEqual(settings['hooks']['Stop'][0]['hooks'][0]['command'], self.guard('stop'))
@@ -319,7 +319,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         result = subprocess.run(args, env=self.env, capture_output=True, text=True, check=True)
         self.assertIn('--kind codex', result.stdout)
         self.assertIn('--model gpt-6-astra', result.stdout)
-        self.assertIn('--dangerously-bypass-hook-trust', result.stdout)
+        self.assertNotIn('bypass-hook-trust', result.stdout)
         self.assertIn('--add-dir ' + str(self.home), result.stdout)
         self.assertEqual(self.calls(), [])
 
@@ -491,7 +491,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         path = self.base / 'hooks.json'
         path.write_text('{ "description" : "foreign" }\n')
         original = path.read_bytes()
-        with patch.object(launch, 'hooks_path', return_value=path):
+        with patch.object(launch, 'hooks_path', return_value=path), patch('builtins.print'):
             launch.manage_hooks(False, False)
             self.assertEqual(path.read_bytes(), original)
             launch.manage_hooks(True, False)
@@ -507,6 +507,64 @@ class LaunchTests(Sandbox, unittest.TestCase):
         schema = load_launcher().SCHEMA
         self.assertNotIn('agy', schema['properties']['family']['enum'])
         self.assertNotIn('gemini-4-argon-high', schema['properties']['model']['enum'])
+
+    def test_install_prints_review_and_exact_keys_with_foreign_indexes(self):
+        path = Path(self.env['CODEX_HOME']) / 'hooks.json'
+        path.parent.mkdir()
+        path.write_text(json.dumps({'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': 'foreign'}]}]}}))
+        result = self.run_tool('launch', 'install-hooks', '--family', 'codex')
+        self.assertIn(load_launcher().REVIEW_STEPS, result.stdout)
+        self.assertIn('codex --no-daemon --no-alt-screen -s read-only -C /absolute/empty-folder', result.stdout)
+        self.assertIn('Esc then Ctrl-D', result.stdout)
+        for suffix in ('stop:1:0', 'pre_tool_use:0:0', 'session_start:0:0'):
+            self.assertIn(str(path.resolve()) + ':' + suffix, result.stdout.splitlines())
+        self.assertFalse((path.parent / 'config.toml').exists())
+
+    def test_codex_trust_config_present_absent_and_malformed_never_refuses(self):
+        self.run_tool('launch', 'install-hooks', '--family', 'codex')
+        path = Path(self.env['CODEX_HOME']) / 'hooks.json'
+        config = path.parent / 'config.toml'
+        keys = [str(path.resolve()) + ':' + suffix for suffix in
+                ('stop:0:0', 'pre_tool_use:0:0', 'session_start:0:0')]
+        def trusted(key):
+            return '[hooks.state.' + json.dumps(key) + ']\ntrusted_hash = "sha256:reviewed"\n'
+        cases = [None, 'invalid = [', 'model = "gpt-6.1-sol"\n', 'hooks = []\n',
+                 'hooks.state = []\n', '[hooks.state.' + json.dumps(keys[0]) + ']\nenabled = true\n',
+                 ''.join(trusted(key) for key in keys), ''.join(trusted(key) for key in keys[:2])]
+        for source in cases:
+            with self.subTest(config=source):
+                if source is None:
+                    config.unlink(missing_ok=True)
+                else:
+                    config.write_text(source)
+                result = self.launch('--role', 'helper')
+                warnings = [line for line in result.stderr.splitlines() if 'need /hooks review' in line]
+                if source == cases[-2]:
+                    self.assertEqual(warnings, [])
+                else:
+                    self.assertEqual(len(warnings), 1)
+                    expected = keys[-1:] if source == cases[-1] else keys
+                    for key in expected:
+                        self.assertIn(key, warnings[0])
+                self.assertFalse(any('bypass-hook-trust' in flag for flag in self.flags()))
+                if source is None:
+                    self.assertFalse(config.exists())
+                else:
+                    self.assertEqual(config.read_text(), source)
+
+    def test_trust_keys_use_the_source_path_when_hooks_file_is_a_symlink(self):
+        path = Path(self.env['CODEX_HOME']) / 'hooks.json'
+        path.parent.mkdir()
+        target = self.base / 'shared-hooks.json'
+        target.write_text('{}')
+        path.symlink_to(target)
+        result = self.run_tool('launch', 'install-hooks', '--family', 'codex')
+        keys = [str(path) + ':' + suffix for suffix in ('stop:0:0', 'pre_tool_use:0:0', 'session_start:0:0')]
+        self.assertTrue(all(key in result.stdout.splitlines() for key in keys))
+        config = path.parent / 'config.toml'
+        config.write_text(''.join('[hooks.state.' + json.dumps(key) + ']\ntrusted_hash = "sha256:reviewed"\n' for key in keys))
+        self.assertNotIn('need /hooks review', self.launch('--role', 'helper').stderr)
+        self.assertTrue(path.is_symlink())
 
 
 if __name__ == '__main__':

@@ -18,6 +18,11 @@ HOOKS = PLUGIN / "hooks"
 SCHEMA = json.loads((CONFIG / "seat.schema.json").read_text())
 
 
+REVIEW_STEPS = """2. For one-time review, launch from an empty plain folder: `CODEX_HOME=/absolute/codex-home codex --no-daemon --no-alt-screen -s read-only -C /absolute/empty-folder`. The tested isolated home was this task's `home`; never substitute it for the production home unintentionally.
+3. At startup choose **Continue without trusting**, then type `/hooks`, Enter. Inspect the list. When only vetted Kiln entries need trust, press **t** (trust all); otherwise review/trust only Kiln entries individually. The tested path used one three-line Stop script (`kiln-stop.sh:1`) and `/hooks` → `t` (`evidence/experiment-notes.txt:8`).
+4. Confirm the entry is active, exit with Esc then Ctrl-D. The hash entry persists automatically. Repeat review after changing the definition or source identity."""
+
+
 def absolute(value):
     return str(Path(value).resolve())
 
@@ -66,7 +71,7 @@ def native(seat, hook_config, home):
     elif seat["family"] == "codex":
         flags = ["--model", model, "-c", f"model_reasoning_effort={effort}",
                  "-s", "workspace-write", "-C", root, "-c", "approval_policy=never",
-                 "--dangerously-bypass-hook-trust", "--add-dir", str(home)]
+                 "--add-dir", str(home)]
         if seat["role"] != "worker":
             flags += ["-c", "sandbox_workspace_write.network_access=true"]
     for directory in seat["extra_roots"]:
@@ -106,8 +111,12 @@ def write_json(path, data, dry_run):
         temporary.replace(path)
 
 
+def codex_home():
+    return Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+
+
 def hooks_path():
-    return (Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "hooks.json").resolve()
+    return (codex_home() / "hooks.json").resolve()
 
 
 def hook_events(path):
@@ -122,6 +131,12 @@ def hook_events(path):
 
 def is_kiln(handler):
     return isinstance(handler, dict) and "KILN_SEAT" in str(handler.get("command", ""))
+
+
+def kiln_keys(path, events):
+    return [f"{path}:{re.sub(r'(?<!^)(?=[A-Z])', '_', event).lower()}:{i}:{j}"
+            for event, groups in events.items() for i, group in enumerate(groups)
+            for j, handler in enumerate(group.get("hooks", [])) if is_kiln(handler)]
 
 
 def manage_hooks(install, dry_run):
@@ -151,18 +166,37 @@ def manage_hooks(install, dry_run):
         data["hooks"] = events
     if data != original:
         write_json(path, data, dry_run)
+    if install:
+        print(REVIEW_STEPS)
+        print("Expected hooks.state keys (created by Codex review):")
+        for key in kiln_keys(codex_home().resolve() / "hooks.json", events):
+            print(key)
 
 
 def warn_missing_hooks():
     try:
-        _, events = hook_events(hooks_path())
+        path = hooks_path()
+        _, events = hook_events(path)
+        keys = kiln_keys(codex_home().resolve() / "hooks.json", events)
         installed = all(any(is_kiln(h) for group in events.get(event, []) for h in group.get("hooks", []))
                         for event in ("Stop", "SessionStart", "PreToolUse"))
-        if installed:
-            return
     except (OSError, ValueError, TypeError, AttributeError):
-        pass
-    print("launch: warning: Codex Kiln hooks are not installed; run launch install-hooks --family codex", file=sys.stderr)
+        keys, installed = [], False
+    try:
+        with (codex_home() / "config.toml").open("rb") as stream:
+            state = tomllib.load(stream).get("hooks", {}).get("state", {})
+        if not isinstance(state, dict):
+            raise ValueError("hooks.state must be a table")
+    except (OSError, ValueError, AttributeError):
+        state = {}
+    missing = [key for key in keys if not isinstance(state.get(key), dict) or not state[key].get("trusted_hash")]
+    warnings = []
+    if not installed:
+        warnings.append("Codex Kiln hooks are not installed; run launch install-hooks --family codex")
+    if missing:
+        warnings.append("Kiln entries need /hooks review: " + ", ".join(missing))
+    if warnings:
+        print("launch: warning: " + "; ".join(warnings), file=sys.stderr)
 
 
 def herdr(args, dry_run):
