@@ -106,7 +106,11 @@ children whose current status lacks a terminal done/question line; persistent
 children never count. Closing a persistent
 seat requires `team close <addr> --force`; closing does not send Herdr commands.
 Headlines must be one line; those above 100 characters warn without refusing.
-Launch adds handoff/card parent directories to extra_roots. --wait-ms writes
+Launch only records handoff/card paths; it does not widen extra_roots or
+--add-dir for them. The edit-path rule is defined once in the fence (see hooks.md).
+The required run field records --run for workers (required per worker) and the
+phase root for persistent seats; worker status is read only from its own run.
+--wait-ms writes
 seat.wait_ms (default 1800000 ms) for Stop wait recipes. Claude executes both
 Herdr wait forms with Bash run_in_background: true; Codex waits in the foreground.
 The rotation producer's old_session/old_pane/acked contract is in hooks.md.

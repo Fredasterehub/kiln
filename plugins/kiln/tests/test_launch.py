@@ -37,6 +37,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
         return 'sh -c ' + shlex.quote(guard)
 
     def launch(self, *extra, ok=True):
+        if '--role' in extra and extra[extra.index('--role') + 1] == 'worker' and '--run' not in extra:
+            extra = (*extra, '--run', str(self.base / 'worker-run'))
         return self.run_tool('launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
                              '--root', str(self.root), '--parent', 'super', *extra, ok=ok)
 
@@ -82,7 +84,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertNotIn('pending', seat)
         self.assertEqual(seat['card'], str(card))
         self.assertEqual(seat['handoff'], str(handoff))
-        self.assertEqual(seat['extra_roots'], [str(extra), str(self.base)])
+        self.assertEqual(seat['extra_roots'], [str(extra)])
+        self.assertEqual(seat['run'], str(self.root))
         split = self.calls()[2]
         self.assertEqual(split[:3], ['pane', 'split', 'w-test:p1'])
         self.assertIn('KILN_SEAT=' + str(self.home / 'seats/build.json'), split)
@@ -103,7 +106,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(set(settings['hooks']), {'SessionStart', 'PreToolUse', 'Stop'})
         for event, script in [('SessionStart', 'start'), ('PreToolUse', 'fence'), ('Stop', 'stop')]:
             self.assertEqual(settings['hooks'][event][0]['hooks'][0]['command'], self.guard(script))
-        self.assertEqual(flags[-4:], ['--add-dir', str(extra), '--add-dir', str(self.base)])
+        self.assertEqual(flags[-2:], ['--add-dir', str(extra)])
         self.assertFalse((self.root / '.codex').exists())
 
     def test_claude_worker_defaults_to_review_without_start_hook(self):
@@ -387,7 +390,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_worktree_without_root_and_parent_validation(self):
         self.run_tool('launch', '--tab', 'build', '--address', 'impl', '--role', 'worker',
-                      '--worktree', str(self.root), '--parent', 'build')
+                      '--worktree', str(self.root), '--parent', 'build', '--run', str(self.base / 'impl-run'))
         self.assertEqual(self.seat('impl')['root'], str(self.root))
         self.assertEqual(self.seat('impl')['family'], 'codex')
         before = self.calls()
@@ -424,13 +427,15 @@ class LaunchTests(Sandbox, unittest.TestCase):
                                                dict(model='claude-opus-5-5', effort='medium')])
         self.assertEqual(lane['advisor'], dict(model='gemini-4-argon-high', effort='high'))
 
-    def test_wait_ms_and_explicit_card_handoff_roots(self):
+    def test_wait_ms_and_recorded_card_handoff_paths(self):
         card = self.base / 'cards' / 'build.md'
         handoff = self.base / 'handoff' / 'build.md'
         self.launch('--wait-ms', '7200000', '--card', str(card), '--handoff', str(handoff))
         seat = self.seat()
         self.assertEqual(seat['wait_ms'], 7200000)
-        self.assertEqual(set(seat['extra_roots']), {str(card.parent), str(handoff.parent)})
+        self.assertEqual(seat['extra_roots'], [])
+        self.assertEqual(seat['card'], str(card))
+        self.assertEqual(seat['handoff'], str(handoff))
         self.assertIn('KILN_PLUGIN=' + str(PLUGIN), self.calls()[2])
         self.launch('--wait-ms', '0', ok=False)
 
@@ -440,6 +445,34 @@ class LaunchTests(Sandbox, unittest.TestCase):
         launch = load_launcher()
         self.assertEqual(launch.hooks('manager')['PreToolUse'][0]['matcher'], 'Bash|apply_patch')
         self.assertNotIn(str(PLUGIN), launch.hooks('manager')['Stop'][0]['hooks'][0]['command'])
+
+    def test_required_run_and_wait_ms_schema(self):
+        launch = load_launcher()
+        self.launch()
+        seat = self.seat()
+        self.assertEqual(seat['run'], str(self.root))
+        for key in ('run', 'wait_ms'):
+            self.assertIn(key, launch.SCHEMA['required'])
+            incomplete = dict(seat)
+            incomplete.pop(key)
+            with self.assertRaises(ValueError):
+                launch.validate(incomplete)
+        before = self.calls()
+        result = self.run_tool('launch', '--tab', 'build', '--address', 'impl', '--role', 'worker',
+                              '--root', str(self.root), '--parent', 'build', ok=False)
+        self.assertIn('--run is required', result.stderr)
+        self.assertEqual(self.calls(), before)
+        self.launch('--role', 'worker', '--run', str(self.base / 'impl-run'))
+        self.assertEqual(self.seat()['run'], str(self.base / 'impl-run'))
+
+    def test_codex_card_handoff_paths_do_not_add_writable_directories(self):
+        card, handoff = self.base / 'cards/build.md', self.base / 'handoffs/build.md'
+        self.launch('--family', 'codex', '--role', 'helper', '--card', str(card), '--handoff', str(handoff))
+        self.assertEqual(self.seat()['extra_roots'], [])
+        flags = self.flags()
+        self.assertNotIn(str(card.parent), flags)
+        self.assertNotIn(str(handoff.parent), flags)
+        self.assertNotIn('--dangerously-bypass-hook-trust', flags)
 
     def test_routing_defaults_and_pane_role_words(self):
         launch = load_launcher()

@@ -16,7 +16,9 @@
     "model",
     "effort",
     "pane",
-    "workspace"
+    "workspace",
+    "run",
+    "wait_ms"
   ],
   "properties": {
     "address": {
@@ -113,6 +115,10 @@
       "minimum": 1,
       "default": 1800000,
       "description": "Herdr wait timeout in milliseconds, supplied by --wait-ms."
+    },
+    "run": {
+      "type": "string",
+      "description": "Worker-specific status/run folder, from --run; persistent seats use their phase root. Status is read only here."
     }
   }
 }

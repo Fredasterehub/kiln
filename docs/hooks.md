@@ -15,8 +15,9 @@ No user configuration is edited at seat launch. Start nested CLIs with
 seat identity. A copied guard with a missing plugin variable silently exits.
 
 The Python guard accepts `seat.pane == HERDR_PANE_ID`. During an unacked rotation,
-only the fence also accepts `old_pane` from the rotation receipt. Other events
-from that replaced pane exit silently. Unrelated panes never run hook policy.
+the fence and Stop also accept `old_pane` from the rotation receipt. Such a Stop
+is outgoing and checks only rotation ownership, never inbox rows or workers.
+Other events from that replaced pane exit silently. Unrelated panes never run hook policy.
 Errors fail open. Logs contain refusals, errors, skipped-ledger-line counts,
 and the required SessionStart card line count; cards over 40 lines add a warning.
 Ordinary allowed tools, allowed Stops and successful listener wakes are not logged.
@@ -40,16 +41,20 @@ Remediation commands use the absolute path of this plugin's `bin/team`.
 
 `team workers` lists all children by parent. Stop considers only role `worker`:
 its seat record must remain present (`team close` removes it), and its current
-status must lack a terminal done/question line. A run directory in extra_roots
-takes precedence over root; search in reverse extra-root order. Within that
-directory use the highest numbered `status-fix<n>.txt`, otherwise `status.txt`.
+status must lack a terminal done/question line. The required `seat.run` is its
+sole status folder: workers must supply their own `--run` (for example
+`chunks/<id>/impl/`, `gate/`, `review/`); persistent seats record their phase root.
+The caller assigns a distinct folder to each worker. No status is read from
+root, extra_roots, card/handoff folders or another worker's run. Within run use
+the highest numbered `status-fix<n>.txt`, otherwise `status.txt`.
 The last nonblank line beginning `HH:MM done:` / `question:` (or without time)
 is terminal. Missing status is unfinished. Persistent children never count.
 
 An armed wait is `waits/<worker>.pid`, containing the live wait process PID;
 zombies/dead/invalid PIDs are unarmed. Stop's command records that PID and waits
 for it to finish. `seat.wait_ms` supplies the Herdr timeout in milliseconds;
-`launch --wait-ms` defaults to 1800000. Claude must execute the Bash payload with
+`wait_ms` is required in the schema; `launch --wait-ms` defaults to 1800000.
+The hook also uses that default for legacy seat files missing wait_ms. Claude must execute the Bash payload with
 `run_in_background: true`; shell `&` alone cannot supply the native completion
 notification. Both agent wait and pane wait-output follow this rule. Codex waits
 in the foreground with `--timeout`. No request-count or poll-loop heuristic exists.
@@ -65,15 +70,21 @@ The out-of-scope handoff plugin's rotate producer atomically writes
 
 After its replacement receipt/ledger ack, rotate sets `acked: true`. The Stop
 condition compares payload session_id to old_session, never pane; a same-pane
-replacement is never refused for that rotation. A different old pane retains
-its fence until ack but its Stop exits through the pane guard. The receipt must
-remain until outgoing hooks have finished. Hooks never publish the ack.
+replacement is never refused for that rotation. Both same-pane and different-pane
+outgoing Stops evaluate only the rotation condition: they never ask the old
+seat to consume the replacement's inbox or wait on its workers. The old pane
+retains its fence and rotation-only Stop until ack. Outgoing listeners do not
+re-arm and existing listeners retire when their session becomes outgoing. The
+receipt must remain until outgoing hooks have finished. Hooks never publish the ack.
 
 ## Fence and family coverage
 
-Write roots are root + extra_roots + card/handoff parent directories + payload
-scratchpad_dir when present. Launch explicitly adds card/handoff directories to
-extra_roots. Paths resolve against payload cwd with symlinks resolved. NotebookEdit
+The fence's write rule is root + extra_roots + payload scratchpad_dir when
+present, plus the exact seat.handoff file as an exception. The exact seat.card
+file is always read-only, including when it lies inside an allowed root. Neither
+card nor handoff grants access to its parent directory. The launcher only
+records those paths: it adds neither directory to extra_roots or --add-dir.
+Paths resolve against payload cwd with symlinks resolved. NotebookEdit
 uses notebook_path; Edit/Write use file_path. MultiEdit file_path is supported for
 compatibility and included in the requested matcher, but is absent from the fetched
 current Claude tool list. A scratchpad is allowed only when supplied in the payload.
@@ -110,8 +121,11 @@ the edit-tool fence does not prevent shell writes to those files.
 
 Persistent Claude seats register listen.sh at SessionStart and Stop with
 asyncRewake and timeout 300 s; the listener lasts at most 280 s. A Stop listener
-seeing unread rows that the synchronous Stop refuses does not re-arm. Other
-listeners scan the initial ledger once, then read only appended bytes at their
+seeing unread rows suppresses re-arm only after the complete shared Stop
+policy successfully confirms an unread refusal. If that policy errors (for
+example on a broken child record), the listener arms normally and wakes on the
+unread rows; the diagnostic is logged. It does not assume that finding unread
+rows means the rest of the synchronous policy succeeded. Other listeners scan the initial ledger once, then read only appended bytes at their
 last offset every 1 s; receipt files are checked without consuming rows.
 
 Each listener publishes listeners/<address>.pid under its generation lock and
@@ -126,3 +140,9 @@ fallback: one status check, one delayed re-check if working, one inbox prompt if
 idle/done and unread; no retry. A newly armed listener suppresses that prompt.
 SIGKILL may leave a dead marker. PID reuse by an unrelated process does not suppress
 fallback; PID reuse by another listener remains a simple-marker limitation.
+
+Step 4 must verify the Codex foreground-wait contract at the tool transport:
+a long shell/unified-exec wait may yield control before its command ends even
+while the wait PID marker remains live. No hook-side change is claimed for this
+unverified behavior. Existing live checks also include Claude completion/wake
+notifications and whether PreToolUse carries scratchpad_dir.

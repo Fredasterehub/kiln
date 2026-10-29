@@ -41,7 +41,7 @@ class HookTests(unittest.TestCase):
         (self.home / 'seats').mkdir()
         self.seatpath = self.home / 'seats/build.json'
         self.seat = dict(address='build', role='manager', family='claude', pane='w4:p1',
-                         root=str(self.root), extra_roots=[str(self.extra)],
+                         root=str(self.root), run=str(self.root), extra_roots=[str(self.extra)],
                          inbox=str(self.home / 'inbox/build.json'), tab='build', parent='super',
                          workspace='w4', model='claude-opus-5-5', effort='medium', wait_ms=1800000)
         self.env = dict(os.environ, KILN_HOME=str(self.home), KILN_SEAT=str(self.seatpath), HERDR_PANE_ID='w4:p1', KILN_PLUGIN=str(HOOKS.parent))
@@ -52,9 +52,12 @@ class HookTests(unittest.TestCase):
         self.seatpath.write_text(json.dumps(self.seat))
 
     def child(self, address, parent='build', pane=None, role='worker'):
+        run = self.home / 'runs' / address
+        run.mkdir(parents=True, exist_ok=True)
         child = self.seat | dict(address=address, parent=parent, pane=pane or address + '-pane',
-                                 role=role, inbox='')
+                                 role=role, inbox='', run=str(run))
         (self.home / 'seats' / f'{address}.json').write_text(json.dumps(child))
+        return run
 
     def row(self, id='r1', kind='request', to='build', **updates):
         return dict(id=id, kind=kind, to=to, **{'from': 'super'}, task='task',
@@ -185,13 +188,13 @@ class HookTests(unittest.TestCase):
         process.wait()
         self.blocked(self.run_hook())
 
-    def test_finished_request_result_or_sibling_status_needs_done(self):
+    def test_received_finished_result_does_not_require_done(self):
         (self.extra / 'status.txt').write_text('12:34 done: worker proof\n')
         self.rows(self.row(path=str(self.extra)), read=['r1'])
         for family in STOP_INPUTS:
             self.allowed(self.run_hook(family=family))
 
-    def test_finished_directory_and_done_citation(self):
+    def test_received_finished_directory_is_a_card_obligation(self):
         (self.extra / 'status.txt').write_text('12:34 done: worker proof\n')
         self.rows(self.row(path=str(self.extra)), read=['r1'])
         for family in STOP_INPUTS:
@@ -472,8 +475,8 @@ class HookTests(unittest.TestCase):
         self.assertFalse((self.home / 'listeners/build.pid').exists())
 
     def test_finished_or_question_workers_do_not_require_wait(self):
-        self.child('impl')
-        status = self.extra / 'status.txt'
+        run = self.child('impl')
+        status = run / 'status.txt'
         for family in STOP_INPUTS:
             for terminal in ('12:34 done: result', '12:35 question: #q1'):
                 status.write_text(terminal + '\n')
@@ -484,12 +487,12 @@ class HookTests(unittest.TestCase):
         self.allowed(self.run_hook())
 
     def test_latest_fix_round_status_owns_worker_liveness(self):
-        self.child('impl')
-        (self.extra / 'status.txt').write_text('12:30 done: first round\n')
-        (self.extra / 'status-fix1.txt').write_text('12:31 done: old fix\n')
-        (self.extra / 'status-fix2.txt').write_text('12:32 acting\n')
+        run = self.child('impl')
+        (run / 'status.txt').write_text('12:30 done: first round\n')
+        (run / 'status-fix1.txt').write_text('12:31 done: old fix\n')
+        (run / 'status-fix2.txt').write_text('12:32 acting\n')
         self.blocked(self.run_hook())
-        (self.extra / 'status-fix2.txt').write_text('12:33 question: #q1\n')
+        (run / 'status-fix2.txt').write_text('12:33 question: #q1\n')
         self.allowed(self.run_hook())
 
     def test_stop_wait_uses_seat_timeout_and_absolute_team(self):
@@ -507,14 +510,18 @@ class HookTests(unittest.TestCase):
         self.blocked(self.fence('NotebookEdit', {'notebook_path': str(self.home / 'book.ipynb')}), 'fence')
         self.blocked(self.fence('MultiEdit', {'file_path': str(self.home / 'outside'), 'edits': []}), 'fence')
 
-    def test_card_handoff_and_payload_scratchpad_are_writable(self):
-        self.save(handoff=str(self.home / 'handoffs' / 'handoff.md'), card=str(self.home / 'cards' / 'card.md'))
+    def test_exact_handoff_and_scratchpad_allowed_card_readonly(self):
+        self.save(handoff=str(self.home / 'handoffs' / 'handoff.md'), card=str(self.root / 'card.md'))
         for family, tool, field in (('claude', 'Write', 'file_path'), ('codex', 'apply_patch', 'command')):
-            for path in (self.seat['handoff'], self.seat['card'], str(self.home / 'scratch' / 'note')):
+            for path, allowed in ((self.seat['handoff'], True), (str(self.home / 'scratch' / 'note'), True),
+                                  (self.seat['card'], False), (str(self.home / 'handoffs' / 'other.md'), False)):
                 data = {field: path if tool == 'Write' else '*** Begin Patch\n*** Add File: ' + path + '\n*** End Patch'}
-                self.allowed(self.run_hook('fence', family=family,
-                    payload={'tool_name': tool, 'tool_input': data, 'scratchpad_dir': str(self.home / 'scratch')}))
-        self.blocked(self.fence('Write', {'file_path': str(self.home / 'cards-sibling' / 'note')}, family='claude'), 'fence')
+                result = self.run_hook('fence', family=family,
+                    payload={'tool_name': tool, 'tool_input': data, 'scratchpad_dir': str(self.home / 'scratch')})
+                if allowed:
+                    self.allowed(result)
+                else:
+                    self.blocked(result, 'fence')
 
     def test_old_rotation_pane_fenced_until_ack_only(self):
         directory = self.home / 'rotations'
@@ -526,7 +533,8 @@ class HookTests(unittest.TestCase):
             self.save(family=family)
             self.blocked(self.run_hook('fence', env=env,
                 payload={'tool_name': 'Bash', 'tool_input': {'command': 'herdr agent wait w'}}), 'fence')
-            self.allowed(self.run_hook(env=env, payload={'session_id': 'old-session'}))
+            self.assertIn('Rotation of session old-session',
+                          self.blocked(self.run_hook(env=env, payload={'session_id': 'old-session'})))
         state['acked'] = True
         (directory / 'build.json').write_text(json.dumps(state))
         self.allowed(self.run_hook('fence', env=env,
@@ -612,6 +620,105 @@ class HookTests(unittest.TestCase):
         for event in ('stop', 'start', 'fence', 'listen'):
             self.allowed(self.run_hook(event, env=env))
         self.assertFalse((self.home / 'hooks.log').exists())
+
+    def test_different_pane_outgoing_stop_only_checks_rotation(self):
+        directory = self.home / 'rotations'
+        directory.mkdir()
+        path = directory / 'build.json'
+        state = dict(old_session='old-session', old_pane='old-pane', acked=False)
+        path.write_text(json.dumps(state))
+        self.rows(self.row('replacement-row'))
+        self.child('replacement-worker')
+        marker = self.home / 'inbox/build.json'
+        before = marker.read_bytes()
+        env = dict(self.env, HERDR_PANE_ID='old-pane')
+        for family in STOP_INPUTS:
+            self.save(family=family)
+            reason = self.blocked(self.run_hook(env=env, payload={'session_id': 'old-session'}))
+            self.assertIn('Rotation of session old-session', reason)
+            self.assertNotIn('Unread', reason)
+            self.assertNotIn('worker', reason.lower())
+            self.assertNotIn('inbox --mark', reason)
+            self.allowed(self.run_hook(env=env, payload={'session_id': 'old-session', 'stop_hook_active': True}))
+            replacement = self.blocked(self.run_hook(payload={'session_id': 'new-session'}))
+            self.assertIn('replacement-row', replacement)
+            self.assertNotIn('Rotation', replacement)
+        self.assertEqual(marker.read_bytes(), before)
+        state['acked'] = True
+        path.write_text(json.dumps(state))
+        self.allowed(self.run_hook(env=env, payload={'session_id': 'old-session'}))
+
+    def test_same_pane_outgoing_stop_ignores_replacement_work(self):
+        directory = self.home / 'rotations'
+        directory.mkdir()
+        (directory / 'build.json').write_text(json.dumps(dict(old_session='old-session', old_pane='w4:p1', acked=False)))
+        self.rows(self.row('replacement-row'))
+        self.child('replacement-worker')
+        for family in STOP_INPUTS:
+            reason = self.blocked(self.run_hook(family=family, payload={'session_id': 'old-session'}))
+            self.assertNotIn('Unread', reason)
+            self.assertNotIn('Worker', reason)
+            self.assertIn('Rotation', reason)
+            self.allowed(self.run_hook('listen', payload={'session_id': 'old-session'}))
+        self.assertFalse((self.home / 'listeners').exists())
+
+    def test_status_is_only_read_from_own_run(self):
+        run = self.child('impl')
+        self.child('review')
+        other = self.home / 'runs/review'
+        (other / 'status.txt').write_text('12:30 done: sibling\n')
+        (self.root / 'status.txt').write_text('12:30 done: project\n')
+        (self.extra / 'status.txt').write_text('12:30 done: extra root\n')
+        for family in STOP_INPUTS:
+            reason = self.blocked(self.run_hook(family=family))
+            self.assertIn('Worker impl', reason)
+            self.assertNotIn('Worker review', reason)
+        (run / 'status.txt').write_text('12:31 question: #q1\n')
+        self.allowed(self.run_hook())
+
+    def test_missing_legacy_wait_ms_uses_default_without_losing_refusal(self):
+        self.seat.pop('wait_ms')
+        self.save()
+        self.rows(self.row())
+        self.child('impl')
+        for family in STOP_INPUTS:
+            reason = self.blocked(self.run_hook(family=family))
+            self.assertIn('Unread rows r1', reason)
+            self.assertIn('--timeout 1800000', reason)
+
+    def test_listener_arms_when_stop_policy_errors_with_unread_rows(self):
+        self.rows(self.row())
+        self.child('broken')
+        (self.home / 'seats/broken.json').write_text('{broken')
+        self.allowed(self.run_hook())
+        result = self.run_hook('listen')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('Unread rows r1', result.stderr)
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
+        logs = [json.loads(line) for line in (self.home / 'hooks.log').read_text().splitlines()]
+        self.assertIn('error', logs[0]['outcome'])
+        self.assertIn('JSONDecodeError', logs[1]['stop_error'])
+
+    def test_armed_listener_retires_when_same_pane_session_rotates(self):
+        process = self.listener_process()
+        directory = self.home / 'rotations'
+        directory.mkdir()
+        (directory / 'build.json').write_text(json.dumps(dict(
+            old_session=STOP_INPUTS['claude']['session_id'], old_pane='w4:p1', acked=False)))
+        self.rows(self.row('replacement-row'))
+        out, err = process.communicate(timeout=3)
+        self.assertEqual((process.returncode, out, err), (0, '', ''))
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
+
+    def test_listener_recovers_when_stop_rotation_receipt_is_broken(self):
+        directory = self.home / 'rotations'
+        directory.mkdir()
+        (directory / 'build.json').write_text('{broken')
+        self.rows(self.row())
+        self.allowed(self.run_hook())
+        result = self.run_hook('listen')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('Unread rows r1', result.stderr)
 
     def test_launcher_registers_claude_listener_only(self):
         from test_launch import load_launcher

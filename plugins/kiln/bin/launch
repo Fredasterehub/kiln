@@ -265,21 +265,19 @@ def main():
             raise ValueError("agy runs as a plain command, not a seat")
         if not (args.worktree or args.root):
             raise ValueError("--root or --worktree is required")
+        if args.role == "worker" and not args.run:
+            raise ValueError("--run is required for a worker seat")
         root = absolute(args.worktree or args.root)
         extra_roots = list(dict.fromkeys(absolute(p) for p in args.extra_root + ([args.run] if args.run else [])))
         seat = dict(address=args.address, role=args.role, family=args.family, tab=args.tab,
-                    root=root, extra_roots=extra_roots, parent=args.parent, model=model,
+                    root=root, run=absolute(args.run) if args.role == "worker" else root,
+                    extra_roots=extra_roots, parent=args.parent, model=model,
                     effort=effort, lane=lane, pane="", workspace=workspace, wait_ms=args.wait_ms,
                     inbox="" if args.role == "worker" else str(home / "inbox" / f"{args.address}.json"))
         for key in ("name", "card", "handoff"):
             value = getattr(args, key)
             if value is not None:
                 seat[key] = value if key == "name" else absolute(value)
-        for key in ("handoff", "card"):
-            if seat.get(key):
-                directory = str(Path(seat[key]).parent)
-                if directory not in seat["extra_roots"]:
-                    seat["extra_roots"].append(directory)
         validate(seat)
         config = hooks(args.role, args.family)
         flags = native(seat, config, home)

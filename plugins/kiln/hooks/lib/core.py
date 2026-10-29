@@ -37,40 +37,56 @@ def unread(seat, rows):
 def live_worker(child):
     if child["role"] != "worker":
         return False
-    # A run folder's status takes precedence over the worktree's status.
-    for root in [*reversed(child.get("extra_roots", [])), child["root"]]:
-        candidates = [(0, Path(root) / "status.txt")]
-        for candidate in Path(root).glob("status-fix*.txt"):
-            match = re.fullmatch(r"status-fix(\d+)\.txt", candidate.name)
-            if match:
-                candidates.append((int(match[1]), candidate))
-        existing = [(round_id, path) for round_id, path in candidates if path.is_file()]
-        if existing:
-            _, path = max(existing)
-            last = next((line.strip() for line in reversed(path.read_text().splitlines()) if line.strip()), "")
-            return not re.match(r"^(?:\d{2}:\d{2}\s+)?(?:done|question):", last)
+    run = Path(child["run"])
+    candidates = [(0, run / "status.txt")]
+    for candidate in run.glob("status-fix*.txt"):
+        match = re.fullmatch(r"status-fix(\d+)\.txt", candidate.name)
+        if match:
+            candidates.append((int(match[1]), candidate))
+    existing = [(round_id, path) for round_id, path in candidates if path.is_file()]
+    if existing:
+        _, path = max(existing)
+        last = next((line.strip() for line in reversed(path.read_text().splitlines()) if line.strip()), "")
+        return not re.match(r"^(?:\d{2}:\d{2}\s+)?(?:done|question):", last)
     return True
 
 
-def stop(home, seat, payload, metrics):
+def outgoing_session(state, session):
+    return bool(session and state.get("old_session") == session and state.get("acked") is False)
+
+
+def listener_outgoing(home, seat, session, metrics):
+    try:
+        state = read_json(home / "rotations" / f'{seat["address"]}.json', {})
+        return outgoing_session(state, session)
+    except (OSError, ValueError, TypeError, AttributeError) as error:
+        metrics["stop_error"] = f"{type(error).__name__}: {error}"
+        return False  # An invalid rotation must not suppress a recovery wake.
+
+
+def stop(home, seat, payload, metrics, outgoing=False):
     if payload.get("stop_hook_active"):
         return None
-    reasons = []
-    new = unread(seat, ledger(home, metrics))
-    if new:
-        reasons.append("Unread rows " + ", ".join(r["id"] for r in new) + f"; run: {TEAM} inbox --mark")
-    for child in workers(home, seat):
-        worker = child["address"]
-        if live_worker(child) and not live_pid(home / "waits" / f"{worker}.pid"):
-            marker = shlex.quote(str(home / "waits" / f"{worker}.pid"))
-            command = (f"mkdir -p {shlex.quote(str(home / 'waits'))}; "
-                       f"herdr agent wait {shlex.quote(worker)} --timeout {seat['wait_ms']} & "
-                       f'wait_pid=$!; echo "$wait_pid" > {marker}; wait "$wait_pid"')
-            how = " with run_in_background: true" if seat["family"] == "claude" else " in the foreground"
-            reasons.append(f"Worker {worker} has no armed wait; run{how}: {command}")
     rotation = home / "rotations" / f'{seat["address"]}.json'
     state = read_json(rotation, {})
-    if state.get("old_session") and state["old_session"] == payload.get("session_id") and state.get("acked") is False:
+    owns_rotation = outgoing_session(state, payload.get("session_id"))
+    outgoing = outgoing or bool(owns_rotation)
+    reasons = []
+    if not outgoing:
+        new = unread(seat, ledger(home, metrics))
+        if new:
+            metrics["unread_refusal"] = True
+            reasons.append("Unread rows " + ", ".join(r["id"] for r in new) + f"; run: {TEAM} inbox --mark")
+        for child in workers(home, seat):
+            worker = child["address"]
+            if live_worker(child) and not live_pid(home / "waits" / f"{worker}.pid"):
+                marker = shlex.quote(str(home / "waits" / f"{worker}.pid"))
+                command = (f"mkdir -p {shlex.quote(str(home / 'waits'))}; "
+                           f"herdr agent wait {shlex.quote(worker)} --timeout {seat.get('wait_ms', 1800000)} & "
+                           f'wait_pid=$!; echo "$wait_pid" > {marker}; wait "$wait_pid"')
+                how = " with run_in_background: true" if seat["family"] == "claude" else " in the foreground"
+                reasons.append(f"Worker {worker} has no armed wait; run{how}: {command}")
+    if owns_rotation:
         reasons.append(f"Rotation of session {state['old_session']} awaits handoff-plugin ack; inspect: cat {shlex.quote(str(rotation))}")
     return "\n".join(reasons) or None
 
@@ -94,13 +110,16 @@ def fence(seat, payload, adapter):
     tool, data = payload["tool_name"], payload["tool_input"]
     cwd = Path(payload.get("cwd", seat["root"]))
     directories = [seat["root"], *seat.get("extra_roots", [])]
-    directories += [str(Path(seat[k]).parent) for k in ("handoff", "card") if seat.get(k)]
     if payload.get("scratchpad_dir"):
         directories.append(payload["scratchpad_dir"])
     roots = [Path(p).resolve() for p in directories]
+    handoff = Path(seat["handoff"]).resolve() if seat.get("handoff") else None
+    card = Path(seat["card"]).resolve() if seat.get("card") else None
     for value in adapter.paths(tool, data):
         path = (cwd / value).resolve()
-        if not any(path.is_relative_to(root) for root in roots):
+        if path == card:
+            return f"card {value} is read-only"
+        if path != handoff and not any(path.is_relative_to(root) for root in roots):
             return f"path {value} is outside declared roots; use a declared writable path"
     if tool != "Bash" or seat["role"] not in BOSSES:
         return None
@@ -136,16 +155,28 @@ def fence(seat, payload, adapter):
 
 def listen(home, seat, payload, metrics):
     """Read appended bytes only; marker removal precedes the final expiry check."""
+    session = payload.get("session_id")
+    if listener_outgoing(home, seat, session, metrics):
+        return 0
     path = home / "ledger.jsonl"
     with path.open("a+b") as stream:
         stream.seek(0)
         rows = unread(seat, ledger(home, metrics, stream))
         if payload["hook_event_name"] == "Stop" and not payload.get("stop_hook_active") and rows:
-            return 0  # The synchronous Stop will refuse; don't create a second wake.
-        return listen_armed(home, seat, metrics, stream, rows)
+            # Both native handlers run independently. Reuse the complete policy,
+            # rather than assuming unread rows imply a successful Stop refusal.
+            probe = {}
+            try:
+                reason = stop(home, seat, payload, probe)
+            except Exception as error:
+                metrics["stop_error"] = f"{type(error).__name__}: {error}"
+            else:
+                if reason and probe.get("unread_refusal"):
+                    return 0
+        return listen_armed(home, seat, metrics, stream, rows, session)
 
 
-def listen_armed(home, seat, metrics, stream, rows):
+def listen_armed(home, seat, metrics, stream, rows, session):
     directory = home / "listeners"
     directory.mkdir(exist_ok=True)
     marker = directory / f'{seat["address"]}.json'
@@ -176,13 +207,15 @@ def listen_armed(home, seat, metrics, stream, rows):
         while time.monotonic() < deadline:
             if read_json(Path(os.environ["KILN_SEAT"]), {}).get("pane") != seat["pane"]:
                 return 0
-            if read_json(marker, {}).get("token") != token:
+            if read_json(marker, {}).get("token") != token or listener_outgoing(home, seat, session, metrics):
                 return 0
             rows = unread(seat, rows + ledger(home, metrics, stream))
             if rows:
                 return wake(rows)
             time.sleep(1)
         retire()
+        if listener_outgoing(home, seat, session, metrics):
+            return 0
         return wake(unread(seat, rows + ledger(home, metrics, stream)))
     finally:
         try:
@@ -200,10 +233,12 @@ def main():
         pane = os.environ.get("HERDR_PANE_ID")
         if not pane:
             return 0
+        outgoing = False
         if seat.get("pane") != pane:
             state = read_json(Path(os.environ["KILN_HOME"]) / "rotations" / f'{seat["address"]}.json', {})
-            if not (event == "fence" and state.get("old_pane") == pane and state.get("acked") is False):
+            if not (event in ("fence", "stop") and state.get("old_pane") == pane and state.get("acked") is False):
                 return 0
+            outgoing = True
         home = Path(os.environ["KILN_HOME"])
         payload = json.load(sys.stdin)
         family = seat["family"]
@@ -214,7 +249,7 @@ def main():
         if event in ("stop", "start", "listen") and seat["role"] not in PERSISTENT:
             return 0
         if event == "stop":
-            reason = stop(home, seat, payload, metrics)
+            reason = stop(home, seat, payload, metrics, outgoing=outgoing)
             if reason:
                 outcome, output = "refuse", adapter.stop(reason)
         elif event == "start":
