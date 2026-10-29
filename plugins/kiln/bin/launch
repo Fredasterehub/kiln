@@ -10,9 +10,10 @@ import subprocess
 import sys
 import tomllib
 
-REPO = Path(__file__).resolve().parents[3]
-HOOKS = Path(__file__).resolve().parents[1] / "hooks"
-SCHEMA = json.loads((REPO / "docs/seat.schema.json").read_text())
+PLUGIN = Path(__file__).resolve().parents[1]
+CONFIG = PLUGIN / "config"
+HOOKS = PLUGIN / "hooks"
+SCHEMA = json.loads((CONFIG / "seat.schema.json").read_text())
 
 
 def absolute(value):
@@ -24,23 +25,23 @@ def family(model):
 
 
 def routing(args):
-    config = tomllib.loads((REPO / "routing.toml").read_text())
+    config = tomllib.loads((CONFIG / "routing.toml").read_text())
     lane = config["active"]
     key = args.role
     if key == "worker":
-        key = "review_of_gpt" if args.family == "claude" else "implementer"
+        key = "review_of_gpt" if (args.family or (family(args.model) if args.model else None)) == "claude" else "implementer"
     choice = config["lanes"][lane][key]
     if args.role in ("director", "super") and config["bosses"] == "gpt":
         choice = config["boss_lanes"]["gpt"][args.role]
     model, effort = args.model or choice["model"], args.effort or choice["effort"]
-    if family(model) != args.family:
+    if args.family is not None and family(model) != args.family:
         raise ValueError("model family differs from --family; supply --model or change routing.toml")
     return lane, model, effort
 
 
 def hooks(role):
     events = {"Stop": "stop", "PreToolUse": "fence"}
-    if role not in ("worker", "advisor"):
+    if role != "worker":
         events["SessionStart"] = "start"
     config = {}
     for event, script in events.items():
@@ -50,22 +51,23 @@ def hooks(role):
     return config
 
 
-def native(seat, hook_config):
+def native(seat, hook_config, home):
     model, effort, root = seat["model"], seat["effort"], seat["root"]
     if seat["family"] == "claude":
+        hook_config = __import__("runpy").run_path(str(HOOKS / "lib/claude.py"))["with_listener"](hook_config, seat["role"])
         roots = [root, *seat["extra_roots"]]
         settings = dict(fallbackModel=[], switchModelsOnFlag=False, hooks=hook_config,
                         permissions={"allow": [f"Edit(/{p.rstrip('/')}/**)" for p in roots]})
-        flags = ["--model", model, "--effort", effort, "--permission-mode", "acceptEdits",
+        flags = ["--model", model, "--effort", effort,
                  "--settings", json.dumps(settings, separators=(",", ":"))]
     elif seat["family"] == "codex":
         flags = ["--model", model, "-c", f"model_reasoning_effort={effort}",
                  "-s", "workspace-write", "-C", root, "-c", "approval_policy=never",
-                 "--dangerously-bypass-hook-trust"]
+                 "--dangerously-bypass-hook-trust", "--add-dir", str(home)]
         if seat["role"] != "worker":
             flags += ["-c", "sandbox_workspace_write.network_access=true"]
     else:
-        return ["-p", "--model", model, "--effort", effort, "--sandbox", "--output-format", "json"]
+        raise ValueError("agy runs as a plain command, not a seat")
     for directory in seat["extra_roots"]:
         flags += ["--add-dir", directory]
     return flags
@@ -93,85 +95,68 @@ def write_json(path, data, dry_run):
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        with temporary.open("w") as stream:
+            json.dump(data, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+        if path.exists():
+            temporary.chmod(path.stat().st_mode & 0o777)
         temporary.replace(path)
 
 
-def parts(text):
-    """Locate JSON values without reserializing existing hook entries."""
-    decoder = json.JSONDecoder()
-    index = len(text) - len(text.lstrip()) + 1
-    is_object = text.lstrip().startswith("{")
-    while True:
-        while text[index].isspace() or text[index] == ",":
-            index += 1
-        if text[index] in "}]":
-            return
-        key = None
-        if is_object:
-            key, index = decoder.raw_decode(text, index)
-            index = text.index(":", index) + 1
-            while text[index].isspace():
-                index += 1
-        start = index
-        _, index = decoder.raw_decode(text, index)
-        yield key, start, index
+def hooks_path():
+    return (Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "hooks.json").resolve()
 
 
-def member(text, key, transform, default="{}"):
-    for name, start, end in parts(text):
-        if name == key:
-            return text[:start] + transform(text[start:end]) + text[end:]
-    value = transform(default)
-    if value == default:
-        return text
-    end = text.rfind("}")
-    return text[:end] + ("," if json.loads(text) else "") + json.dumps(key) + ":" + value + text[end:]
+def hook_events(path):
+    if not path.exists():
+        return {}, {}
+    with path.open() as stream:
+        data = json.load(stream)
+    if not isinstance(data, dict) or not isinstance(data.get("hooks", {}), dict):
+        raise ValueError("hooks.json must be an object with a hooks object")
+    return data, data.get("hooks", {})
 
 
-def filter_array(text, transform):
-    old = [text[start:end] for _, start, end in parts(text)]
-    new = [value for item in old if (value := transform(item)) is not None]
-    return text if old == new else "[" + ",".join(new) + "]"
-
-
-def remove_kiln(group):
-    def remove_handlers(array):
-        return filter_array(array, lambda raw: None if "KILN_SEAT" in json.loads(raw).get("command", "") else raw)
-    updated = member(group, "hooks", remove_handlers, "[]")
-    return None if updated != group and not json.loads(updated)["hooks"] else updated
+def is_kiln(handler):
+    return isinstance(handler, dict) and "KILN_SEAT" in str(handler.get("command", ""))
 
 
 def manage_hooks(install, dry_run):
-    path = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "hooks.json"
+    path = hooks_path()
     if not install and not path.exists():
         return
-    original = path.read_bytes().decode("utf-8") if path.exists() else "{}\n"
-    json.loads(original)  # Validate before making any edits.
+    data, events = hook_events(path)
+    for event, groups in events.items():
+        if not isinstance(groups, list):
+            raise ValueError(f"hooks.{event} must be an array")
+        kept = []
+        for group in groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks", []), list):
+                raise ValueError(f"hooks.{event} groups must have hooks arrays")
+            old = group.get("hooks", [])
+            handlers = [handler for handler in old if not is_kiln(handler)]
+            if handlers or not old:
+                if handlers != old:
+                    group["hooks"] = handlers
+                kept.append(group)
+        events[event] = kept
+    if install:
+        for event, groups in hooks("manager").items():
+            events.setdefault(event, []).extend(groups)
+    data["hooks"] = events
+    write_json(path, data, dry_run)
 
-    def update(events):
-        if install:
-            for event, groups in hooks("manager").items():
-                def append(array):
-                    if groups[0] in json.loads(array):
-                        return array
-                    end = array.rfind("]")
-                    return array[:end] + ("," if json.loads(array) else "") + json.dumps(groups[0]) + array[end:]
-                events = member(events, event, append, "[]")
-        else:
-            for _, start, end in reversed(list(parts(events))):
-                events = events[:start] + filter_array(events[start:end], remove_kiln) + events[end:]
-        return events
 
-    updated = member(original, "hooks", update)
-    if updated != original:
-        if dry_run:
-            print(f"# write {path}: {updated}")
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_suffix(".tmp")
-            temporary.write_bytes(updated.encode("utf-8"))
-            temporary.replace(path)
+def warn_missing_hooks():
+    try:
+        _, events = hook_events(hooks_path())
+        installed = all(any(is_kiln(h) for group in events.get(event, []) for h in group.get("hooks", []))
+                        for event in ("Stop", "SessionStart", "PreToolUse"))
+        if installed:
+            return
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    print("launch: warning: Codex Kiln hooks are not installed; run launch install-hooks --family codex", file=sys.stderr)
 
 
 def herdr(args, dry_run):
@@ -194,8 +179,8 @@ def target_pane(tab, workspace, dry_run):
         tab = matches[0]["tab_id"]
     panes = herdr(["pane", "list", "--workspace", workspace], dry_run)
     if dry_run:
-        return "<tab-pane>"
-    return next(p["pane_id"] for p in panes["panes"] if p["tab_id"] == tab)
+        return "<tab-pane>", tab
+    return next(p["pane_id"] for p in panes["panes"] if p["tab_id"] == tab), matches[0]["label"]
 
 
 def main():
@@ -211,10 +196,11 @@ def main():
         except (OSError, ValueError, KeyError, TypeError) as error:
             parser.exit(1, f"launch: {error}\n")
         return
-    for key in ("tab", "address", "root", "parent"):
+    for key in ("tab", "address", "parent"):
         parser.add_argument(f"--{key}", required=True)
-    for key in ("role", "family"):
-        parser.add_argument(f"--{key}", required=True, choices=SCHEMA["properties"][key]["enum"])
+    parser.add_argument("--role", required=True, choices=SCHEMA["properties"]["role"]["enum"])
+    parser.add_argument("--family", choices=SCHEMA["properties"]["family"]["enum"])
+    parser.add_argument("--root")
     for key in ("model", "effort"):
         parser.add_argument(f"--{key}", choices=SCHEMA["properties"][key]["enum"])
     for key in ("name", "card", "handoff", "worktree", "run"):
@@ -222,42 +208,58 @@ def main():
     parser.add_argument("--extra-root", action="append", default=[])
     parser.add_argument("--dry-run", action="store_true", help="print commands and file contents without side effects")
     args = parser.parse_args()
+    seat_path = None
     try:
-        home = Path(os.environ["KILN_HOME"]).resolve()
+        home_value = os.environ.get("KILN_HOME")
+        if not home_value and not args.dry_run:
+            raise ValueError("KILN_HOME is required")
+        home = Path(home_value).resolve() if home_value else Path("<KILN_HOME>")
         workspace = os.environ.get("HERDR_WORKSPACE_ID", "<workspace>" if args.dry_run else "")
         if not workspace:
             raise ValueError("HERDR_WORKSPACE_ID is required")
         lane, model, effort = routing(args)
-        if args.family == "agy" and args.role != "advisor":
-            raise ValueError("agy is a one-shot advisor only")
+        args.family = family(model)
+        if args.family == "agy":
+            raise ValueError("agy runs as a plain command, not a seat")
+        if not (args.worktree or args.root):
+            raise ValueError("--root or --worktree is required")
         root = absolute(args.worktree or args.root)
         extra_roots = list(dict.fromkeys(absolute(p) for p in args.extra_root + ([args.run] if args.run else [])))
         seat = dict(address=args.address, role=args.role, family=args.family, tab=args.tab,
                     root=root, extra_roots=extra_roots, parent=args.parent, model=model,
-                    effort=effort, lane=lane, workers=[], pending=[], pane="", workspace=workspace,
+                    effort=effort, lane=lane, pane="", workspace=workspace,
                     inbox="" if args.role == "worker" else str(home / "inbox" / f"{args.address}.json"))
         for key in ("name", "card", "handoff"):
             value = getattr(args, key)
             if value is not None:
                 seat[key] = value if key == "name" else absolute(value)
         validate(seat)
-        config = {} if args.family == "agy" else hooks(args.role)
-        flags = native(seat, config)
-        target = target_pane(args.tab, workspace, args.dry_run)
-        seat_path = home / "seats" / f"{args.address}.json"
-        write_json(seat_path, seat, args.dry_run)
+        config = hooks(args.role)
+        flags = native(seat, config, home)
+        if args.family == "codex":
+            warn_missing_hooks()
+        target, seat["tab"] = target_pane(args.tab, workspace, args.dry_run)
+        candidate = home / "seats" / f"{args.address}.json"
+        previous = json.loads(candidate.read_text()) if candidate.exists() else None
+        write_json(candidate, seat, args.dry_run)
+        seat_path = candidate
         result = herdr(["pane", "split", target, "--cwd", root, "--no-focus",
                         "--env", f"KILN_SEAT={seat_path}", "--env", f"KILN_HOME={home}"], args.dry_run)
         seat["pane"] = "<new-pane>" if args.dry_run else result["pane"]["pane_id"]
+        if previous and previous.get("pane") != seat["pane"]:
+            print(f"launch: warning: replacing {args.address} from pane {previous.get('pane')} with {seat['pane']}", file=sys.stderr)
         write_json(seat_path, seat, args.dry_run)
         short = {"claude-opus-5-5": "opus-5.5", "claude-fable-5-1": "fable-5.1",
                  "claude-sonnet-5-5": "sonnet-5.5", "gpt-6.1-sol": "sol-6.1",
                  "gpt-6-astra": "astra", "gemini-4-argon-high": "argon-high"}[model]
-        label = f"{args.name or args.address} · {args.role} · {short}"
+        role_text = {"super": "super manager", "manager": f"{seat['tab']} manager", "chunkmaster": "chunk master"}.get(args.role, args.role)
+        label = f"{args.name or args.address} · {role_text} · {short}"
         herdr(["pane", "rename", seat["pane"], label], args.dry_run)
         herdr(["agent", "start", args.address, "--kind", args.family, "--pane", seat["pane"],
                "--timeout", "30000", "--", *flags], args.dry_run)
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.TimeoutExpired) as error:
+        if seat_path is not None and not args.dry_run:
+            seat_path.unlink(missing_ok=True)
         parser.exit(1, f"launch: {error}\n")
 
 

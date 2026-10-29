@@ -4,11 +4,15 @@ import importlib.util
 import json
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import unittest
 from unittest.mock import patch
 
-from test_team import PLUGIN, Sandbox
+try:
+    from .test_team import PLUGIN, Sandbox
+except ImportError:
+    from test_team import PLUGIN, Sandbox
 
 
 def load_launcher():
@@ -33,13 +37,13 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def launch(self, *extra, ok=True):
         return self.run_tool('launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
-                             '--family', 'claude', '--root', str(self.root), '--parent', 'super', *extra, ok=ok)
+                             '--root', str(self.root), '--parent', 'super', *extra, ok=ok)
 
     def seat(self, addr='build'):
         return json.loads((self.home / 'seats' / f'{addr}.json').read_text())
 
     def assert_schema(self, seat):
-        schema = json.loads((PLUGIN.parents[1] / 'docs/seat.schema.json').read_text())
+        schema = json.loads((PLUGIN / 'config/seat.schema.json').read_text())
         self.assertTrue(set(schema['required']) <= seat.keys())
         self.assertTrue(seat.keys() <= schema['properties'].keys())
         for key, value in seat.items():
@@ -73,6 +77,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(seat['pane'], 'w-test:p3')
         self.assertEqual(seat['workspace'], 'w-test')
         self.assertEqual(seat['inbox'], str(self.home / 'inbox/build.json'))
+        self.assertNotIn('workers', seat)
+        self.assertNotIn('pending', seat)
         self.assertEqual(seat['card'], str(card))
         self.assertEqual(seat['handoff'], str(handoff))
         self.assertEqual(seat['extra_roots'], [str(extra)])
@@ -82,9 +88,10 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertIn('KILN_HOME=' + str(self.home), split)
         self.assertIn('--no-focus', split)
         self.assertEqual(self.calls()[3][:3], ['pane', 'rename', 'w-test:p3'])
-        self.assertEqual(self.calls()[3][3], 'Oracle · manager · opus-5.5')
+        self.assertEqual(self.calls()[3][3], 'Oracle · build manager · opus-5.5')
         flags = self.flags()
-        self.assertEqual(flags[:6], ['--model', 'claude-opus-5-5', '--effort', 'medium', '--permission-mode', 'acceptEdits'])
+        self.assertEqual(flags[:4], ['--model', 'claude-opus-5-5', '--effort', 'medium'])
+        self.assertNotIn('--permission-mode', flags)
         settings = json.loads(flags[flags.index('--settings') + 1])
         self.assertEqual(settings['fallbackModel'], [])
         self.assertFalse(settings['switchModelsOnFlag'])
@@ -97,7 +104,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertFalse((self.root / '.codex').exists())
 
     def test_claude_worker_defaults_to_review_without_start_hook(self):
-        self.launch('--role', 'worker')
+        self.launch('--role', 'worker', '--family', 'claude')
         self.assert_schema(self.seat())
         flags = self.flags()
         settings = json.loads(flags[flags.index('--settings') + 1])
@@ -122,6 +129,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         flags = self.flags()
         self.assertIn('model_reasoning_effort=medium', flags)
         self.assertIn('approval_policy=never', flags)
+        self.assertIn(str(self.home), [flags[i + 1] for i, flag in enumerate(flags) if flag == '--add-dir'])
         self.assertIn('--dangerously-bypass-hook-trust', flags)
         self.assertEqual(flags[flags.index('-s') + 1], 'workspace-write')
         self.assertEqual(flags[flags.index('-C') + 1], str(worktree))
@@ -136,16 +144,15 @@ class LaunchTests(Sandbox, unittest.TestCase):
         flags = self.flags()
         self.assertIn('sandbox_workspace_write.network_access=true', flags)
         self.assertIn('approval_policy=never', flags)
+        self.assertIn(str(self.home), [flags[i + 1] for i, flag in enumerate(flags) if flag == '--add-dir'])
         self.assertIn('--dangerously-bypass-hook-trust', flags)
         self.assertIn('model_reasoning_effort=high', flags)
         self.assertEqual(self.seat()['model'], 'gpt-6-astra')
 
-    def test_agy_advisor_one_shot_no_hooks(self):
-        self.launch('--family', 'agy', '--role', 'advisor')
-        self.assert_schema(self.seat())
-        self.assertEqual(self.flags(), ['-p', '--model', 'gemini-4-argon-high', '--effort', 'high',
-                                        '--sandbox', '--output-format', 'json'])
-        self.assertFalse((self.root / '.codex').exists())
+    def test_advisor_is_a_plain_command_not_a_seat(self):
+        self.launch('--family', 'agy', '--role', 'advisor', ok=False)
+        self.launch('--model', 'gemini-4-argon-high', ok=False)
+        self.assertEqual(self.calls(), [])
 
     def test_dry_run_no_writes_or_herdr_and_full_commands(self):
         for extra in [[], ['--family', 'codex', '--role', 'worker', '--worktree', str(self.base / 'new-worktree'),
@@ -167,7 +174,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), [])
         self.assertFalse(Path(self.env['CODEX_HOME']).exists())
 
-    def test_install_idempotent_preserves_foreign_entry_bytes_and_order(self):
+    def test_install_idempotent_preserves_foreign_entry_contents_and_order(self):
         path = Path(self.env['CODEX_HOME']) / 'hooks.json'
         path.parent.mkdir()
         foreign = '{ "matcher" : "startup",\r\n "hooks" : [{ "command" : "echo \\u263a", "type":"command" }] }'
@@ -182,7 +189,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.env.pop('KILN_HOME')  # Setup is independent of seat launches.
         self.run_tool('launch', 'install-hooks', '--family', 'codex')
         installed = path.read_bytes()
-        self.assertIn((foreign + ',' + second).encode(), installed)
+        self.assertEqual(json.loads(installed)['hooks']['SessionStart'][:2], [json.loads(foreign), json.loads(second)])
+        self.assertEqual(list(json.loads(installed)), ['description', 'hooks'])
         parsed = json.loads(installed)
         self.assertEqual(set(parsed['hooks']), {'Stop', 'SessionStart', 'PreToolUse'})
         for event, script in [('Stop', 'stop'), ('SessionStart', 'start'), ('PreToolUse', 'fence')]:
@@ -190,7 +198,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.run_tool('launch', 'install-hooks', '--family', 'codex')
         self.assertEqual(path.read_bytes(), installed)
         self.run_tool('launch', 'uninstall-hooks', '--family', 'codex')
-        self.assertIn((foreign + ',' + second).encode(), path.read_bytes())
+        self.assertEqual(json.loads(path.read_bytes())['description'], 'keep me')
         self.assertEqual(json.loads(path.read_bytes())['hooks']['SessionStart'],
                          [json.loads(foreign), json.loads(second)])
         uninstalled = path.read_bytes()
@@ -208,8 +216,6 @@ class LaunchTests(Sandbox, unittest.TestCase):
         group = '{"matcher":"KILN_SEAT", "hooks":[' + kiln + ',' + foreign + ',' + mcp + ']}'
         path.write_text('{"hooks":{"Stop":[' + group + '],"SessionEnd":[{"hooks":[' + kiln + ']}]}}')
         self.run_tool('launch', 'uninstall-hooks', '--family', 'codex')
-        self.assertIn(foreign.encode(), path.read_bytes())
-        self.assertIn(mcp.encode(), path.read_bytes())
         data = json.loads(path.read_bytes())
         self.assertEqual(data['hooks']['Stop'], [{'matcher': 'KILN_SEAT', 'hooks': [json.loads(foreign), json.loads(mcp)]}])
         self.assertEqual(data['hooks']['SessionEnd'], [])
@@ -255,6 +261,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
     def test_tab_id_and_bridge_label_resolution(self):
         self.launch('--tab', 'w-test:t2')
         self.assertEqual(self.calls()[2][2], 'w-test:p2')
+        self.assertEqual(self.seat()['tab'], 'bridge')
 
     def test_missing_tab_and_start_failure_are_not_retried(self):
         self.launch('--tab', 'missing', ok=False)
@@ -262,7 +269,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.env['FAKE_FAIL'] = 'agent start'
         self.launch(ok=False)
         self.assertEqual(sum(c[:2] == ['agent', 'start'] for c in self.calls()), 1)
-        self.assertEqual(self.seat()['pane'], 'w-test:p3')
+        self.assertFalse((self.home / 'seats/build.json').exists())
 
     def test_invalid_values_fail_before_herdr(self):
         for extra in [ ['--address', '../escape'], ['--family', 'codex'], ['--model', 'haiku'],
@@ -277,14 +284,133 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_routing_boss_override_and_defaults(self):
         launch = load_launcher()
-        routing = (PLUGIN.parents[1] / 'routing.toml').read_text()
+        routing = (PLUGIN / 'config/routing.toml').read_text()
         (self.base / 'routing.toml').write_text(routing.replace('bosses = "claude"', 'bosses = "gpt"'))
-        with patch.object(launch, 'REPO', self.base):
+        with patch.object(launch, 'CONFIG', self.base):
             for role, model in [('director', 'gpt-6-astra'), ('super', 'gpt-6.1-sol'), ('helper', 'gpt-6.1-sol')]:
                 args = argparse.Namespace(role=role, family='codex', model=None, effort=None)
                 self.assertEqual(launch.routing(args), ('balanced', model, 'medium'))
             args.model, args.effort = 'gpt-6.1-sol', 'low'
             self.assertEqual(launch.routing(args), ('balanced', 'gpt-6.1-sol', 'low'))
+
+    def copy_plugin(self):
+        target = self.base / 'installed copy'
+        (target / 'bin').mkdir(parents=True)
+        shutil.copy2(PLUGIN / 'bin/launch', target / 'bin/launch')
+        shutil.copytree(PLUGIN / 'config', target / 'config')
+        return target
+
+    def test_installed_copy_has_config_and_infers_gpt_boss_family(self):
+        target = self.copy_plugin()
+        routing = target / 'config/routing.toml'
+        routing.write_text(routing.read_text().replace('bosses = "claude"', 'bosses = "gpt"'))
+        subprocess.run([str(target / 'bin/launch'), '--help'], env=self.env,
+                       capture_output=True, text=True, check=True)
+        args = [str(target / 'bin/launch'), '--tab', 'bridge', '--address', 'director',
+                '--role', 'director', '--root', str(self.root), '--parent', '', '--dry-run']
+        result = subprocess.run(args, env=self.env, capture_output=True, text=True, check=True)
+        self.assertIn('--kind codex', result.stdout)
+        self.assertIn('--model gpt-6-astra', result.stdout)
+        self.assertIn('--dangerously-bypass-hook-trust', result.stdout)
+        self.assertIn('--add-dir ' + str(self.home), result.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_reinstall_from_another_copy_replaces_old_kiln_commands(self):
+        self.run_tool('launch', 'install-hooks', '--family', 'codex')
+        target = self.copy_plugin()
+        subprocess.run([str(target / 'bin/launch'), 'install-hooks', '--family', 'codex'],
+                       env=self.env, capture_output=True, text=True, check=True)
+        data = json.loads((Path(self.env['CODEX_HOME']) / 'hooks.json').read_text())
+        for groups in data['hooks'].values():
+            self.assertEqual(len(groups), 1)
+            command = groups[0]['hooks'][0]['command']
+            self.assertNotIn(str(PLUGIN), command)
+            self.assertIn(str(target / 'hooks'), shlex.split(command)[2])
+
+    def test_malformed_hook_json_is_reported_without_writing(self):
+        path = Path(self.env['CODEX_HOME']) / 'hooks.json'
+        path.parent.mkdir()
+        for original in ('broken', '{"hooks": []}', '{"hooks":{"Stop":false}}', '{"hooks":{"Stop":[3]}}'):
+            for operation in ('install-hooks', 'uninstall-hooks'):
+                path.write_text(original)
+                result = self.run_tool('launch', operation, '--family', 'codex', ok=False)
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertEqual(path.read_text(), original)
+
+    def test_nonobject_handlers_survive_uninstall_without_a_traceback(self):
+        path = Path(self.env['CODEX_HOME']) / 'hooks.json'
+        path.parent.mkdir()
+        foreign = ['keep', None, 1, {'type': 'command', 'command': 'keep'}]
+        handlers = foreign + [{'type': 'command', 'command': self.guard('stop')}]
+        path.write_text(json.dumps({'hooks': {'Stop': [{'hooks': handlers}]}}))
+        self.run_tool('launch', 'uninstall-hooks', '--family', 'codex')
+        self.assertEqual(json.loads(path.read_text())['hooks']['Stop'][0]['hooks'], foreign)
+
+    def test_install_and_uninstall_write_through_a_symlink(self):
+        path = Path(self.env['CODEX_HOME']) / 'hooks.json'
+        path.parent.mkdir()
+        target = self.base / 'shared-hooks.json'
+        target.write_text('{"description":"keep","hooks":{}}')
+        target.chmod(0o640)
+        path.symlink_to(target)
+        self.run_tool('launch', 'install-hooks', '--family', 'codex')
+        self.assertTrue(path.is_symlink())
+        self.assertEqual(target.stat().st_mode & 0o777, 0o640)
+        self.assertIn('Stop', json.loads(target.read_text())['hooks'])
+        self.run_tool('launch', 'uninstall-hooks', '--family', 'codex')
+        self.assertTrue(path.is_symlink())
+        self.assertEqual(json.loads(target.read_text())['description'], 'keep')
+
+    def test_failed_split_removes_seat_without_start_or_retry(self):
+        self.env['FAKE_FAIL'] = 'pane split'
+        self.launch(ok=False)
+        self.assertFalse((self.home / 'seats/build.json').exists())
+        self.assertEqual(sum(c[:2] == ['pane', 'split'] for c in self.calls()), 1)
+        self.assertFalse(any(c[:2] == ['agent', 'start'] for c in self.calls()))
+
+    def test_replacing_a_different_pane_warns_but_same_pane_does_not(self):
+        self.launch()
+        path = self.home / 'seats/build.json'
+        seat = self.seat()
+        seat['pane'] = 'old-pane'
+        path.write_text(json.dumps(seat))
+        self.assertIn('replacing build from pane old-pane', self.launch().stderr)
+        self.assertNotIn('replacing', self.launch().stderr)
+
+    def test_worktree_without_root_and_parent_validation(self):
+        self.run_tool('launch', '--tab', 'build', '--address', 'impl', '--role', 'worker',
+                      '--worktree', str(self.root), '--parent', 'build')
+        self.assertEqual(self.seat('impl')['root'], str(self.root))
+        self.assertEqual(self.seat('impl')['family'], 'codex')
+        before = self.calls()
+        self.launch('--parent', '../bad', ok=False)
+        self.assertEqual(self.calls(), before)
+        self.assertTrue((self.home / 'seats/impl.json').exists())
+
+    def test_routing_defaults_and_pane_role_words(self):
+        launch = load_launcher()
+        for role, model in [('manager', 'claude-opus-5-5'), ('helper', 'gpt-6.1-sol'),
+                            ('chunkmaster', 'gpt-6.1-sol')]:
+            args = argparse.Namespace(role=role, family=None, model=None, effort=None)
+            self.assertEqual(launch.routing(args), ('balanced', model, 'medium'))
+        for role, label in [('director', 'director'), ('super', 'super manager'), ('manager', 'build manager'),
+                            ('helper', 'helper'), ('chunkmaster', 'chunk master'), ('worker', 'worker')]:
+            self.launch('--role', role)
+            self.assertEqual(self.calls()[-2][3].split(' · ')[1], label)
+
+    def test_dry_run_without_home_and_plain_missing_env_message(self):
+        self.env.pop('KILN_HOME')
+        self.assertIn('KILN_HOME is required', self.launch(ok=False).stderr)
+        result = self.launch('--role', 'worker', '--dry-run')
+        self.assertIn('<KILN_HOME>', result.stdout)
+        self.assertIn('--add-dir', result.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_missing_hooks_warn_without_refusal_and_install_clears_warning(self):
+        result = self.launch('--role', 'helper')
+        self.assertIn('warning: Codex Kiln hooks are not installed', result.stderr)
+        self.run_tool('launch', 'install-hooks', '--family', 'codex')
+        self.assertNotIn('not installed', self.launch('--role', 'helper').stderr)
 
 
 if __name__ == '__main__':

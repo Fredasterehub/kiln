@@ -34,11 +34,29 @@ def locked(home):
 
 def records(home):
     path = home / "ledger.jsonl"
-    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    rows = []
+    if path.exists():
+        with path.open("rb") as stream:
+            for number, line in enumerate(stream, 1):
+                try:
+                    row = json.loads(line)
+                    if not isinstance(row, dict):
+                        raise ValueError("expected a row object")
+                    rows.append(row)
+                except ValueError as error:
+                    print(f"team: skipping ledger line {number}: {error}", file=sys.stderr)
+    return rows
 
 
-def markers(home, addr):
-    return set(read_json(home / "inbox" / f"{addr}.json", {"read": []})["read"])
+def markers(seat):
+    return set(read_json(Path(seat["inbox"]), {"read": []})["read"]) if seat["inbox"] else set()
+
+
+def environment(name):
+    value = os.environ.get(name)
+    if not value:
+        raise ValueError(f"{name} is required")
+    return value
 
 
 def emit(rows):
@@ -65,7 +83,7 @@ def nudge(home, receiver, row, delay):
             time.sleep(delay)
             state = herdr("agent", "get", addr)["agent"]["agent_status"]
         with locked(home):
-            unread = row["id"] not in markers(home, addr)
+            unread = row["id"] not in markers(receiver)
         if unread and state in ("idle", "done"):
             herdr("agent", "prompt", addr, "inbox")
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
@@ -78,6 +96,8 @@ def send(args, home, seat):
         raise ValueError("--from must match KILN_SEAT address")
     if seat["role"] == "worker" and args.kind != "question":
         raise ValueError("workers may send only question")
+    if args.cites is not None and args.kind not in ("done", "answer"):
+        raise ValueError("only done/answer may cite a row")
     receiver = read_json(home / "seats" / f"{address(args.to)}.json")
     if receiver is None:
         raise ValueError("receiver seat not found")
@@ -89,11 +109,20 @@ def send(args, home, seat):
             cited = next((r for r in rows if r["id"] == args.cites), None)
             if cited is None or cited["kind"] not in ("request", "question"):
                 raise ValueError("done/answer must cite a request/question id")
+            if cited["to"] != sender or args.to != cited["from"]:
+                raise ValueError("reply must come from the receiver and go to the original asker")
         now = dt.datetime.now(dt.timezone.utc)
         row = dict(id=f"{now:%Y%m%dT%H%M%S%fZ}-{secrets.token_hex(2)}",
                    **{"from": sender}, to=args.to, kind=args.kind, task=args.task,
                    headline=args.headline, path=args.path, time=now.isoformat(), cites=args.cites)
         with (home / "ledger.jsonl").open("a") as stream:
+            # Separate a torn final line from the next complete row.
+            path = home / "ledger.jsonl"
+            with path.open("rb") as existing:
+                if existing.seek(0, os.SEEK_END):
+                    existing.seek(-1, os.SEEK_END)
+                    if existing.read(1) != b"\n":
+                        stream.write("\n")
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")
             stream.flush()
             os.fsync(stream.fileno())
@@ -112,30 +141,46 @@ def main():
     send_parser.add_argument("--kind", required=True, choices=("request", "done", "question", "answer", "update"))
     send_parser.add_argument("--path")
     send_parser.add_argument("--cites")
-    send_parser.add_argument("--recheck-seconds", type=float, default=20,
-                             help="one busy receiver recheck delay (default: 20)")
+    send_parser.add_argument("--recheck-seconds", type=float, default=5,
+                             help="one busy receiver recheck delay (default: 5)")
     commands.add_parser("inbox", help="print unread rows").add_argument("--mark", action="store_true")
     commands.add_parser("overdue", help="print uncompleted requests").add_argument("--minutes", type=float, default=0)
     commands.add_parser("ledger", help="print ledger rows").add_argument("--tail", type=int)
+    commands.add_parser("workers", help="list seats whose parent is this seat")
+    commands.add_parser("pending", help="print received rows with no done/answer citation")
     args = parser.parse_args()
     try:
-        home = Path(os.environ["KILN_HOME"]).resolve()
+        home = Path(environment("KILN_HOME")).resolve()
+        seat = None
+        if args.command in ("send", "inbox", "workers", "pending"):
+            seat = read_json(Path(environment("KILN_SEAT")))
+            if seat is None:
+                raise ValueError("KILN_SEAT file not found")
         if args.command == "send":
             if args.recheck_seconds < 0:
                 raise ValueError("recheck seconds must be nonnegative")
-            send(args, home, read_json(Path(os.environ["KILN_SEAT"])))
+            send(args, home, seat)
             return
         with locked(home):
+            if args.command == "workers":
+                emit([child for path in sorted((home / "seats").glob("*.json"))
+                      if (child := read_json(path))["parent"] == seat["address"]])
+                return
             rows = records(home)
-            if args.command == "inbox":
-                seat = read_json(Path(os.environ["KILN_SEAT"]))
+            if args.command in ("inbox", "pending"):
                 addr = address(seat["address"])
-                read = markers(home, addr)
+                read = markers(seat)
+                if args.command == "pending":
+                    completed = {r.get("cites") for r in rows if r["kind"] in ("done", "answer")}
+                    emit([r for r in rows if r["to"] == addr and r["id"] in read and r["id"] not in completed])
+                    return
                 rows = [r for r in rows if r["to"] == addr and r["id"] not in read]
                 emit(rows)
                 sys.stdout.flush()
                 if args.mark:
-                    path = home / "inbox" / f"{addr}.json"
+                    if not seat["inbox"]:
+                        return
+                    path = Path(seat["inbox"])
                     path.parent.mkdir(parents=True, exist_ok=True)
                     temp = path.with_suffix(".tmp")
                     temp.write_text(json.dumps({"read": sorted(read | {r["id"] for r in rows})}) + "\n")
@@ -144,7 +189,7 @@ def main():
             if args.command == "overdue":
                 completed = {r["cites"] for r in rows if r["kind"] in ("done", "answer")}
                 cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=args.minutes)
-                rows = [r for r in rows if r["kind"] == "request" and r["id"] not in completed
+                rows = [r for r in rows if r["kind"] in ("request", "question") and r["id"] not in completed
                         and dt.datetime.fromisoformat(r["time"]) <= cutoff]
             elif args.tail is not None:
                 if args.tail < 0:

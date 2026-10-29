@@ -30,7 +30,7 @@ if args[:2] == ['agent', 'get']:
     if count == 2 and os.environ.get('FAKE_MARK'):
         home = pathlib.Path(os.environ['KILN_HOME'])
         row = json.loads((home / 'ledger.jsonl').read_text().splitlines()[-1])
-        path = home / 'inbox' / (args[2] + '.json')
+        path = pathlib.Path(json.loads((home / 'seats' / (args[2] + '.json')).read_text())['inbox'])
         path.parent.mkdir(exist_ok=True)
         path.write_text(json.dumps({'read': [row['id']]}))
 elif args[:2] == ['tab', 'list']:
@@ -83,10 +83,12 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.seat('receiver')
         self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
 
-    def seat(self, addr, role='manager', family='claude'):
+    def seat(self, addr, role='manager', family='claude', parent='', inbox=None):
         path = self.home / 'seats' / f'{addr}.json'
         path.parent.mkdir(exist_ok=True)
-        path.write_text(json.dumps(dict(address=addr, role=role, family=family)))
+        marker = str(self.home / 'inbox' / f'{addr}.json') if inbox is None else str(inbox)
+        path.write_text(json.dumps(dict(address=addr, role=role, family=family,
+                                       parent=parent, inbox=marker if role != 'worker' else '')))
 
     def send(self, kind='request', *extra, ok=True):
         return self.run_tool('team', 'send', '--from', 'sender', '--to', 'receiver',
@@ -95,6 +97,13 @@ class TeamTests(Sandbox, unittest.TestCase):
 
     def rows(self, result):
         return [json.loads(line) for line in result.stdout.splitlines()]
+
+    def reply(self, row, kind='done', *extra, ok=True):
+        self.env['KILN_SEAT'] = str(self.home / 'seats/receiver.json')
+        try:
+            return self.send(kind, '--from', 'receiver', '--to', 'sender', '--cites', row['id'], *extra, ok=ok)
+        finally:
+            self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
 
     def test_row_format_and_claude_no_nudge(self):
         row = self.rows(self.send())[0]
@@ -128,9 +137,10 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.send('answer', '--cites', update['id'], ok=False)
         self.send('done', '--cites', 'missing', ok=False)
         request = self.rows(self.send())[0]
-        self.send('done', '--cites', request['id'], '--path', '/result.md')
+        self.send('done', '--cites', request['id'], ok=False)
+        self.reply(request, 'done', '--path', '/result.md')
         question = self.rows(self.send('question'))[0]
-        self.send('answer', '--cites', question['id'])
+        self.reply(question, 'answer')
         self.assertEqual(self.rows(self.run_tool('team', 'overdue')), [])
 
     def test_inbox_receipt_does_not_complete_and_new_row_is_unread(self):
@@ -209,7 +219,7 @@ class TeamTests(Sandbox, unittest.TestCase):
         spec = importlib.util.spec_from_loader(loader.name, loader)
         module = importlib.util.module_from_spec(spec)
         loader.exec_module(module)
-        receiver = dict(address='receiver', family='codex')
+        receiver = dict(address='receiver', family='codex', inbox=str(self.base / 'marker.json'))
         ready = subprocess.CompletedProcess([], 0, '{"result":{"agent":{"agent_status":"idle"}}}', '')
         stalled = subprocess.TimeoutExpired(['herdr'], 30)
         errors = io.StringIO()
@@ -226,6 +236,77 @@ class TeamTests(Sandbox, unittest.TestCase):
         rows = self.rows(self.run_tool('team', 'ledger'))
         self.assertEqual(len(rows), 24)
         self.assertEqual(len({r['id'] for r in rows}), 24)
+
+    def test_reply_recipient_and_non_reply_citations(self):
+        row = self.rows(self.send())[0]
+        self.seat('third')
+        self.reply(row, 'done', '--to', 'third', ok=False)
+        for kind in ('request', 'question', 'update'):
+            self.send(kind, '--cites', row['id'], ok=False)
+        self.assertEqual(len(self.rows(self.run_tool('team', 'ledger'))), 1)
+
+    def test_overdue_includes_unanswered_questions(self):
+        question = self.rows(self.send('question'))[0]
+        self.assertEqual(self.rows(self.run_tool('team', 'overdue')), [question])
+        self.reply(question, 'answer')
+        self.assertEqual(self.rows(self.run_tool('team', 'overdue')), [])
+
+    def test_custom_inbox_path_used_for_receipts_and_nudges(self):
+        custom = self.base / 'custom' / 'receipts.json'
+        self.seat('receiver', inbox=custom)
+        row = self.rows(self.send())[0]
+        self.env['KILN_SEAT'] = str(self.home / 'seats/receiver.json')
+        self.run_tool('team', 'inbox', '--mark')
+        self.assertEqual(json.loads(custom.read_text()), {'read': [row['id']]})
+        self.assertFalse((self.home / 'inbox/receiver.json').exists())
+        self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
+        # A fake status check marks the new row at the declared path.
+        self.seat('receiver', family='codex', inbox=custom)
+        self.env.update(FAKE_STATES='working,idle', FAKE_MARK='1')
+        self.send()
+        self.assertEqual(self.calls(), [['agent', 'get', 'receiver']] * 2)
+
+    def test_pending_is_derived_from_receipts_and_completions(self):
+        request = self.rows(self.send())[0]
+        question = self.rows(self.send('question'))[0]
+        self.env['KILN_SEAT'] = str(self.home / 'seats/receiver.json')
+        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [])
+        self.run_tool('team', 'inbox', '--mark')
+        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [request, question])
+        self.reply(request)
+        update = self.rows(self.send('update'))[0]
+        self.env['KILN_SEAT'] = str(self.home / 'seats/receiver.json')
+        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [question])
+        self.run_tool('team', 'inbox', '--mark')
+        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [question, update])
+
+    def test_workers_are_seats_with_matching_parent(self):
+        self.seat('impl', role='worker', parent='sender')
+        self.seat('helper', role='helper', parent='sender')
+        self.seat('other', role='worker', parent='receiver')
+        rows = self.rows(self.run_tool('team', 'workers'))
+        self.assertEqual([r['address'] for r in rows], ['helper', 'impl'])
+        path = self.home / 'seats/impl.json'
+        path.unlink()
+        self.assertEqual([r['address'] for r in self.rows(self.run_tool('team', 'workers'))], ['helper'])
+
+    def test_corrupt_and_torn_lines_are_reported_without_losing_appends(self):
+        first = self.rows(self.send())[0]
+        with (self.home / 'ledger.jsonl').open('ab') as stream:
+            stream.write(b'not-json\n\xff\n{"id":')
+        sent = self.send('question')
+        self.assertIn('skipping ledger line 2', sent.stderr)
+        self.assertIn('skipping ledger line 3', sent.stderr)
+        self.assertIn('skipping ledger line 4', sent.stderr)
+        latest = self.rows(sent)[0]
+        self.assertEqual(self.rows(self.run_tool('team', 'ledger')), [first, latest])
+
+    def test_missing_environment_messages_and_recheck_default(self):
+        self.env.pop('KILN_SEAT')
+        self.assertIn('KILN_SEAT is required', self.send(ok=False).stderr)
+        self.env.pop('KILN_HOME')
+        self.assertIn('KILN_HOME is required', self.run_tool('team', 'ledger', ok=False).stderr)
+        self.assertIn('default: 5', self.run_tool('team', 'send', '--help').stdout)
 
     def test_help_without_environment(self):
         self.env.pop('KILN_HOME')

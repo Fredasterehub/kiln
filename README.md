@@ -7,7 +7,6 @@ Principles, in the operator's words: *the owner answers, the file remembers* (ow
 - `docs/SPEC.md` — the agreed design for v0 (source of truth while v0 is built).
 - `docs/fred-protocol.md` — the operator's own statement of how the team works.
 - `docs/handoffs.md` — per-phase hand-off table: artifact, producing seat, accepting seat, completion evidence.
-- `docs/seat.schema.json` — the `seat.json` the launcher writes for every seat; hooks and the team tool read their identity from it.
-- `routing.toml` — model lanes per role; v0 ships `balanced` plus the `bosses` override.
+- Plugin config: [seat schema](plugins/kiln/config/seat.schema.json) defines seat identity; [routing](plugins/kiln/config/routing.toml) defines the balanced lane and bosses override.
 
 Status: v0 under construction on branch `v4` (orphan). Previous Kiln (v3.2.2) lives on `main` until v4 is released.

@@ -1,80 +1,81 @@
 # Pinned family contract (Kiln 4, kernel step 2)
 
-`plugins/kiln/bin/launch` emits these native arguments after Herdr's `--`.
-The installed `claude --help`, `codex exec --help`, and `agy --help` were
-checked on 2026-10-29. Models use the exact IDs in `routing.toml` and
-`seat.schema.json`; there is no model fallback or provider substitution.
+`plugins/kiln/bin/launch` emits native arguments after Herdr's `--`.
+The plugin ships its own [routing](../plugins/kiln/config/routing.toml) and
+[seat schema](../plugins/kiln/config/seat.schema.json), resolved from the
+launcher's location, so a copied plugin needs no repository-level config.
 
 | Family / seat | Native arguments |
 | --- | --- |
-| Claude, persistent or worker | `--model <id> --effort <e> --permission-mode acceptEdits --settings <inline-json>` |
-| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <root> -c approval_policy=never --dangerously-bypass-hook-trust -c sandbox_workspace_write.network_access=true` |
-| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <worktree-or-root> -c approval_policy=never --dangerously-bypass-hook-trust --add-dir <run>` (when supplied) |
-| agy, advisor only | `-p --model <id> --effort <e> --sandbox --output-format json` |
+| Claude | `--model <id> --effort <e> --settings <inline-json>` |
+| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <root> -c approval_policy=never --dangerously-bypass-hook-trust --add-dir <KILN_HOME> -c sandbox_workspace_write.network_access=true` |
+| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <worktree-or-root> -c approval_policy=never --dangerously-bypass-hook-trust --add-dir <KILN_HOME>` |
 
-Claude and Codex also receive one `--add-dir <dir>` per declared extra root.
-`--run` adds its directory to that list; `--worktree` replaces the writable root.
-All paths are absolute. The split pane starts in the writable root.
+Both families receive one `--add-dir <dir>` per declared extra root; `--run`
+adds its directory to that list. `--worktree` supplies the writable root and
+makes `--root` optional. Paths are absolute. Codex always receives KILN_HOME
+as an additional writable directory so seats can append rows and mark inboxes.
+`approval_policy=never` lets Codex run unattended within its native sandbox.
 
-Claude's inline settings combine `{"fallbackModel":[],"switchModelsOnFlag":false}`
-with hooks and `permissions.allow` entries `Edit(//absolute/root/**)` for the
-root and extra roots. `acceptEdits` accepts writes in the working directories;
-these settings do not claim to sandbox arbitrary shell writes. See the
-[Claude permission contract](https://code.claude.com/docs/en/permissions).
+Claude inherits the operator's permission mode: the launcher emits no
+`--permission-mode`. The fence controls writes; inline `permissions.allow`
+contains declared-root `Edit(//absolute/root/**)` rules without claiming to
+sandbox shell writes. Settings retain `{"fallbackModel":[],"switchModelsOnFlag":false}`.
+The [settings guide](https://code.claude.com/docs/en/settings.md) links the
+[current key reference](https://code.claude.com/docs/en/settings-reference.md),
+verified 2026-10-29: lines 425 and 767 name `fallbackModel` and
+`switchModelsOnFlag`; line 779 shows `"switchModelsOnFlag": false`.
 
 Claude receives Stop → `stop.sh`, PreToolUse → `fence.sh`, and, for persistent
-roles, SessionStart → `start.sh`, via inline settings only. No Claude user or
-project settings file is written. agy has no hooks.
+roles, SessionStart → `start.sh`, via inline settings only. The existing
+Claude adapter adds the persistent seat's asynchronous inbox listener.
+No Claude user or project settings file is written.
 
 Install Codex's three events (Stop, SessionStart, PreToolUse) once with
-`plugins/kiln/bin/launch install-hooks --family codex`; remove them with
+`plugins/kiln/bin/launch install-hooks --family codex`; uninstall with
 `plugins/kiln/bin/launch uninstall-hooks --family codex`. Both accept `--dry-run`.
-The target is `$CODEX_HOME/hooks.json`, or `~/.codex/hooks.json` when unset.
-Installation is idempotent and preserves the bytes and order of non-Kiln
-entries. Uninstall removes only handlers whose command contains `KILN_SEAT`,
-and drops a matcher group only when those removals empty it. Seat launches
-write no Codex hook files; neither setup nor launch edits `config.toml`.
+The target is `$CODEX_HOME/hooks.json`, otherwise `~/.codex/hooks.json`.
+Install first removes existing handlers whose commands contain `KILN_SEAT`,
+then appends the current copy's handlers. Uninstall removes only those handlers
+and drops groups emptied by those removals. Non-Kiln content and order remain;
+JSON formatting is normalized with indent 2. Parse and shape checks happen
+before writing, and writes follow a symlink to its resolved target.
+Seat launches write no hook files and never edit Codex `config.toml`.
+Missing installed Kiln hooks produce a warning and never refuse a launch.
+Codex installs SessionStart for all seats; `start.sh` exits for workers.
 
-Every Kiln hook command, in both families, has this guard (the plugin root
-is resolved from the launcher's own location; script paths are shell-quoted):
+Every Kiln hook command has this guard; paths resolve from the launcher's
+own location and are shell-quoted when necessary:
 
 ```sh
 sh -c '[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] || exit 0; exec <absolute-plugin-root>/hooks/<script>.sh'
 ```
 
-Paths point to `plugins/kiln/hooks/`; this step does not create those scripts.
-The hook object follows the [Claude hook schema](https://code.claude.com/docs/en/hooks.md)
-and [Codex hook schema](https://learn.chatgpt.com/docs/hooks), checked 2026-10-29.
-Both schemas nest event arrays, matcher-group `hooks` arrays, then handlers
-with `"type": "command"` and `"command"` fields. Codex's docs list all three
-event names and user-level hooks; Claude's docs use the same settings structure.
-Codex's `-c` values use its native config override mechanism; help verifies the
-flag, while the pinned values come from SPEC §3 and the config reference.
+Both the [Claude hooks](https://code.claude.com/docs/en/hooks.md) and
+[Codex hooks](https://learn.chatgpt.com/docs/hooks) schemas use event arrays,
+matcher-group `hooks` arrays, and command handlers with `type` and `command`.
+Installed Codex 0.165.0 help verifies `--dangerously-bypass-hook-trust`;
+SPEC §3's isolated probe established unattended user hooks in fresh worktrees.
+The flag applies to all enabled sources, including non-Kiln hooks.
 
-The launcher reads the repository's `routing.toml`. Defaults use the active
-lane's role row and apply `boss_lanes.gpt` to director/super when `bosses="gpt"`.
-The generic worker role defaults to `implementer` for Codex and `review_of_gpt`
-for Claude; task-specific routing uses explicit `--model` / `--effort`.
-An explicit family must match the resulting model. Advisor defaults to its
-advisor row. Explicit model and effort override their respective defaults.
+The active lane supplies model/effort defaults; `bosses="gpt"` overrides
+`director` and `super`. Explicit model/effort override independently.
+Family is derived from the final model; optional `--family` checks a caller's
+explicit choice. Generic workers default to `implementer`, or `review_of_gpt`
+when Claude is selected. No advisor seat exists: Argon runs as a plain
+`agy -p <sanitized-prompt> --model gemini-4-argon-high --effort high --sandbox
+--output-format json` command, outside this launcher, with no hooks or inbox.
 
-Herdr commands are `tab list --workspace <HERDR_WORKSPACE_ID>`,
-`pane list --workspace <id>`, `pane split <tab-pane> --cwd <root> --no-focus
---env KILN_SEAT=<seat-path> --env KILN_HOME=<home>`, `pane rename <new-pane>
-'<name-or-address> · <role> · <short-model>'`, and `agent start <address>
---kind <family> --pane <new-pane> --timeout 30000 -- <native-arguments>`.
-`--tab` accepts a unique label or ID in the caller's workspace; the first pane
-listed in that tab is the split target. Workspace and pane IDs come from
-Herdr responses, never from UI focus. Seat identity is written before agent start.
+The launcher selects a tab by unique label or ID within HERDR_WORKSPACE_ID,
+splits its first listed pane, and stores the resolved tab label. Labels use
+`<name-or-address> · <role-text> · <short-model>`; role text is `director`,
+`super manager`, `<tab> manager`, `helper`, `chunk master`, or `worker`.
+Herdr startup uses `agent start <addr> --kind <family> --pane <new-pane>
+--timeout 30000 -- <native-arguments>`. Failed split/start removes the seat
+record; an overwritten address with a different pane produces a warning.
+Workers and pending rows are derived via `team workers` and `team pending`.
 
-`--dry-run` makes no Herdr calls and writes no files. It prints the commands
-and commented JSON file writes, using `<workspace>` if no workspace env exists,
-`<tab-pane>` for the pane to split, and `<new-pane>` for the returned pane ID.
-
-The installed Codex 0.165.0 `codex exec --help` and `codex --help` confirm
-`--dangerously-bypass-hook-trust`. SPEC §3's isolated probe established that
-user-level hooks plus this flag run unattended in fresh worktrees. The flag
-applies to all enabled hook sources, including preserved non-Kiln hooks.
-Live card/write/resume acceptance remains integration work after step 3.
-Herdr describes `agent start` as interactive readiness; agy's one-shot `-p`
-readiness needs that isolated acceptance check as well.
+`--dry-run` writes no files and makes no Herdr calls. It prints commands and
+commented JSON writes, using placeholders for unavailable pane/workspace IDs
+and `<KILN_HOME>` when unset. Live card/write/resume and local-socket sandbox
+acceptance remain integration work, separate from these fake-Herdr unit tests.
