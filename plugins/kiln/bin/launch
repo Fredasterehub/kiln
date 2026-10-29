@@ -407,7 +407,15 @@ def main():
         label = f"{args.name or args.address} · {role_text} · {short}"
         herdr(["pane", "rename", seat["pane"], label], args.dry_run)
         # Re-read immediately before start and re-apply once if the flag disappeared.
-        pretrust(root, args.family, args.dry_run)
+        if not args.dry_run:
+            try:
+                pretrust(root, args.family, False)
+            except (OSError, ValueError, KeyError, TypeError):
+                try:
+                    herdr(["pane", "close", seat["pane"]], False)
+                except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as cleanup_error:
+                    print(f"launch: could not close pane {seat['pane']}: {cleanup_error}", file=sys.stderr)
+                raise
         herdr(["agent", "start", args.address, "--kind", args.family, "--pane", seat["pane"],
                "--timeout", "30000", "--", *flags], args.dry_run)
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.TimeoutExpired) as error:

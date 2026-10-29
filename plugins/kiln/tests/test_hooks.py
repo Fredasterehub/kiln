@@ -803,17 +803,59 @@ class HookTests(unittest.TestCase):
         self.assertNotIn('initial-id', err)
         self.assertEqual(json.loads((self.home / 'inbox/build.json').read_text()), {'read': []})
 
-    def test_continued_listener_expiry_does_not_rewake_initial_unread(self):
+    def expire_continued_listener(self, before_expiry=None):
         ns = runpy.run_path(str(HOOKS / 'lib/core.py'))
-        self.rows(self.row('initial-id'))
-        with patch.object(time, 'monotonic', side_effect=[0, 281]):
-            with contextlib.redirect_stderr(io.StringIO()) as err:
-                result = ns['listen'](self.home, self.seat, {'hook_event_name': 'Stop', 'stop_hook_active': True}, {})
-        self.assertEqual(result, 0)
-        self.assertEqual(err.getvalue(), '')
-        self.assertFalse((self.home / 'listeners/build.pid').exists())
+        ticks = iter([0, 0, 281])
+        def clock():
+            now = next(ticks)
+            if now == 281 and before_expiry:
+                before_expiry()
+            return now
+        payload = dict(hook_event_name='Stop', stop_hook_active=True, session_id='claude-session')
+        with patch.dict(os.environ, self.env), patch.object(time, 'monotonic', side_effect=clock):
+            with patch.object(time, 'sleep') as sleep, contextlib.redirect_stderr(io.StringIO()) as err:
+                result = ns['listen'](self.home, self.seat, payload, {})
+                sleep.assert_called_once_with(1)
+        return result, err.getvalue()
 
-    def test_continued_listener_expiry_wakes_new_ids_only(self):
+    def test_continued_listener_delays_initial_unread_wake_until_expiry(self):
+        self.rows(self.row('initial-id'))
+        result, err = self.expire_continued_listener()
+        self.assertEqual(result, 2)
+        self.assertIn('Unread rows initial-id', err)
+        self.assertEqual(err.count('initial-id'), 1)
+        self.assertFalse((self.home / 'listeners/build.pid').exists())
+        self.assertEqual(json.loads((self.home / 'inbox/build.json').read_text()), {'read': []})
+
+    def test_continued_listener_does_not_wake_if_initial_rows_read_before_expiry(self):
+        self.rows(self.row('initial-id'))
+        def read_before_expiry():
+            self.assertTrue((self.home / 'listeners/build.pid').exists())
+            (self.home / 'inbox/build.json').write_text(json.dumps({'read': ['initial-id']}))
+        result, err = self.expire_continued_listener(read_before_expiry)
+        self.assertEqual((result, err), (0, ''))
+        self.assertFalse((self.home / 'listeners/build.expiry.json').exists())
+
+    def test_second_continued_listener_never_repeats_delayed_ids(self):
+        self.rows(self.row('initial-id'))
+        self.assertEqual(self.expire_continued_listener()[0], 2)
+        result, err = self.expire_continued_listener()
+        self.assertEqual((result, err), (0, ''))
+        self.assertEqual(json.loads((self.home / 'listeners/build.expiry.json').read_text()),
+                         {'woken': ['initial-id']})
+        self.assertEqual(json.loads((self.home / 'inbox/build.json').read_text()), {'read': []})
+
+    def test_new_initial_ids_keep_their_own_one_time_expiry_wake(self):
+        self.rows(self.row('old-id'))
+        self.assertEqual(self.expire_continued_listener()[0], 2)
+        self.rows(self.row('old-id'), self.row('another-id'))
+        result, err = self.expire_continued_listener()
+        self.assertEqual(result, 2)
+        self.assertIn('Unread rows another-id', err)
+        self.assertNotIn('old-id', err)
+        self.assertEqual(self.expire_continued_listener(), (0, ''))
+
+    def test_continued_listener_expiry_combines_new_and_once_delayed_ids(self):
         ns = runpy.run_path(str(HOOKS / 'lib/core.py'))
         self.rows(self.row('initial-id'))
         ticks = iter([0, 281])
@@ -829,7 +871,7 @@ class HookTests(unittest.TestCase):
                 result = ns['listen'](self.home, self.seat, {'hook_event_name': 'Stop', 'stop_hook_active': True}, {})
         self.assertEqual(result, 2)
         self.assertIn('new-id', err.getvalue())
-        self.assertNotIn('initial-id', err.getvalue())
+        self.assertEqual(err.getvalue().count('initial-id'), 1)
 
     def test_herdr_probe_target_is_literal_and_later_help_is_not_exempt(self):
         for family in STOP_INPUTS:

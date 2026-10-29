@@ -186,6 +186,8 @@ def listen_armed(home, seat, metrics, stream, rows, session, ignore_ids):
     pid_marker = directory / f'{seat["address"]}.pid'
     lock_path = directory / f'{seat["address"]}.lock'
     token = uuid.uuid4().hex
+    initial_rows = [r for r in rows if r["id"] in ignore_ids]
+    expiry_receipt = directory / f'{seat["address"]}.expiry.json'
     def retire():
         with lock_path.open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -221,7 +223,18 @@ def listen_armed(home, seat, metrics, stream, rows, session, ignore_ids):
         retire()
         if listener_outgoing(home, seat, session, metrics):
             return 0
-        return wake(fresh_unread(rows + ledger(home, metrics, stream)))
+        fresh = fresh_unread(rows + ledger(home, metrics, stream))
+        with lock_path.open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if read_json(marker, {}).get("token") != token:
+                return 0  # A replacement owns delivery now.
+            woken = set(read_json(expiry_receipt, {"woken": []})["woken"])
+            delayed = {r["id"]: r for r in unread(seat, initial_rows) if r["id"] not in woken}
+            if delayed:
+                temporary = expiry_receipt.with_suffix(".tmp")
+                temporary.write_text(json.dumps({"woken": sorted(woken | delayed.keys())}) + "\n")
+                temporary.replace(expiry_receipt)
+        return wake(fresh + list(delayed.values()))
     finally:
         try:
             retire()

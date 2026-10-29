@@ -73,6 +73,17 @@ def nudge(home, receiver, row, delay):
         print(f"team: row {row['id']} saved; nudge failed: {error}", file=sys.stderr)
 
 
+def mark_read(seat, ids):
+    """Caller holds the ledger lock, including across receipt read and replace."""
+    if not seat["inbox"]:
+        return
+    path = Path(seat["inbox"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps({"read": sorted(markers(seat) | set(ids))}) + "\n")
+    temp.replace(path)
+
+
 def send(args, home, seat):
     sender = address(seat["address"])
     if args.sender != sender:
@@ -118,9 +129,12 @@ def send(args, home, seat):
             stream.write(json.dumps(row, ensure_ascii=False) + "\n")
             stream.flush()
             os.fsync(stream.fileno())
+        self_answer = args.kind == "answer" and args.to == sender
+        if self_answer:
+            mark_read(seat, [row["id"]])
     emit([row])
     sys.stdout.flush()
-    if seat["role"] != "worker":
+    if seat["role"] != "worker" and not self_answer:
         nudge(home, receiver, row, args.recheck_seconds)
 
 
@@ -201,13 +215,7 @@ def main():
                 emit(rows)
                 sys.stdout.flush()
                 if args.mark:
-                    if not seat["inbox"]:
-                        return
-                    path = Path(seat["inbox"])
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    temp = path.with_suffix(".tmp")
-                    temp.write_text(json.dumps({"read": sorted(read | {r["id"] for r in rows})}) + "\n")
-                    temp.replace(path)
+                    mark_read(seat, [r["id"] for r in rows])
                 return
             if args.command == "overdue":
                 completed = {r.get("cites") for r in rows if r.get("kind") in ("done", "answer")}

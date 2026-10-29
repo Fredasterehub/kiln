@@ -701,7 +701,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
             original = path.read_bytes()
             result = self.launch('--role', role, '--dry-run')
             self.assertIn(str(path), result.stdout)
-            self.assertIn('# backup', result.stdout)
+            self.assertEqual(result.stdout.count('# backup'), 1)
+            self.assertEqual(result.stdout.count('# append' if role == 'helper' else '# set'), 1)
             self.assertIn('trust_level' if role == 'helper' else 'hasTrustDialogAccepted', result.stdout)
             self.assertNotIn('private-canary', result.stdout)
             self.assertEqual(path.read_bytes(), original)
@@ -789,10 +790,17 @@ class LaunchTests(Sandbox, unittest.TestCase):
             path = (Path(self.env['CODEX_HOME']) / 'config.toml' if family == 'codex'
                     else Path(self.env['HOME']) / '.claude.json')
             writes = []
+            closed = []
+            seat_path = self.home / 'seats/build.json'
+            seat_path.parent.mkdir(exist_ok=True)
+            previous = {'pane': 'old-pane', 'address': 'build'}
+            seat_path.write_text(json.dumps(previous))
             def checked(args, dry_run):
                 if args[:2] == ['pane', 'rename']:
                     path.write_text('' if family == 'codex' else '{}')
                 self.assertNotEqual(args[:2], ['agent', 'start'])
+                if args[:2] == ['pane', 'close']:
+                    closed.append(args)
                 return original_herdr(args, dry_run)
             def lost_again(target, content, mode):
                 original_write(target, content, mode)
@@ -808,6 +816,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
                     module.main()
                 self.assertIn('after re-apply; refusing launch', errors.getvalue())
             self.assertEqual(len(writes), 2)
+            self.assertEqual(closed, [['pane', 'close', 'w-test:p3']])
+            self.assertEqual(json.loads(seat_path.read_text()), previous)
 
     def test_atomic_trust_temp_is_private_and_fsynced_before_replace(self):
         module = load_launcher()

@@ -486,6 +486,20 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.assertEqual(self.calls()[-1], ['agent', 'get', 'receiver'])
         self.assertEqual(len(self.calls()), 3)
 
+    def test_launcher_self_answer_is_received_at_send_and_remains_in_ledger(self):
+        question = self.worker_question(to='launcher')
+        marker = self.base / 'custom-inbox/launcher.json'
+        self.seat('launcher', inbox=str(marker))
+        self.assertEqual(self.rows(self.run_tool('team', 'inbox', '--mark')), [question])
+        self.assertEqual(self.calls(), [])
+        result = self.send('answer', '--from', 'launcher', '--to', 'launcher', '--cites', question['id'])
+        answer = self.rows(result)[0]
+        self.assertEqual(set(json.loads(marker.read_text())['read']), {question['id'], answer['id']})
+        self.assertEqual(self.rows(self.run_tool('team', 'inbox')), [])
+        self.assertEqual(self.rows(self.run_tool('team', 'pending')), [])
+        self.assertEqual(self.rows(self.run_tool('team', 'ledger')), [question, answer])
+        self.assertEqual(self.calls(), [])
+
 
 if __name__ == '__main__':
     unittest.main()

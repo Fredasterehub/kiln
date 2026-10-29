@@ -42,7 +42,8 @@ Codex Stop emits nothing: the docs do not specify a reason-only advisory shape.
 Unread rows stay unread; the hook does not mark receipt or completion. A Codex
 seat ending a continued Stop with unread rows waits for the next nudge or
 `team relay`; this hook does not guarantee an immediate wake. Claude's continued
-listener ignores the initial unread IDs and wakes only for new unread rows.
+listener defers the initial unread IDs until expiry, with one delayed wake per
+ID if still unread; new unread rows can wake it immediately.
 An empty reason produces no output. Outgoing sessions still check only rotation,
 never replacement inbox/workers. Workers always stop. Completion and sending
 done remain card rules.
@@ -146,10 +147,19 @@ example on a broken child record), the listener arms normally and wakes on the
 unread rows; the diagnostic is logged. It does not assume that finding unread
 rows means the rest of the synchronous policy succeeded. Other listeners scan the initial ledger once, then read only appended bytes at their
 last offset every 1 s; receipt files are checked without consuming rows.
-On stop_hook_active, the initial unread ID set is excluded for that listener's
-whole lifetime, including its final expiry check. Existing unread rows cannot
-repeatedly trigger asyncRewake; new unread IDs still wake the seat. Exclusion
-never marks the old rows read or completed.
+On stop_hook_active, initial unread IDs are excluded from ordinary polling;
+new unread IDs still wake immediately. At expiry, initial rows still unread
+get one delayed exit-2 wake, named alongside any new unread rows found then.
+Rows marked read before that check do not wake the seat. A listener that exits
+early for new rows does not consume the initial rows' delayed-wake allowance.
+
+`listeners/<address>.expiry.json` records `{"woken":["row-id"]}` for delayed wakes
+only. At expiry the listener checks receipt state under its generation lock and
+atomically records newly claimed IDs before exiting 2. A superseded generation
+cannot claim them. This state persists across re-arms: a second continued Stop
+with the same unread IDs cannot give them another delayed wake. Each new ID has
+its own allowance. The file is notification bookkeeping, not an inbox receipt;
+no rows are marked read or completed, and Codex remains on relay/nudge delivery.
 
 Each listener publishes listeners/<address>.pid under its generation lock and
 removes only its own marker on wake, error, termination or supersession. On expiry
