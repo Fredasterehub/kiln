@@ -1368,10 +1368,13 @@ test('every rung of the ladder is re-entrant: asked again, and asked by a new pr
 // to forbid them, and a proof that cannot tell documentation from use would
 // either fail on its own contract or have to stop reading the prose that
 // states it.
-test('no workflow script and no part of the resolver reaches for a forbidden mechanism', () => {
+test('no workflow script and no part of a resolver reaches for a forbidden mechanism', () => {
   const roots = [
     path.join(__dirname, '..', '..', 'workflows'),
     path.join(__dirname, '..', 'src', 'spine.js'),
+    // Every resolver joins this proof as it lands: the absences are a property
+    // of the layer, not of the first module that happened to hold them.
+    path.join(__dirname, '..', 'src', 'verification-spine.js'),
   ];
   const files = [];
   for (const root of roots) {
@@ -1384,7 +1387,7 @@ test('no workflow script and no part of the resolver reaches for a forbidden mec
       files.push(root);
     }
   }
-  assert.ok(files.length >= 2, 'the proof must actually be reading the workflow scripts and the resolver');
+  assert.ok(files.length >= 3, 'the proof must actually be reading the workflow scripts and both resolvers');
 
   const forbidden = [
     [/SendMessage/, 'SendMessage'],
