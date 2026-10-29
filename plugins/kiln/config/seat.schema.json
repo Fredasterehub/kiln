@@ -107,6 +107,12 @@
     "workspace": {
       "type": "string",
       "description": "Herdr workspace id."
+    },
+    "wait_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1800000,
+      "description": "Herdr wait timeout in milliseconds, supplied by --wait-ms."
     }
   }
 }

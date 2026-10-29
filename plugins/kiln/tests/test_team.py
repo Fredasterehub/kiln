@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -82,7 +83,12 @@ class TeamTests(Sandbox, unittest.TestCase):
         self.seat('sender')
         self.seat('receiver')
         (self.home / 'listeners').mkdir()
-        (self.home / 'listeners/receiver.pid').write_text(str(os.getpid()))
+        self.listener = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', 'core.py', 'listen'])
+        def cleanup_listener():
+            self.listener.terminate()
+            self.listener.wait()
+        self.addCleanup(cleanup_listener)
+        (self.home / 'listeners/receiver.pid').write_text(str(self.listener.pid))
         self.env['KILN_SEAT'] = str(self.home / 'seats/sender.json')
 
     def seat(self, addr, role='manager', family='claude', parent='', inbox=None):
@@ -157,12 +163,17 @@ class TeamTests(Sandbox, unittest.TestCase):
         marker.unlink()
         receiver = dict(address='receiver', family='claude', inbox=str(self.base / 'marker.json'))
         def arm(_):
-            marker.write_text(str(os.getpid()))
+            marker.write_text(str(self.listener.pid))
         with patch.object(module, 'herdr', side_effect=[{'agent': {'agent_status': 'working'}},
                                                       {'agent': {'agent_status': 'idle'}}]) as herdr:
             with patch.object(module.time, 'sleep', side_effect=arm):
                 module.nudge(self.home, receiver, {'id': 'row'}, 0)
         self.assertEqual(herdr.call_count, 2)
+
+    def test_listener_pid_reused_by_unrelated_process_does_not_suppress_nudge(self):
+        (self.home / 'listeners/receiver.pid').write_text(str(os.getpid()))
+        self.send()
+        self.assertEqual(self.calls(), [['agent', 'get', 'receiver'], ['agent', 'prompt', 'receiver', 'inbox']])
 
     def test_identity_and_worker_rules(self):
         self.send('update', '--from', 'impostor', ok=False)

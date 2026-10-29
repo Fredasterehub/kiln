@@ -18,13 +18,11 @@ as an additional writable directory so seats can append rows and mark inboxes.
 `approval_policy=never` lets Codex run unattended within its native sandbox.
 
 Claude inherits the operator's permission mode: the launcher emits no
-`--permission-mode`. The fence controls writes; inline `permissions.allow`
-contains declared-root `Edit(//absolute/root/**)` rules without claiming to
-sandbox shell writes. Settings retain `{"fallbackModel":[],"switchModelsOnFlag":false}`.
-The [settings guide](https://code.claude.com/docs/en/settings.md) links the
-[current key reference](https://code.claude.com/docs/en/settings-reference.md),
-verified 2026-10-29: lines 425 and 767 name `fallbackModel` and
-`switchModelsOnFlag`; line 779 shows `"switchModelsOnFlag": false`.
+`--permission-mode` and no Edit permission allow rules. The fence covers native
+edit tools only. Claude shell writes have no native directory scope. Codex's
+sandbox includes all KILN_HOME via --add-dir; shell writes can alter other seats'
+receipts, records and ledger state. This is a known integrity gap, not covered
+by the edit-tool fence. Settings retain fallbackModel=[] and switchModelsOnFlag=false.
 
 Claude receives Stop → `stop.sh`, PreToolUse → `fence.sh`, and, for persistent
 roles, SessionStart → `start.sh`, via inline settings only. The existing
@@ -38,7 +36,7 @@ Install Codex's three events (Stop, SessionStart, PreToolUse) once with
 `plugins/kiln/bin/launch uninstall-hooks --family codex`. Both accept `--dry-run`.
 The target is `$CODEX_HOME/hooks.json`, otherwise `~/.codex/hooks.json`.
 Install first removes existing handlers whose commands contain `KILN_SEAT`,
-then appends the current copy's handlers. Uninstall removes only those handlers
+then appends the current generic Kiln handlers. Uninstall removes only those handlers
 and drops groups emptied by those removals. Non-Kiln content and order remain;
 JSON formatting is normalized with indent 2. Parse and shape checks happen
 before writing, and writes follow a symlink to its resolved target.
@@ -47,11 +45,11 @@ Seat launches write no hook files and never edit Codex `config.toml`.
 Missing installed Kiln hooks produce a warning and never refuse a launch.
 Codex installs SessionStart for all seats; `start.sh` exits for workers.
 
-Every Kiln hook command has this guard; paths resolve from the launcher's
-own location and are shell-quoted when necessary:
+Every Kiln hook command has this guard; KILN_PLUGIN is passed through Herdr's
+--env for each seat so frozen copies select their own code:
 
 ```sh
-sh -c '[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] || exit 0; exec <absolute-plugin-root>/hooks/<script>.sh'
+sh -c '[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] && [ -n "$KILN_PLUGIN" ] || exit 0; exec "$KILN_PLUGIN/hooks/<script>.sh"'
 ```
 
 Both the [Claude hooks](https://code.claude.com/docs/en/hooks.md) and
@@ -91,13 +89,19 @@ children are seat files whose parent matches this address, regardless of role;
 pending rows are requests or questions addressed here, received in `seat.inbox`,
 and not cited by any done/answer. The hook reads this state directly, without
 invoking team. The launcher's owner runs `team close <addr>` when it accepts a
-worker; this removes the seat record and is idempotent. The stop hook treats
-every listed child as live until that record is removed. Closing a persistent
+worker; this removes the seat record and is idempotent. Stop counts only worker
+children whose current status lacks a terminal done/question line; persistent
+children never count. Closing a persistent
 seat requires `team close <addr> --force`; closing does not send Herdr commands.
 Headlines must be one line; those above 100 characters warn without refusing.
+Launch adds handoff/card parent directories to extra_roots. --wait-ms writes
+seat.wait_ms (default 1800000 ms) for Stop wait recipes. Claude executes both
+Herdr wait forms with Bash run_in_background: true; Codex waits in the foreground.
+The rotation producer's old_session/old_pane/acked contract is in hooks.md.
 
 A Claude listener publishes `KILN_HOME/listeners/<address>.pid` while alive,
-and removes its own marker on exit. `team send` leaves a live listener to wake
+and removes its own marker before its final expiry check. Liveness also checks
+/proc/<pid>/cmdline for core.py listen. `team send` leaves a live listener to wake
 Claude; absent/dead markers use the same fallback as Codex: an idle/done status
 gets one `herdr agent prompt <address> inbox`, with one delayed status re-check
 if working, and no retry. This closes the listener-expiry idle gap. A forced
@@ -108,3 +112,8 @@ for marker ownership, wait and receipt interfaces.
 commented JSON writes, using placeholders for unavailable pane/workspace IDs
 and `<KILN_HOME>` when unset. Live card/write/resume and local-socket sandbox
 acceptance remain integration work, separate from these fake-Herdr unit tests.
+
+PreToolUse matchers are Claude Bash|Edit|Write|NotebookEdit|MultiEdit and Codex
+Bash|apply_patch. Native patch paths are fenced; patches run through Bash are shell
+writes. Nested CLIs must clear both identifiers: env -u KILN_SEAT -u KILN_PLUGIN.
+Logs retain refusals/errors, skipped-row counts and required start-card metrics.

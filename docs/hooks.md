@@ -1,119 +1,128 @@
-# Kernel hooks (step 3)
+# Kernel hooks
 
-`hooks/{stop,start,fence,listen}.sh` repeat the launcher's guard as their first
-executable line, before Python starts. A missing/mismatched `HERDR_PANE_ID`
-is also silent and has no side effects. The shared `lib/core.py` reads identity
-from `KILN_SEAT`; `lib/{claude,codex}.py` own wire output and write-tool paths.
-Errors allow the operation and append one JSON line to `$KILN_HOME/hooks.log`.
-A matching invocation logs once, including worker/advisor no-ops. No Herdr
-command is executed by a hook. Hooks never mark inbox rows read.
+`hooks/{stop,start,fence,listen}.sh` test `KILN_SEAT` (nonempty, file exists)
+and `KILN_PLUGIN` before starting Python. The launcher's handler command is:
 
-## State interfaces
+```sh
+sh -c '[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] && [ -n "$KILN_PLUGIN" ] || exit 0; exec "$KILN_PLUGIN/hooks/<event>.sh"'
+```
 
-- `plugins/kiln/lib/ledger.py` is imported by both `team` and the hooks. It
-  owns receipt, pending-row and worker lookup plus PID-marker liveness, without
-  loading the team command-line parser or shelling out on a hook's hot path.
-- Receipt uses `seat.inbox`, normally `$KILN_HOME/inbox/<address>.json`, with
-  `{"read":["row-id"]}` as `team inbox --mark` writes it. SessionStart lists
-  pending IDs exactly as `team pending`: rows addressed to this seat, marked
-  received, with no done/answer citation. This includes questions and updates;
-  there is no stored `pending` field. Rotation inherits the same receipt file.
-- Workers are derived from `$KILN_HOME/seats/*.json`: each child whose `parent`
-  equals this seat's address, regardless of role, exactly as `team workers`.
-  There is no stored `workers` field. These seat records are the live roster;
-  their owner removes a record when its lifecycle ends. Stop checks each child
-  and the typing fence permits its address/pane, excluding the director.
-  An armed wait is `$KILN_HOME/waits/<worker>.pid` containing the positive PID
-  of the live **wait process**, not a shell that already returned. `kill(pid,0)`
-  establishes liveness; Linux zombies are not live. The waiter/owner writes
-  the marker on launch and may unlink it on exit; a dead PID is unarmed even
-  if its marker remains. PID reuse is a limitation of this simple interface.
-  The Stop reason supplies a command recording the wait PID; Claude runs that
-  command as a background group ending in `&`.
-- A finished request is an incoming `request` marked received, with no `done`
-  row citing its ID, whose `path` names a result file or task directory. Check
-  that file and its sibling `status.txt` (directory: its `status.txt` only).
-  The last nonblank line must start `done:` or `HH:MM done:`; following text
-  is allowed. Earlier done lines, `question:` and Herdr status are not proof.
-  A task name alone is never guessed into a filesystem path.
-- Rotation publishes `$KILN_HOME/rotations/<address>.json`:
-  `{"id":"rotation-id","pane":"old-pane-id","acked":false}`. The rotate
-  script sets `acked` true after its replacement receipt, as SPEC §3 requires.
-  Write receipts atomically. Only the old owning pane is refused; replacement
-  inbox work is independent. The refusal names the receipt and `cat` command
-  to inspect it; publishing the ack belongs to rotate, never to the new seat.
+Every seat receives `KILN_PLUGIN=<launcher's plugin root>` through Herdr env.
+Codex's user-level entries therefore run the seat's frozen copy, regardless of
+which copy installed them. Claude receives these commands inline in settings.
+No user configuration is edited at seat launch. Start nested CLIs with
+`env -u KILN_SEAT -u KILN_PLUGIN codex ...` (or `claude ...`) to avoid inheriting
+seat identity. A copied guard with a missing plugin variable silently exits.
 
-The selectable `claude-lean` routing lane keeps Claude bridge bosses and uses
-Sol for managers/workers, with the specified cross-family review/UI roles;
-see [families.md](families.md). The GPT boss override affects only director/super.
+The Python guard accepts `seat.pane == HERDR_PANE_ID`. During an unacked rotation,
+only the fence also accepts `old_pane` from the rotation receipt. Other events
+from that replaced pane exit silently. Unrelated panes never run hook policy.
+Errors fail open. Logs contain refusals, errors, skipped-ledger-line counts,
+and the required SessionStart card line count; cards over 40 lines add a warning.
+Ordinary allowed tools, allowed Stops and successful listener wakes are not logged.
 
-## Native adapters and listener
+## Shared state and Stop
 
-Both adapters emit `decision: block`/`reason` at Stop, and
-`hookSpecificOutput` with `additionalContext` at SessionStart or
-`permissionDecision: deny`/`permissionDecisionReason` at PreToolUse.
-Claude Edit/Write uses `file_path`; Codex apply_patch uses `command` and checks
-Add/Update/Delete headers and both ends of Move. Paths resolve relative to
-hook `cwd`, including symlinks, against `root` and `extra_roots`.
+`plugins/kiln/lib/ledger.py` supplies receipt, pending, child-seat lookup,
+PID liveness and the ledger parser to both team and hooks. It has no CLI parser.
+Bad JSON/torn lines are skipped: team reports them on stderr; hooks count them
+in `hooks.log`. The same `ledger.lock` protects reads against live appends.
 
-Bash checks apply only to director/super/manager/chunkmaster. Literal Herdr
-commands are recognized at command boundaries, including simple shell lists;
-this is not a shell interpreter or a sandbox. No command is executed and no
-poll-loop patterns are checked. A Claude `herdr agent wait` command must end
-in `&`. Both wait forms need `--timeout` (including `--timeout=N`). Agent prompt
-targets are worker addresses; pane send-text/send-keys targets are the panes
-in those workers' seat files. The director's address/pane is always excluded.
-Shell writes rely on native family scope, as the spec states.
+Receipt is the `{"read":["row-id"]}` file at `seat.inbox`. Pending IDs are received
+request/question rows addressed to this seat, with no done/answer citation.
+Received updates/done/answers are not obligations. Nothing marks rows implicitly.
+Workers and pending IDs are derived, never stored in seat.json.
 
-The **one-line launcher interface addition** calls Claude's `with_listener`
-adapter when building inline settings. It adds a second guarded command to
-SessionStart and Stop for persistent Claude seats, with `asyncRewake: true`
-and `timeout: 300`. Native Claude runs this listener in the background; a
-child backgrounded by stop.sh itself would not register an asyncRewake hook.
-Workers, advisors and Codex receive no listener entry.
+Stop refuses only unread rows, a live worker without an armed wait, or an unacked
+rotation owned by this session. `stop_hook_active` allows the continued Stop;
+workers always stop. Request completion and sending done remain card rules.
+Remediation commands use the absolute path of this plugin's `bin/team`.
 
-The listener follows the proven rewaketest pattern: check unread rows, sleep,
-exit 2 with row IDs and `team inbox --mark` on stderr. It checks every 250 ms,
-never consumes a row, and times out after 280 seconds (before Claude's 300 s
-handler timeout). This is detached file monitoring, not an agent polling loop.
-Every re-arm replaces a generation token under `listeners/<address>.lock`;
-older listeners retire, as do listeners whose seat pane changed. Rows already
-present at re-arm are checked immediately. Each listener atomically publishes
-`$KILN_HOME/listeners/<address>.pid` under that lock. On wake, expiry, error,
-SIGTERM or SIGINT it removes only its own marker; an older listener cannot
-remove a replacement's PID. SIGKILL may leave a dead marker, which is harmless.
-`team send` skips a Claude nudge while this PID is live. When absent or dead,
-it uses the Codex fallback: check Herdr state, re-check once if working, and
-prompt `inbox` once if still unread and idle/done. A listener armed during
-that re-check suppresses the fallback. There is no prompt retry. This covers
-idle seats after listener expiry without extending the proven hook timeout.
-Codex has no idle asyncRewake equivalent: its documented background output
-waits for the next user turn, so `team` always handles its inbox nudge.
+`team workers` lists all children by parent. Stop considers only role `worker`:
+its seat record must remain present (`team close` removes it), and its current
+status must lack a terminal done/question line. A run directory in extra_roots
+takes precedence over root; search in reverse extra-root order. Within that
+directory use the highest numbered `status-fix<n>.txt`, otherwise `status.txt`.
+The last nonblank line beginning `HH:MM done:` / `question:` (or without time)
+is terminal. Missing status is unfinished. Persistent children never count.
 
-Official contracts retrieved **2026-10-29** (installed CLI versions verified:
-Claude Code 2.1.312, Codex 0.165.0). Relevant exact quotes:
+An armed wait is `waits/<worker>.pid`, containing the live wait process PID;
+zombies/dead/invalid PIDs are unarmed. Stop's command records that PID and waits
+for it to finish. `seat.wait_ms` supplies the Herdr timeout in milliseconds;
+`launch --wait-ms` defaults to 1800000. Claude must execute the Bash payload with
+`run_in_background: true`; shell `&` alone cannot supply the native completion
+notification. Both agent wait and pane wait-output follow this rule. Codex waits
+in the foreground with `--timeout`. No request-count or poll-loop heuristic exists.
 
-- [Claude hooks](https://code.claude.com/docs/en/hooks.md): “For command hooks,
-  input arrives on stdin.” Stop: “`"block"` prevents Claude from stopping.”
-  `stop_hook_active`: “Check this value or process the transcript to avoid
-  blocking on a condition that will never resolve.” SessionStart:
-  “String added to Claude's context at the start of the conversation, before
-  the first prompt.” PreToolUse: “Use `hookSpecificOutput.permissionDecision`
-  and `hookSpecificOutput.permissionDecisionReason` instead.” Exit status:
-  “Exit with code 2 to block the action.” Async: “If `true`, runs in the
-  background and wakes Claude on exit code 2.” Timeout: “Claude Code still
-  enforces `timeout` on a hook you run with `asyncRewake`.”
-- [Codex hooks](https://learn.chatgpt.com/docs/hooks): “Every command hook
-  receives one JSON object on `stdin`.” Stop: “To keep Codex going, return:”
-  followed by `{"decision":"block","reason":...}`. PreToolUse:
-  “You can also use exit code `2` and write the blocking reason to `stderr`.”
-  The documented JSON denial is `hookSpecificOutput.permissionDecision: deny`
-  with `permissionDecisionReason`. SessionStart: “That `additionalContext`
-  text is added as extra developer context.” Background: “Finishing a
-  background hook doesn't start a new turn.”
+## Rotation producer interface
 
-Local read-only evidence: `shared-data/rewaketest-20261029/{listen.sh,
-claude-settings.json}` and `shared-data/envtest-20261029/{claude,codex}.txt`
-under `/home/dev/.cache/kiln4/`. Test Stop fixtures preserve observed field
-shapes with anonymous IDs/paths; other event fields follow the official docs.
-No installed user configuration or live workspace was used for validation.
+The out-of-scope handoff plugin's rotate producer atomically writes
+`$KILN_HOME/rotations/<address>.json` before replacement:
+
+```json
+{"old_session":"outgoing-session-id","old_pane":"outgoing-pane-id","acked":false}
+```
+
+After its replacement receipt/ledger ack, rotate sets `acked: true`. The Stop
+condition compares payload session_id to old_session, never pane; a same-pane
+replacement is never refused for that rotation. A different old pane retains
+its fence until ack but its Stop exits through the pane guard. The receipt must
+remain until outgoing hooks have finished. Hooks never publish the ack.
+
+## Fence and family coverage
+
+Write roots are root + extra_roots + card/handoff parent directories + payload
+scratchpad_dir when present. Launch explicitly adds card/handoff directories to
+extra_roots. Paths resolve against payload cwd with symlinks resolved. NotebookEdit
+uses notebook_path; Edit/Write use file_path. MultiEdit file_path is supported for
+compatibility and included in the requested matcher, but is absent from the fetched
+current Claude tool list. A scratchpad is allowed only when supplied in the payload.
+
+Claude's matcher is `Bash|Edit|Write|NotebookEdit|MultiEdit`; Codex's is
+`Bash|apply_patch`. Per the [Claude hook reference](https://code.claude.com/docs/en/hooks.md)
+and [Codex hook reference](https://learn.chatgpt.com/docs/hooks), tool-event matchers
+filter tool names (Codex also supports aliases). Omitted matchers match all events.
+The [Claude tools reference](https://code.claude.com/docs/en/tools-reference.md)
+describes native background Bash and NotebookEdit. Retrieved 2026-10-29.
+
+The Codex release reference documents shell/unified exec as Bash and direct patch
+calls as apply_patch, with tool_input.command for both; patch aliases Edit/Write
+retain canonical apply_patch input. MCP/other local tools can also trigger hooks;
+hosted tools do not. Kiln covers only native Bash and apply_patch. Direct patches
+check Add/Update/Delete headers and both ends of Move. A patch invoked through Bash
+is a shell write and is not inspected. These are documented 0.165.0 wire contracts,
+not new live captures; real shell/patch capture remains step 4 acceptance.
+
+Bash rules apply only to director/super/manager/chunkmaster. The hook recognizes
+literal Herdr wait/typing command forms, not a shell program. Unbalanced quoting
+(for example in a heredoc) can make shlex fail: policy fails open and logs an error.
+Wrappers (`env herdr`, `bash -c`), substitutions and global flags before the subcommand
+are not reliably seen. No shell-write parsing or additional typing verbs are claimed.
+Typing permits child addresses/panes except the director and this seat's address.
+
+Claude shell writes have **no native directory scope**; no Edit allow rules are
+installed or claimed as a boundary. Codex shell writes use its native sandbox,
+which includes all of KILN_HOME via --add-dir: a seat can write other receipts,
+seat records, rotations, waits and the ledger. This is a known integrity gap;
+the edit-tool fence does not prevent shell writes to those files.
+
+## Listener
+
+Persistent Claude seats register listen.sh at SessionStart and Stop with
+asyncRewake and timeout 300 s; the listener lasts at most 280 s. A Stop listener
+seeing unread rows that the synchronous Stop refuses does not re-arm. Other
+listeners scan the initial ledger once, then read only appended bytes at their
+last offset every 1 s; receipt files are checked without consuming rows.
+
+Each listener publishes listeners/<address>.pid under its generation lock and
+removes only its own marker on wake, error, termination or supersession. On expiry
+it removes that marker under the lock **before** one final unread check. A row
+arriving at this boundary either sees no marker in send or is caught by that check.
+Re-arm retires the old generation; an old exit cannot erase the replacement PID.
+
+`team send` skips a Claude nudge only when the PID is live, not a zombie, and
+/proc/<pid>/cmdline contains core.py followed by listen. Otherwise it uses Codex's
+fallback: one status check, one delayed re-check if working, one inbox prompt if
+idle/done and unread; no retry. A newly armed listener suppresses that prompt.
+SIGKILL may leave a dead marker. PID reuse by an unrelated process does not suppress
+fallback; PID reuse by another listener remains a simple-marker limitation.

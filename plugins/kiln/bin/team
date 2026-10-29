@@ -14,7 +14,7 @@ import time
 from contextlib import contextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.ledger import live_pid, markers, pending, read_json, workers
+from lib.ledger import live_pid, markers, pending, read_json, records, workers
 
 
 def address(value):
@@ -29,22 +29,6 @@ def locked(home):
     with (home / "ledger.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield
-
-
-def records(home):
-    path = home / "ledger.jsonl"
-    rows = []
-    if path.exists():
-        with path.open("rb") as stream:
-            for number, line in enumerate(stream, 1):
-                try:
-                    row = json.loads(line)
-                    if not isinstance(row, dict):
-                        raise ValueError("expected a row object")
-                    rows.append(row)
-                except ValueError as error:
-                    print(f"team: skipping ledger line {number}: {error}", file=sys.stderr)
-    return rows
 
 
 def environment(name):
@@ -74,7 +58,7 @@ def nudge(home, receiver, row, delay):
     try:
         addr = receiver["address"]
         listener = home / "listeners" / f"{addr}.pid"
-        if receiver["family"] == "claude" and live_pid(listener):
+        if receiver["family"] == "claude" and live_pid(listener, listener=True):
             return
         state = herdr("agent", "get", addr)["agent"]["agent_status"]
         if state == "working":
@@ -83,7 +67,7 @@ def nudge(home, receiver, row, delay):
         with locked(home):
             unread = row["id"] not in markers(receiver)
         if (unread and state in ("idle", "done")
-                and not (receiver["family"] == "claude" and live_pid(listener))):
+                and not (receiver["family"] == "claude" and live_pid(listener, listener=True))):
             herdr("agent", "prompt", addr, "inbox")
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         print(f"team: row {row['id']} saved; nudge failed: {error}", file=sys.stderr)

@@ -13,12 +13,14 @@ def deny(reason, tool):
 
 
 def paths(tool, data):
-    return [data["file_path"]] if tool in ("Edit", "Write") else []
+    if tool == "NotebookEdit":
+        return [data["notebook_path"]]
+    return [data["file_path"]] if tool in ("Edit", "Write", "MultiEdit") else []
 
 
 def with_listener(config, role):
     """Called by launch: only Claude persistent seats register native asyncRewake."""
-    if role in ("worker", "advisor"):
+    if role == "worker":
         return config
     import copy
     config = copy.deepcopy(config)

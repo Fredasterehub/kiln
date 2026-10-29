@@ -32,8 +32,9 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.env['CODEX_HOME'] = str(self.base / 'codex home')
 
     def guard(self, script):
-        return ('sh -c \'[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] || exit 0; exec '
-                + str(PLUGIN / 'hooks' / f'{script}.sh') + "'")
+        guard = ('[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] && [ -n "$KILN_PLUGIN" ] '
+                 f'|| exit 0; exec "$KILN_PLUGIN/hooks/{script}.sh"')
+        return 'sh -c ' + shlex.quote(guard)
 
     def launch(self, *extra, ok=True):
         return self.run_tool('launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
@@ -81,7 +82,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertNotIn('pending', seat)
         self.assertEqual(seat['card'], str(card))
         self.assertEqual(seat['handoff'], str(handoff))
-        self.assertEqual(seat['extra_roots'], [str(extra)])
+        self.assertEqual(seat['extra_roots'], [str(extra), str(self.base)])
         split = self.calls()[2]
         self.assertEqual(split[:3], ['pane', 'split', 'w-test:p1'])
         self.assertIn('KILN_SEAT=' + str(self.home / 'seats/build.json'), split)
@@ -95,12 +96,14 @@ class LaunchTests(Sandbox, unittest.TestCase):
         settings = json.loads(flags[flags.index('--settings') + 1])
         self.assertEqual(settings['fallbackModel'], [])
         self.assertFalse(settings['switchModelsOnFlag'])
-        self.assertEqual(settings['permissions']['allow'],
-                         [f'Edit(/{self.root}/**)', f'Edit(/{extra}/**)'])
+        self.assertNotIn('permissions', settings)
+        self.assertEqual(settings['hooks']['PreToolUse'][0]['matcher'], 'Bash|Edit|Write|NotebookEdit|MultiEdit')
+        self.assertEqual(seat['wait_ms'], 1800000)
+        self.assertIn('KILN_PLUGIN=' + str(PLUGIN), split)
         self.assertEqual(set(settings['hooks']), {'SessionStart', 'PreToolUse', 'Stop'})
         for event, script in [('SessionStart', 'start'), ('PreToolUse', 'fence'), ('Stop', 'stop')]:
             self.assertEqual(settings['hooks'][event][0]['hooks'][0]['command'], self.guard(script))
-        self.assertEqual(flags[-2:], ['--add-dir', str(extra)])
+        self.assertEqual(flags[-4:], ['--add-dir', str(extra), '--add-dir', str(self.base)])
         self.assertFalse((self.root / '.codex').exists())
 
     def test_claude_worker_defaults_to_review_without_start_hook(self):
@@ -235,8 +238,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_guards_exit_silently_without_a_seat_and_execute_with_one(self):
         launch = load_launcher()
-        hook_dir = self.base / "hooks with ' quotes"
-        hook_dir.mkdir()
+        hook_dir = self.base / "plugin with ' quotes" / "hooks"
+        hook_dir.mkdir(parents=True)
         marker = hook_dir / 'marker'
         script = hook_dir / 'stop.sh'
         script.write_text('#!/bin/sh\nprintf fired > ' + shlex.quote(str(marker)) + '\n')
@@ -245,6 +248,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
             command = launch.hooks('manager')['Stop'][0]['hooks'][0]['command']
         env = dict(self.env)
         env.pop('KILN_SEAT', None)
+        env.pop('KILN_PLUGIN', None)
         for seat in (None, '', str(self.base / 'missing.json')):
             if seat is not None:
                 env['KILN_SEAT'] = seat
@@ -254,6 +258,10 @@ class LaunchTests(Sandbox, unittest.TestCase):
         seat = self.base / 'seat.json'
         seat.write_text('{}')
         env['KILN_SEAT'] = str(seat)
+        result = subprocess.run(shlex.split(command), env=env, capture_output=True, text=True)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+        self.assertFalse(marker.exists())
+        env['KILN_PLUGIN'] = str(hook_dir.parent)
         result = subprocess.run(shlex.split(command), env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(marker.read_text(), 'fired')
@@ -325,7 +333,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
             self.assertEqual(len(groups), 1)
             command = groups[0]['hooks'][0]['command']
             self.assertNotIn(str(PLUGIN), command)
-            self.assertIn(str(target / 'hooks'), shlex.split(command)[2])
+            self.assertIn('$KILN_PLUGIN/hooks/', shlex.split(command)[2])
 
     def test_malformed_hook_json_is_reported_without_writing(self):
         path = Path(self.env['CODEX_HOME']) / 'hooks.json'
@@ -415,6 +423,23 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(lane['operational'], [dict(model='gpt-6.1-sol', effort='medium'),
                                                dict(model='claude-opus-5-5', effort='medium')])
         self.assertEqual(lane['advisor'], dict(model='gemini-4-argon-high', effort='high'))
+
+    def test_wait_ms_and_explicit_card_handoff_roots(self):
+        card = self.base / 'cards' / 'build.md'
+        handoff = self.base / 'handoff' / 'build.md'
+        self.launch('--wait-ms', '7200000', '--card', str(card), '--handoff', str(handoff))
+        seat = self.seat()
+        self.assertEqual(seat['wait_ms'], 7200000)
+        self.assertEqual(set(seat['extra_roots']), {str(card.parent), str(handoff.parent)})
+        self.assertIn('KILN_PLUGIN=' + str(PLUGIN), self.calls()[2])
+        self.launch('--wait-ms', '0', ok=False)
+
+    def test_codex_matcher_and_plugin_env(self):
+        self.launch('--role', 'helper')
+        self.assertIn('KILN_PLUGIN=' + str(PLUGIN), self.calls()[2])
+        launch = load_launcher()
+        self.assertEqual(launch.hooks('manager')['PreToolUse'][0]['matcher'], 'Bash|apply_patch')
+        self.assertNotIn(str(PLUGIN), launch.hooks('manager')['Stop'][0]['hooks'][0]['command'])
 
     def test_routing_defaults_and_pane_role_words(self):
         launch = load_launcher()

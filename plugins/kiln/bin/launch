@@ -41,15 +41,18 @@ def routing(args):
     return lane, model, effort
 
 
-def hooks(role):
+def hooks(role, family="codex"):
     events = {"Stop": "stop", "PreToolUse": "fence"}
     if role != "worker":
         events["SessionStart"] = "start"
     config = {}
     for event, script in events.items():
-        guard = ('[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] || exit 0; exec '
-                 + shlex.quote(str(HOOKS / f"{script}.sh")))
-        config[event] = [{"hooks": [{"type": "command", "command": "sh -c " + shlex.quote(guard)}]}]
+        guard = ('[ -n "$KILN_SEAT" ] && [ -f "$KILN_SEAT" ] && [ -n "$KILN_PLUGIN" ] '
+                 f'|| exit 0; exec "$KILN_PLUGIN/hooks/{script}.sh"')
+        group = {"hooks": [{"type": "command", "command": "sh -c " + shlex.quote(guard)}]}
+        if event == "PreToolUse":
+            group["matcher"] = "Bash|Edit|Write|NotebookEdit|MultiEdit" if family == "claude" else "Bash|apply_patch"
+        config[event] = [group]
     return config
 
 
@@ -57,9 +60,7 @@ def native(seat, hook_config, home):
     model, effort, root = seat["model"], seat["effort"], seat["root"]
     if seat["family"] == "claude":
         hook_config = runpy.run_path(str(HOOKS / "lib/claude.py"))["with_listener"](hook_config, seat["role"])
-        roots = [root, *seat["extra_roots"]]
-        settings = dict(fallbackModel=[], switchModelsOnFlag=False, hooks=hook_config,
-                        permissions={"allow": [f"Edit(/{p.rstrip('/')}/**)" for p in roots]})
+        settings = dict(fallbackModel=[], switchModelsOnFlag=False, hooks=hook_config)
         flags = ["--model", model, "--effort", effort,
                  "--settings", json.dumps(settings, separators=(",", ":"))]
     elif seat["family"] == "codex":
@@ -74,7 +75,7 @@ def native(seat, hook_config, home):
 
 
 def validate(seat):
-    """The seat schema is a flat object with string and string-array fields."""
+    """Validate the flat seat schema, including the wait timeout."""
     if set(SCHEMA["required"]) - seat.keys() or seat.keys() - SCHEMA["properties"].keys():
         raise ValueError("seat fields do not match schema")
     for key, value in seat.items():
@@ -83,6 +84,8 @@ def validate(seat):
             raise ValueError(f"{key} must be a string")
         if prop["type"] == "array" and (not isinstance(value, list) or any(not isinstance(v, str) for v in value)):
             raise ValueError(f"{key} must be a string array")
+        if prop["type"] == "integer" and (type(value) is not int or value < prop.get("minimum", 0)):
+            raise ValueError(f"invalid {key}: {value}")
         if "enum" in prop and value not in prop["enum"]:
             raise ValueError(f"invalid {key}: {value}")
         if "pattern" in prop and not re.fullmatch(prop["pattern"], value):
@@ -208,6 +211,7 @@ def main():
         parser.add_argument(f"--{key}", choices=SCHEMA["properties"][key]["enum"])
     for key in ("name", "card", "handoff", "worktree", "run"):
         parser.add_argument(f"--{key}")
+    parser.add_argument("--wait-ms", type=int, default=1800000)
     parser.add_argument("--extra-root", action="append", default=[])
     parser.add_argument("--dry-run", action="store_true", help="print commands and file contents without side effects")
     args = parser.parse_args()
@@ -231,14 +235,19 @@ def main():
         extra_roots = list(dict.fromkeys(absolute(p) for p in args.extra_root + ([args.run] if args.run else [])))
         seat = dict(address=args.address, role=args.role, family=args.family, tab=args.tab,
                     root=root, extra_roots=extra_roots, parent=args.parent, model=model,
-                    effort=effort, lane=lane, pane="", workspace=workspace,
+                    effort=effort, lane=lane, pane="", workspace=workspace, wait_ms=args.wait_ms,
                     inbox="" if args.role == "worker" else str(home / "inbox" / f"{args.address}.json"))
         for key in ("name", "card", "handoff"):
             value = getattr(args, key)
             if value is not None:
                 seat[key] = value if key == "name" else absolute(value)
+        for key in ("handoff", "card"):
+            if seat.get(key):
+                directory = str(Path(seat[key]).parent)
+                if directory not in seat["extra_roots"]:
+                    seat["extra_roots"].append(directory)
         validate(seat)
-        config = hooks(args.role)
+        config = hooks(args.role, args.family)
         flags = native(seat, config, home)
         if args.family == "codex":
             warn_missing_hooks()
@@ -255,7 +264,8 @@ def main():
         write_json(candidate, seat, args.dry_run)
         seat_path = candidate
         result = herdr(["pane", "split", target, "--cwd", root, "--no-focus",
-                        "--env", f"KILN_SEAT={seat_path}", "--env", f"KILN_HOME={home}"], args.dry_run)
+                        "--env", f"KILN_SEAT={seat_path}", "--env", f"KILN_HOME={home}",
+                        "--env", f"KILN_PLUGIN={PLUGIN}"], args.dry_run)
         seat["pane"] = "<new-pane>" if args.dry_run else result["pane"]["pane_id"]
         if previous and previous.get("pane") != seat["pane"]:
             print(f"launch: warning: replacing {args.address} from pane {previous.get('pane')} with {seat['pane']}", file=sys.stderr)
