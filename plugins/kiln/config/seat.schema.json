@@ -24,11 +24,11 @@
     "address": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$",
-      "description": "Ledger address. Persistent seats: tab or role word (boss, orchestrator, gravedigger, research, plan, build, verify, deploy, council, build-chunkmaster). Workers: <tab>-<task>-<kind>[-fix<n>]."
+      "description": "Ledger address. Persistent seats: tab or role word (boss, orchestrator, gravedigah, research, plan, build, verify, deploy, council, build-chunkmaster). Workers: <tab>-<task>-<kind>[-fix<n>]."
     },
     "name": {
       "type": "string",
-      "description": "Display name chosen by the boss (cosmetic; pane label only). Chunk Master and Gravedigger are fixed."
+      "description": "Display name chosen by the boss (cosmetic; pane label only). Chunk Master and Gravedigah are fixed."
     },
     "role": {
       "type": "string",
@@ -36,7 +36,7 @@
         "boss",
         "orchestrator",
         "manager",
-        "gravedigger",
+        "gravedigah",
         "chunkmaster",
         "worker"
       ]

@@ -15,7 +15,7 @@ PLUGIN = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PLUGIN))
 from lib.ledger import live_pid, markers, pending, read_json, records, workers
 
-PERSISTENT = {"boss", "orchestrator", "manager", "gravedigger", "chunkmaster"}
+PERSISTENT = {"boss", "orchestrator", "manager", "gravedigah", "chunkmaster"}
 BOSSES = {"boss", "orchestrator", "manager", "chunkmaster"}
 TEAM = shlex.quote(str(PLUGIN / "bin/team"))
 SENTENCE = "this is enough; read rules, ledger and panes only where an item points you"

@@ -18,5 +18,5 @@ plugins/kiln/bin/kiln start --team /path/to/team --project /path/to/repo --works
 ```
 
 Add `--dry-run` to inspect the plan without writes or Herdr calls. The three
-bridge seats (boss, orchestrator, Gravedigger) share `team/bridge`; the orchestrator opens each phase tab and its manager when first needed and never closes them. [Family contracts and phase-launch shape](docs/families.md) describe
+bridge seats (boss, orchestrator, Gravedigah) share `team/bridge`; the orchestrator opens each phase tab and its manager when first needed and never closes them. [Family contracts and phase-launch shape](docs/families.md) describe
 routing, role-card defaults, and trust behavior.

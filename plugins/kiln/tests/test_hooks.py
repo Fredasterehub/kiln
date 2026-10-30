@@ -160,7 +160,7 @@ class HookTests(unittest.TestCase):
 
     def test_all_persistent_roles_get_unread_refusal(self):
         self.rows(self.row())
-        for role in ('boss', 'orchestrator', 'manager', 'gravedigger', 'chunkmaster'):
+        for role in ('boss', 'orchestrator', 'manager', 'gravedigah', 'chunkmaster'):
             self.save(role=role)
             self.blocked(self.run_hook())
 
@@ -313,7 +313,7 @@ class HookTests(unittest.TestCase):
 
     def test_shipped_persistent_cards_start_within_budget_without_handoff(self):
         cards = HOOKS.parent / 'cards'
-        names = ('boss', 'orchestrator', 'gravedigger', 'chunkmaster', 'manager-research',
+        names = ('boss', 'orchestrator', 'gravedigah', 'chunkmaster', 'manager-research',
                  'manager-plan', 'manager-build', 'manager-verify', 'manager-deploy', 'manager-council')
         common = (cards / 'common.md').read_text().rstrip('\n')
         for family in STOP_INPUTS:
@@ -368,10 +368,10 @@ class HookTests(unittest.TestCase):
             self.save(family='claude')
 
     def test_bash_fence_only_four_roles(self):
-        for role in ('boss', 'orchestrator', 'manager', 'chunkmaster', 'gravedigger', 'worker'):
+        for role in ('boss', 'orchestrator', 'manager', 'chunkmaster', 'gravedigah', 'worker'):
             self.save(role=role)
             result = self.fence('Bash', {'command': 'herdr agent wait w'})
-            if role in ('gravedigger', 'worker'):
+            if role in ('gravedigah', 'worker'):
                 self.allowed(result)
             else:
                 self.blocked(result, 'fence')
@@ -389,7 +389,7 @@ class HookTests(unittest.TestCase):
                 self.assertIn('worker', reason)
 
     def test_tool_write_roots_for_all_roles_claude(self):
-        for role in ('boss', 'orchestrator', 'manager', 'chunkmaster', 'gravedigger', 'worker'):
+        for role in ('boss', 'orchestrator', 'manager', 'chunkmaster', 'gravedigah', 'worker'):
             self.save(role=role)
             for tool in ('Edit', 'Write'):
                 for path in ('file.txt', str(self.extra / 'file.txt')):
@@ -517,14 +517,14 @@ class HookTests(unittest.TestCase):
         self.assertFalse((self.home / 'listeners').exists())
 
     def test_persistent_children_never_count_as_live_workers(self):
-        self.child('gravedigger', role='gravedigger', pane='gravedigger-pane')
+        self.child('gravedigah', role='gravedigah', pane='gravedigah-pane')
         self.child('unrelated', parent='plan', pane='other-pane')
         for family in STOP_INPUTS:
             self.allowed(self.run_hook(family=family))
-            self.allowed(self.fence('Bash', {'command': 'herdr pane send-text gravedigger-pane hi'}))
+            self.allowed(self.fence('Bash', {'command': 'herdr pane send-text gravedigah-pane hi'}))
             self.blocked(self.fence('Bash', {'command': 'herdr agent prompt unrelated hi'}), 'fence')
-        (self.home / 'seats/gravedigger.json').unlink()
-        self.blocked(self.fence('Bash', {'command': 'herdr pane send-text gravedigger-pane hi'}), 'fence')
+        (self.home / 'seats/gravedigah.json').unlink()
+        self.blocked(self.fence('Bash', {'command': 'herdr pane send-text gravedigah-pane hi'}), 'fence')
 
     def test_custom_receipt_pending_matches_team_for_all_row_kinds(self):
         custom = self.home / 'custom.json'

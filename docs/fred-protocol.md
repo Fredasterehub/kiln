@@ -10,7 +10,7 @@ Data: Fred's own words, lightly de-noised from voice-to-text, no interpretation 
 - **Big boss**: "the main guy I talk to". Fred leaves it to choose its own name ("Batman or Oracle or whatever he wants to be called").
 - The persistent-mind idea applies to the boss too: "we have a little manager for our boss, so that all the admin stuff ... consumes a lot of context ... we'll delegate that to his little manager."
 - **The boss's manager is the orchestrator** (Robin): "the first manager of the boss ... the intra manager", same tab. "He's really the one responsible of the whole loop and everything, since the boss is just talking with me."
-- **The orchestrator's own worker** (Gravedigger): "whatever admin stuff needs to be done, not really worker stuff, but stuff that helps the orchestration and the actual build of everything."
+- **The orchestrator's own worker** (Gravedigah): "whatever admin stuff needs to be done, not really worker stuff, but stuff that helps the orchestration and the actual build of everything."
 - "That's the basis. And from there, everything spawns."
 
 ## Meta loop

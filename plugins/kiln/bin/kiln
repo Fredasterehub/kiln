@@ -20,7 +20,7 @@ def names(value):
     for item in value.split(",") if value else ():
         role, separator, name = item.partition("=")
         if role not in ("boss", "orchestrator") or not separator or not name or role in result:
-            raise argparse.ArgumentTypeError("names must be boss=<name>,orchestrator=<name>; gravedigger is Gravedigger")
+            raise argparse.ArgumentTypeError("names must be boss=<name>,orchestrator=<name>; gravedigah is Gravedigah")
         result[role] = name
     return result
 
@@ -64,8 +64,8 @@ def trust_codex(project, launcher, dry_run):
 def launch_commands(team, names):
     return [[str(PLUGIN / "bin/launch"), "--tab", "bridge", "--address", role,
              "--role", role, "--root", str(team / "bridge"), "--parent", parent,
-             "--name", "Gravedigger" if role == "gravedigger" else names.get(role, role)]
-            for role, parent in (("boss", ""), ("orchestrator", "boss"), ("gravedigger", "orchestrator"))]
+             "--name", "Gravedigah" if role == "gravedigah" else names.get(role, role)]
+            for role, parent in (("boss", ""), ("orchestrator", "boss"), ("gravedigah", "orchestrator"))]
 
 
 def printable(command, team, workspace):

@@ -79,8 +79,8 @@ It creates ledger.jsonl, seats/, inbox/, and bridge/, research/, plan/, build/,
 verify/, deploy/, council/, waits/, listeners/. It trusts the team folder once for Claude, writes
 team.toml with lane, bosses, project, branch, and trunk paths, creates a Herdr
 workspace, and renames its initial tab to bridge. Boss, orchestrator (parent
-boss), and gravedigger (parent orchestrator) all use bridge/ as their root; gravedigger's
-fixed display name is Gravedigger. It prints their pane IDs and boss address.
+boss), and gravedigah (parent orchestrator) all use bridge/ as their root; gravedigah's
+fixed display name is Gravedigah. It prints their pane IDs and boss address.
 Unspecified lane/bosses use the plugin routing defaults; unnamed bosses use
 their addresses. Starting a configured team again refuses before any changes.
 Bootstrap creates branch `kiln/<slug>` from the product HEAD in
@@ -102,7 +102,7 @@ commands with placeholder IDs and performs no writes or Herdr calls.
 The launcher reads lane and bosses from KILN_HOME/team.toml over the shipped
 routing defaults; explicit --model/--effort still take precedence. When --card
 is absent, persistent roles use the shipped cards/boss.md, orchestrator.md,
-gravedigger.md, or chunkmaster.md; phase managers use cards/manager-<resolved-tab>.md.
+gravedigah.md, or chunkmaster.md; phase managers use cards/manager-<resolved-tab>.md.
 A missing default card refuses launch before the split. Workers have no default
 seat card: their packets refer to cards/worker.md. The shared hand-off table
 ships at `$KILN_PLUGIN/handoffs.md` ([table](../plugins/kiln/handoffs.md)).
@@ -136,7 +136,7 @@ the native sandbox. The operator's checkout is not added as a writable root.
 
 The active lane supplies model/effort defaults; `balanced` and `claude-lean`
 are available. `claude-lean` keeps boss/orchestrator on Opus medium; managers,
-gravedigger, chunkmaster, implementer and investigator use Sol medium. Mechanical
+gravedigah, chunkmaster, implementer and investigator use Sol medium. Mechanical
 and both research slots use Sol low. Review of GPT uses Opus medium and review
 of Claude uses Astra medium. Conceptual is Astra medium (Argon is the advisor);
 operational is Sol medium + Opus medium. UI plan/build/review are respectively
@@ -153,7 +153,7 @@ The launcher selects a tab by unique label or ID within HERDR_WORKSPACE_ID,
 splits its first listed pane with `--direction down` by default (`--direction
 right|down` selects another direction), and stores the resolved tab label. Labels use
 `<name-or-address> · <role-text> · <short-model>`; role text is `boss`,
-`orchestrator`, `<tab> manager`, `gravedigger`, `chunk master`, or `worker`.
+`orchestrator`, `<tab> manager`, `gravedigah`, `chunk master`, or `worker`.
 Herdr startup uses `agent start <addr> --kind <family> --pane <new-pane>
 --timeout 30000 -- <native-arguments>`. Failed split/start restores the previous
 seat record on a relaunch, or removes the record for a new seat. Corrupt prior

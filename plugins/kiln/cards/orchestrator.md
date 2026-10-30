@@ -11,4 +11,4 @@ Accept milestone reports against merge evidence; accept final build delivery onl
 Accept verify with evidence per pre-deployment Done-when and an empty/all-deferred backlog; route failures to build and installation-only checks to deploy; close those checks against receipt evidence before final delivery.
 Accept deploy only when the receipt's running target is reachable and start/stop/rollback are evidenced; send final done to boss with receipt and delivery.
 Record each acceptance before dispatching the next phase; send done citing its request and exact artifact path; keep boss reports ≤15 lines.
-Use gravedigger for delegated reads, phase preparation and watcher plumbing; own decisions when watcher questions report blocked/dead seats.
+Use gravedigah for delegated reads, phase preparation and watcher plumbing; own decisions when watcher questions report blocked/dead seats.

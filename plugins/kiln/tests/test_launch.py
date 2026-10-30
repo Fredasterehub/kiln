@@ -276,7 +276,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(marker.read_text(), 'fired')
 
     def test_tab_id_and_bridge_label_resolution(self):
-        self.launch('--tab', 'w-test:t2', '--role', 'gravedigger')
+        self.launch('--tab', 'w-test:t2', '--role', 'gravedigah')
         self.assertEqual(self.calls()[2][2], 'w-test:p2')
         self.assertEqual(self.seat()['tab'], 'bridge')
 
@@ -308,7 +308,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         routing = (PLUGIN / 'config/routing.toml').read_text()
         (self.base / 'routing.toml').write_text(routing.replace('bosses = "claude"', 'bosses = "gpt"'))
         with patch.object(launch, 'CONFIG', self.base):
-            for role, model in [('boss', 'gpt-6-astra'), ('orchestrator', 'gpt-6.1-sol'), ('gravedigger', 'gpt-6.1-sol')]:
+            for role, model in [('boss', 'gpt-6-astra'), ('orchestrator', 'gpt-6.1-sol'), ('gravedigah', 'gpt-6.1-sol')]:
                 args = argparse.Namespace(role=role, family='codex', model=None, effort=None)
                 self.assertEqual(launch.routing(args), ('balanced', model, 'medium'))
             args.model, args.effort = 'gpt-6.1-sol', 'low'
@@ -438,7 +438,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
             self.assertEqual(self.calls(), before)
 
     def test_default_role_cards_resolve_tab_label_and_workers_get_none(self):
-        for role in ('boss', 'orchestrator', 'gravedigger', 'chunkmaster'):
+        for role in ('boss', 'orchestrator', 'gravedigah', 'chunkmaster'):
             self.launch('--role', role)
             self.assertEqual(self.seat()['card'], str(PLUGIN / 'cards' / f'{role}.md'))
         self.launch('--tab', 'w-test:t1')
@@ -518,7 +518,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         config = tomllib.loads((PLUGIN / 'config/routing.toml').read_text())
         lane = config['lanes']['claude-lean']
         self.assertEqual(set(lane), set(config['lanes']['balanced']))
-        for role in ('manager', 'gravedigger', 'chunkmaster', 'implementer', 'investigator'):
+        for role in ('manager', 'gravedigah', 'chunkmaster', 'implementer', 'investigator'):
             self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='medium'))
         for role in ('mechanical', 'research_gpt', 'research_claude'):
             self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='low'))
@@ -543,7 +543,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.launch('--wait-ms', '0', ok=False)
 
     def test_codex_matcher_and_plugin_env(self):
-        self.launch('--role', 'gravedigger')
+        self.launch('--role', 'gravedigah')
         self.assertIn('KILN_PLUGIN=' + str(PLUGIN), self.calls()[2])
         launch = load_launcher()
         self.assertEqual(launch.hooks('manager')['PreToolUse'][0]['matcher'], 'Bash|apply_patch')
@@ -570,7 +570,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_codex_card_handoff_paths_do_not_add_writable_directories(self):
         card, handoff = self.base / 'cards/build.md', self.base / 'handoffs/build.md'
-        self.launch('--family', 'codex', '--role', 'gravedigger', '--card', str(card), '--handoff', str(handoff))
+        self.launch('--family', 'codex', '--role', 'gravedigah', '--card', str(card), '--handoff', str(handoff))
         self.assertEqual(self.seat()['extra_roots'], [])
         flags = self.flags()
         self.assertNotIn(str(card.parent), flags)
@@ -579,12 +579,12 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_routing_defaults_and_pane_role_words(self):
         launch = load_launcher()
-        for role, model in [('manager', 'claude-opus-5-5'), ('gravedigger', 'gpt-6.1-sol'),
+        for role, model in [('manager', 'claude-opus-5-5'), ('gravedigah', 'gpt-6.1-sol'),
                             ('chunkmaster', 'gpt-6.1-sol')]:
             args = argparse.Namespace(role=role, family=None, model=None, effort=None)
             self.assertEqual(launch.routing(args), ('balanced', model, 'medium'))
         for role, label in [('boss', 'boss'), ('orchestrator', 'orchestrator'), ('manager', 'build manager'),
-                            ('gravedigger', 'gravedigger'), ('chunkmaster', 'chunk master'), ('worker', 'worker')]:
+                            ('gravedigah', 'gravedigah'), ('chunkmaster', 'chunk master'), ('worker', 'worker')]:
             self.launch('--role', role)
             self.assertEqual(self.calls()[-2][3].split(' · ')[1], label)
 
@@ -597,10 +597,10 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(self.calls(), [])
 
     def test_missing_hooks_warn_without_refusal_and_install_clears_warning(self):
-        result = self.launch('--role', 'gravedigger')
+        result = self.launch('--role', 'gravedigah')
         self.assertIn('warning: Codex Kiln hooks are not installed', result.stderr)
         self.run_tool('launch', 'install-hooks', '--family', 'codex')
-        self.assertNotIn('not installed', self.launch('--role', 'gravedigger').stderr)
+        self.assertNotIn('not installed', self.launch('--role', 'gravedigah').stderr)
 
     def test_failed_relaunch_restores_the_previous_record(self):
         self.launch()
@@ -700,7 +700,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertTrue(all(key in result.stdout.splitlines() for key in keys))
         config = path.parent / 'config.toml'
         config.write_text(''.join('[hooks.state.' + json.dumps(key) + ']\ntrusted_hash = "sha256:reviewed"\n' for key in keys))
-        self.assertNotIn('need /hooks review', self.launch('--role', 'gravedigger').stderr)
+        self.assertNotIn('need /hooks review', self.launch('--role', 'gravedigah').stderr)
         self.assertTrue(path.is_symlink())
 
     def test_split_direction_defaults_down_and_accepts_right(self):
@@ -714,7 +714,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_codex_launch_never_creates_or_changes_profile_files(self):
         profile = Path(self.env['CODEX_HOME'])
-        self.launch('--role', 'gravedigger')
+        self.launch('--role', 'gravedigah')
         self.assertFalse(profile.exists())
         profile.mkdir()
         config = profile / 'config.toml'
@@ -722,7 +722,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         original = config.read_bytes()
         profile.chmod(0o500)
         try:
-            self.launch('--role', 'gravedigger')
+            self.launch('--role', 'gravedigah')
             self.assertEqual(config.read_bytes(), original)
             self.assertEqual(list(profile.iterdir()), [config])
         finally:

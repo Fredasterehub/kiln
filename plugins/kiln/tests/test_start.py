@@ -18,7 +18,7 @@ except ImportError:
 
 class StartTests(Sandbox, unittest.TestCase):
     def test_bridge_cards_and_role_addresses(self):
-        for role in ('boss', 'orchestrator', 'gravedigger'):
+        for role in ('boss', 'orchestrator', 'gravedigah'):
             self.assertTrue((PLUGIN / 'cards' / f'{role}.md').is_file(), role)
         self.assertTrue((PLUGIN / 'templates/brief.md').is_file())
         self.assertIn('$KILN_PLUGIN/templates/brief.md', (PLUGIN / 'cards/boss.md').read_text())
@@ -73,9 +73,9 @@ class StartTests(Sandbox, unittest.TestCase):
         self.assertEqual(trust['projects'], {str(self.team): {'hasTrustDialogAccepted': True}})
         self.assertFalse((Path(self.env['HOME']) / '.claude.json.bak-kiln').exists())
         seats = self.seats()
-        self.assertEqual(set(seats), {'boss', 'orchestrator', 'gravedigger'})
+        self.assertEqual(set(seats), {'boss', 'orchestrator', 'gravedigah'})
         for role, parent, name in (('boss', '', 'Oracle'), ('orchestrator', 'boss', 'Robin'),
-                                   ('gravedigger', 'orchestrator', 'Gravedigger')):
+                                   ('gravedigah', 'orchestrator', 'Gravedigah')):
             seat = seats[role]
             self.assertEqual((seat['parent'], seat['name'], seat['root'], seat['tab']),
                              (parent, name, str(self.team / 'bridge'), 'bridge'))
@@ -87,7 +87,7 @@ class StartTests(Sandbox, unittest.TestCase):
         self.assertEqual(calls[:2], [
             ['workspace', 'create', '--label', 'Kiln example', '--cwd', str(self.team / 'bridge'), '--no-focus'],
             ['tab', 'rename', 'w-test:t2', 'bridge']])
-        self.assertEqual([c[2] for c in calls if c[:2] == ['agent', 'start']], ['boss', 'orchestrator', 'gravedigger'])
+        self.assertEqual([c[2] for c in calls if c[:2] == ['agent', 'start']], ['boss', 'orchestrator', 'gravedigah'])
         for call in calls:
             if call[:2] == ['pane', 'split']:
                 self.assertIn(f'KILN_HOME={self.team}', call)
@@ -96,7 +96,7 @@ class StartTests(Sandbox, unittest.TestCase):
     def test_lane_and_bosses_apply_to_bootstrap_and_later_launches(self):
         self.start('--lane', 'claude-lean', '--bosses', 'gpt')
         self.assertEqual({r: s['model'] for r, s in self.seats().items()},
-                         dict(boss='gpt-6-astra', orchestrator='gpt-6.1-sol', gravedigger='gpt-6.1-sol'))
+                         dict(boss='gpt-6-astra', orchestrator='gpt-6.1-sol', gravedigah='gpt-6.1-sol'))
         self.env['KILN_HOME'] = str(self.team)
         self.run_tool('launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
                       '--root', str(self.team / 'build'), '--parent', 'orchestrator')
@@ -109,8 +109,8 @@ class StartTests(Sandbox, unittest.TestCase):
         self.assertFalse(self.team.exists())
         self.assertFalse(Path(self.env['HOME']).exists())
         self.assertEqual(self.calls(), [])
-        for text in ('team.toml', 'ledger.jsonl', 'workspace create', 'tab rename', 'Gravedigger',
-                     'claude-lean', 'gpt', '--address boss', '--address orchestrator', '--address gravedigger'):
+        for text in ('team.toml', 'ledger.jsonl', 'workspace create', 'tab rename', 'Gravedigah',
+                     'claude-lean', 'gpt', '--address boss', '--address orchestrator', '--address gravedigah'):
             self.assertIn(text, result.stdout)
         self.assertEqual(result.stdout.count('# set '), 1)
 
@@ -126,7 +126,7 @@ class StartTests(Sandbox, unittest.TestCase):
         self.assertEqual((self.team / 'team.toml').read_bytes(), original)
 
     def test_invalid_inputs_fail_before_creating_team(self):
-        for extra in (('--lane', 'other'), ('--bosses', 'other'), ('--names', 'gravedigger=Changed'),
+        for extra in (('--lane', 'other'), ('--bosses', 'other'), ('--names', 'gravedigah=Changed'),
                       ('--names', 'director=X,super=Y'),
                       ('--names', 'boss='), ('--names', 'boss=A,boss=B'),
                       ('--project', str(self.base / 'missing'))):
@@ -165,7 +165,7 @@ class StartTests(Sandbox, unittest.TestCase):
         self.assertIn('started panes: boss=w-test:p3', result.stderr)
         remaining = result.stderr.split('remaining launch commands:\n')[1].splitlines()[:2]
         parsed = [shlex.split(line) for line in remaining]
-        self.assertEqual([command[command.index('--address') + 1] for command in parsed], ['orchestrator', 'gravedigger'])
+        self.assertEqual([command[command.index('--address') + 1] for command in parsed], ['orchestrator', 'gravedigah'])
         for command in parsed:
             self.assertEqual(command[:3], ['env', f'KILN_HOME={self.team}', 'HERDR_WORKSPACE_ID=w-test'])
         self.assertIn('--name Robin', remaining[0])
@@ -182,7 +182,7 @@ class StartTests(Sandbox, unittest.TestCase):
         self.assertLess(result.stderr.index(rename), result.stderr.index('remaining launch commands:'))
         self.assertIn(shlex.join(['git', '-C', str(self.project), 'worktree', 'remove', str(self.team / 'build/trunk')]), result.stderr)
         self.assertIn(shlex.join(['git', '-C', str(self.project), 'branch', '-D', 'kiln/team-example']), result.stderr)
-        for role in ('boss', 'orchestrator', 'gravedigger'):
+        for role in ('boss', 'orchestrator', 'gravedigah'):
             self.assertIn(f'--address {role}', result.stderr)
 
     def test_team_name_with_spaces_uses_collapsed_slug(self):

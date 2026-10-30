@@ -351,13 +351,13 @@ class TeamTests(Sandbox, unittest.TestCase):
 
     def test_workers_are_seats_with_matching_parent(self):
         self.seat('impl', role='worker', parent='sender')
-        self.seat('gravedigger', role='gravedigger', parent='sender')
+        self.seat('gravedigah', role='gravedigah', parent='sender')
         self.seat('other', role='worker', parent='receiver')
         rows = self.rows(self.run_tool('team', 'workers'))
-        self.assertEqual([r['address'] for r in rows], ['gravedigger', 'impl'])
+        self.assertEqual([r['address'] for r in rows], ['gravedigah', 'impl'])
         path = self.home / 'seats/impl.json'
         path.unlink()
-        self.assertEqual([r['address'] for r in self.rows(self.run_tool('team', 'workers'))], ['gravedigger'])
+        self.assertEqual([r['address'] for r in self.rows(self.run_tool('team', 'workers'))], ['gravedigah'])
 
     def test_corrupt_and_torn_lines_are_reported_without_losing_appends(self):
         first = self.rows(self.send())[0]
