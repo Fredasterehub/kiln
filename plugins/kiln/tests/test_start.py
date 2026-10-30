@@ -5,6 +5,8 @@ import runpy
 import re
 import shlex
 import subprocess
+import threading
+from types import SimpleNamespace
 from pathlib import Path
 import tomllib
 import unittest
@@ -25,6 +27,34 @@ class StartTests(Sandbox, unittest.TestCase):
         for path in (PLUGIN / 'cards').glob('*.md'):
             with self.subTest(card=path.name):
                 self.assertLessEqual(len(path.read_text().splitlines()), 20)
+
+    def test_wire_ledger_path_precedence(self):
+        for env, expected in (({'KILN_HOME': '/tmp/team', 'WIRE_LEDGER': '/tmp/override'}, '/tmp/team/ledger.jsonl'),
+                              ({'WIRE_LEDGER': '/tmp/override'}, '/tmp/override'),
+                              ({}, '/tank/terry/maintenance/herdr-team/.team/ledger.jsonl')):
+            with self.subTest(env=env), patch.dict('os.environ', env, clear=True):
+                self.assertEqual(runpy.run_path(str(PLUGIN / 'bin/wire'))['LEDGER_PATH'], expected)
+
+    def test_wire_filters_agents_by_workspace_when_set(self):
+        class OnePoll(threading.Event):
+            def wait(self, timeout=None):
+                self.set()
+        for workspace, expected in (('w-test', ['local']), (None, ['local', 'foreign'])):
+            with self.subTest(workspace=workspace):
+                env = dict(self.env)
+                env.pop('WIRE_ROSTER', None)
+                if workspace:
+                    env['HERDR_WORKSPACE_ID'] = workspace
+                else:
+                    env.pop('HERDR_WORKSPACE_ID', None)
+                with patch.dict('os.environ', env, clear=True):
+                    wire = runpy.run_path(str(PLUGIN / 'bin/wire'))
+                    state = SimpleNamespace(stop=OnePoll(), lock=threading.Lock(), seats_unavailable=False,
+                                            seats_read=False, dirty=False, agents=[])
+                    wire['poll_agents'](state)
+                self.assertTrue(state.seats_read)
+                self.assertFalse(state.seats_unavailable)
+                self.assertEqual([a[0] for a in state.agents], expected)
 
     def test_plugin_files_use_current_role_addresses(self):
         retired = re.compile(r'(?<![a-z0-9])(?:director|super(?!\s*\()|helpers?)(?![a-z0-9])', re.I)
@@ -91,6 +121,18 @@ class StartTests(Sandbox, unittest.TestCase):
         for call in calls:
             if call[:2] == ['pane', 'split']:
                 self.assertIn(f'KILN_HOME={self.team}', call)
+        splits = [c for c in calls if c[:2] == ['pane', 'split']]
+        self.assertEqual([(c[2], c[c.index('--direction') + 1], c[c.index('--ratio') + 1]) for c in splits],
+                         [('w-test:p2', 'down', '0.12'), (seats['boss']['pane'], 'down', '0.6'),
+                          (seats['orchestrator']['pane'], 'right', '0.78')])
+        last_start = max(i for i, c in enumerate(calls) if c[:2] == ['agent', 'start'])
+        wire_rename = calls.index(['pane', 'rename', 'w-test:p2', 'wire · ledger · live'])
+        wire_run = next(i for i, c in enumerate(calls) if c[:2] == ['pane', 'run'])
+        self.assertLess(last_start, wire_rename)
+        self.assertLess(wire_rename, wire_run)
+        self.assertIn(['pane', 'run', 'w-test:p2', 'env', f'KILN_HOME={self.team}',
+                       'python3', str(PLUGIN / 'bin/wire')], calls)
+        self.assertFalse(any(c[:2] == ['pane', 'close'] for c in calls))
         self.assertTrue((Path(self.env['CODEX_HOME']) / 'config.toml').exists())
 
     def test_lane_and_bosses_apply_to_bootstrap_and_later_launches(self):
@@ -101,7 +143,7 @@ class StartTests(Sandbox, unittest.TestCase):
         self.run_tool('launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
                       '--root', str(self.team / 'build'), '--parent', 'orchestrator')
         seat = json.loads((self.team / 'seats/build.json').read_text())
-        self.assertEqual((seat['lane'], seat['model']), ('claude-lean', 'gpt-6.1-sol'))
+        self.assertEqual((seat['lane'], seat['model']), ('claude-lean', 'claude-opus-5-5'))
         self.assertEqual(seat['card'], str(PLUGIN / 'cards/manager-build.md'))
 
     def test_dry_run_prints_plan_without_files_or_herdr_calls(self):
@@ -113,6 +155,14 @@ class StartTests(Sandbox, unittest.TestCase):
                      'claude-lean', 'gpt', '--address boss', '--address orchestrator', '--address gravedigah'):
             self.assertIn(text, result.stdout)
         self.assertEqual(result.stdout.count('# set '), 1)
+        lines = [shlex.split(line) for line in result.stdout.splitlines() if '--address' in line]
+        self.assertEqual([(c[c.index('--from') + 1], c[c.index('--direction') + 1],
+                           c[c.index('--ratio') + 1]) for c in lines],
+                         [('<wire-pane>', 'down', '0.12'), ('<boss-pane>', 'down', '0.6'),
+                          ('<orchestrator-pane>', 'right', '0.78')])
+        self.assertIn("herdr pane rename '<wire-pane>' 'wire · ledger · live'", result.stdout)
+        self.assertIn("herdr pane run '<wire-pane>' env", result.stdout)
+        self.assertIn(str(PLUGIN / 'bin/wire'), result.stdout)
 
     def test_existing_team_is_preserved_and_not_launched_again(self):
         self.start()
@@ -138,6 +188,7 @@ class StartTests(Sandbox, unittest.TestCase):
         self.env['FAKE_FAIL'] = 'agent start'
         result = self.start(ok=False)
         self.assertIn('launch failed for boss', result.stderr)
+        self.assertIn('wire pane: w-test:p2', result.stderr)
         self.assertTrue((self.team / 'team.toml').exists())
         self.assertEqual([c[2] for c in self.calls() if c[:2] == ['agent', 'start']], ['boss'])
         self.assertEqual(self.seats(), {})

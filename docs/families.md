@@ -121,7 +121,7 @@ in lane order; `conceptual.0` still selects just the first entry.
 The orchestrator launches each phase manager only when work starts (council
 at the first question), with address equal to the phase. The launcher creates
 a missing tab in HERDR_WORKSPACE_ID, falling back to the parent seat's recorded
-workspace when the variable is absent. Use this shape from the orchestrator's pane:
+workspace when the variable is absent. Phase workers default to their parent’s tab, splitting right of the parent first and down from the last live worker thereafter; bridge seats' workers go to `bridge-work`; a new tab’s root shell closes once the seat is up. Use this shape from the orchestrator's pane:
 
 ```sh
 plugins/kiln/bin/launch --tab build --address build --role manager --root "$KILN_HOME/build" --parent orchestrator

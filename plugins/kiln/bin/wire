@@ -1,0 +1,736 @@
+#!/usr/bin/env python3
+"""Wire: today's wire (ledger messages) plus an agents block in a band that fills the pane, legend on the last row."""
+import datetime
+import hashlib
+import json
+import math
+import os
+import re
+import signal
+import subprocess
+import sys
+import termios
+import threading
+import time
+import unicodedata
+from collections import deque
+
+SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+# One spinner style per tab (label from `herdr tab list`); all one-cell, width-tested in Herdr 2026-10-26.
+TAB_SPINNERS = {}                              # any other tab falls back to SPINNER
+# One plain color per tab, carried by its spinner in the block and the legend. xterm-256 shades of the
+# obvious hue that reach WCAG 2.x 4.5:1 on Nord #2e3440, with the 16-color slot used when TERM lacks 256.
+COLOR_DEPTH = 256 if '256color' in os.environ.get('TERM', '') or os.environ.get('COLORTERM', '').lower() in ('truecolor', '24bit') else 16
+NO_COLOR = bool(os.environ.get('NO_COLOR')) or os.environ.get('TERM') == 'dumb' or not (sys.stdout.isatty() or os.environ.get('FORCE_COLOR'))
+
+
+def paint(n256, n16):
+    if NO_COLOR: return ''
+    return f'\x1b[38;5;{n256}m' if COLOR_DEPTH == 256 else f'\x1b[{n16}m'
+
+
+TAB_COLORS = {
+    'bridge': paint(210, 31),     # red     #ff8787 5.39
+    'research': paint(40, 32),    # green   #00d700 6.38
+    'build': paint(75, 34),       # blue    #5fafff 5.39
+    'plan': paint(220, 33),       # yellow, as council
+    'ui': paint(141, 35),         # purple, as studio
+}                              # any other tab: the band's neutral grey (GREY)
+# Provisional state glyphs (the user picks the final mapping later). 'working' uses SPINNER. In the
+# block, working and idle take the seat's name color; the legend keeps idle grey (it has no seat).
+STATE_GLYPHS = {
+    'working': (None, ''),
+    'idle': ('○', paint(244, 39)),
+    'done': ('✓', paint(78, 92)),
+    'blocked': ('!', (('\x1b[1m' if not NO_COLOR else '') + paint(203, 91))),
+    'unknown': ('?', paint(178, 33)),    # gold    #d7af00 5.96
+}
+LEGEND_KINDS = ('request', 'done', 'question', 'answer')          # order of the legend, words as on the band
+LEGEND_STATES = ('working', 'idle', 'done', 'blocked', 'unknown')
+
+LEDGER_PATH = os.path.join(os.environ['KILN_HOME'], 'ledger.jsonl') if os.environ.get('KILN_HOME') else os.environ.get('WIRE_LEDGER', '/tank/terry/maintenance/herdr-team/.team/ledger.jsonl')
+BAND_ROWS = 5                   # fallback height when the tty size is unknown
+MESSAGE_HISTORY = 64            # messages kept for the band; more than any pane shows
+MIN_MESSAGE_WIDTH = 48          # the agents block gives way before the wire column shrinks below this
+SPINNER_INTERVAL = 0.1
+LEDGER_INTERVAL = 0.2
+AGENT_INTERVAL = 2.0
+AGENT_TIMEOUT = 1.5
+SEPARATOR = ' │ '
+SGR = re.compile(r'\x1b\[[0-9;]*m')
+
+RESET = '' if NO_COLOR else '\x1b[0m'
+LINE = '' if NO_COLOR else '\x1b[38;5;252m'
+DIM = '' if NO_COLOR else '\x1b[2m'
+
+
+def faded(parts):
+    """Older band rows: the same parts, dimmed, so the newest line reads first."""
+    return [((style + DIM) if style else DIM, text) for style, text in parts] if DIM else parts
+GREY = paint(244, 39)
+KINDS = {
+    'request': ('📨', paint(75, 94)),
+    'done': ('✅', paint(78, 92)),
+    'question': ('❓', paint(220, 33)),
+    'answer': ('💬', paint(80, 36)),
+    'update': ('📝', paint(244, 39)),
+}
+SEAT_TAB = {}                  # seat name -> tab label, refreshed by poll_agents; colors seats in the wire by their tab
+FROM_W, TO_W = 12, 12          # fixed from/to columns so every headline starts at the same cell
+# Seven well-separated hues; md5 slot keeps each name's color stable across restarts.
+SEAT_PALETTE = (214, 213, 87, 141, 203, 111, 156)
+
+
+def seat(name):
+    if NO_COLOR: return ''
+    return '\x1b[1m' + TAB_COLORS.get(SEAT_TAB.get(name, ''), GREY)
+
+
+def cells(char):
+    if unicodedata.combining(char):
+        return 0
+    return 2 if unicodedata.east_asian_width(char) in ('W', 'F') else 1
+
+
+def fit(parts, width):
+    """Clip whole display cells and style segments, with no control text from sources."""
+    width = max(0, width)
+    parts = [(style, ''.join(c for c in text if not unicodedata.category(c).startswith('C'))) for style, text in parts]
+    total = sum(cells(c) for _, text in parts for c in text)
+    budget = max(0, width - 1) if total > width else width
+    out = []
+    for style, text in parts:
+        kept = ''
+        for char in text:
+            if cells(char) > budget:
+                if kept: out.append(style + kept + (RESET if style else ''))
+                return ''.join(out) + ('…' if total > width and width else '')
+            kept += char
+            budget -= cells(char)
+        if kept: out.append(style + kept + (RESET if style else ''))
+        if budget == 0: break
+    return ''.join(out) + ('…' if total > width and width else '')
+
+
+def render(record):
+    when = datetime.datetime.fromisoformat(record['time']).astimezone().strftime('%H:%M')
+    glyph, color = KINDS.get(record.get('kind'), ('·', ''))
+    sender, receiver = record.get('from', '?'), record.get('to', '?')
+    sender_s, receiver_s = sender[:FROM_W].rjust(FROM_W), receiver[:TO_W].ljust(TO_W)
+    parts = [(GREY, when + ' '), (color, glyph + ' '), (seat(sender), sender_s), (GREY, ' ▸ '),
+             (seat(receiver), receiver_s), (LINE, ' ' + (record.get('headline') or record.get('line', '')))]   # Kiln rows carry headline; CT101 rows carried line
+    return parts
+
+
+
+def visible_cells(text):
+    return sum(cells(char) for char in SGR.sub('', text))
+
+
+def pad(text, width):
+    return text + ' ' * max(0, width - visible_cells(text))
+
+
+# Quota reads are passive and keep only numeric quota projections in memory.
+CLAUDE_QUOTA = '/tank/dump/claude/tmp/root/claude-0/statusline/quota.json'
+CODEX_SESSIONS = '/root/.codex/sessions'
+
+
+def number(value):
+    if not isinstance(value, (int, float)) or isinstance(value, bool): return False
+    try: return math.isfinite(value)
+    except OverflowError: return False
+
+
+def epoch(value):
+    if not number(value) or value < 0: return None
+    try:
+        datetime.datetime.fromtimestamp(value, datetime.timezone.utc)
+        return value
+    except (OverflowError, OSError, ValueError): return None
+
+
+def event_time(value):
+    if not isinstance(value, str): return None
+    try:
+        dt = datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return epoch(dt.timestamp()) if dt.tzinfo else None
+    except (ValueError, OverflowError, OSError): return None
+
+
+def duration_label(minutes):
+    if not isinstance(minutes, int) or isinstance(minutes, bool) or minutes <= 0: return None
+    if minutes == 10080: return 'wk'
+    if minutes % 1440 == 0: return f'{minutes // 1440}d'
+    if minutes % 60 == 0: return f'{minutes // 60}h'
+    return f'{minutes}m'
+
+
+def age_text(observed, now):
+    age = int(now - observed)
+    for seconds, suffix in ((86400, 'd'), (3600, 'h'), (60, 'm')):
+        if age >= seconds: return f'{age // seconds}{suffix}'
+    return f'{age}s'
+
+
+def quota_window(raw, observed, now, claude=False, duration=None, source_reason='missing'):
+    raw = raw if isinstance(raw, dict) and observed is not None else {}
+    used = raw.get('used_percentage' if claude else 'used_percent')
+    minutes = duration if claude else raw.get('window_minutes')
+    reset = epoch(raw.get('resets_at'))
+    label = duration_label(minutes)
+    valid_used = number(used) and 0 <= used <= 100
+    reason = source_reason if observed is None else 'invalid percentage' if not valid_used else 'duration unknown' if label is None else 'reset unknown' if reset is None else 'expired' if reset <= now else None
+    return {'used': used if valid_used else None, 'minutes': minutes if label else None,
+            'label': label, 'reset': reset, 'observed': observed, 'reason': reason}
+
+
+def read_claude(path, now):
+    reason, observed, data = 'missing', None, {}
+    try:
+        with open(path, encoding='utf-8') as handle: data = json.load(handle)
+        if not isinstance(data, dict) or type(data.get('schema_version')) is not int or data['schema_version'] != 1:
+            reason = 'unsupported schema'
+        else:
+            observed = epoch(data.get('observed_at'))
+            if observed is None or observed > now:
+                reason, observed = 'invalid observation time', None
+    except FileNotFoundError: pass
+    except (OSError, ValueError, UnicodeError): reason = 'unreadable or malformed'
+    return [quota_window(data.get(key) if isinstance(data, dict) else None, observed, now, True, duration, reason)
+            for key, duration in (('five_hour', 300), ('seven_day', 10080))]
+
+
+def project_window(raw):
+    if raw is None: return None
+    if not isinstance(raw, dict): return {}
+    # Reject all other fields before caching, including source identifiers.
+    return {key: raw.get(key) if number(raw.get(key)) else None
+            for key in ('used_percent', 'window_minutes', 'resets_at')}
+
+
+class CodexQuota:
+    """Cache only quota projections; changed files are reparsed, never persisted."""
+    def __init__(self, path):
+        self.path, self.cache = path, {}
+        self.file_count = self.parsed_count = 0
+
+    def read(self, now):
+        files = []
+        for root, dirs, names in os.walk(self.path):
+            for name in names:
+                if not name.startswith('rollout-') or not name.endswith('.jsonl'): continue
+                path = os.path.join(root, name)
+                try:
+                    st = os.stat(path)
+                    files.append((st.st_mtime_ns, path, st.st_size))
+                except OSError: continue
+        files.sort(reverse=True)
+        self.file_count, self.parsed_count = len(files), 0
+        present = {path for _, path, _ in files}
+        self.cache = {path: value for path, value in self.cache.items() if path in present}
+        best = None
+        for mtime, path, size in files:
+            # Accepted mtime optimization assumes event timestamps do not exceed file mtime.
+            if best and best[0] > mtime / 1e9: break
+            signature = (size, mtime)
+            cached = self.cache.get(path)
+            if cached is None or cached[0] != signature:
+                observations = []
+                try:
+                    with open(path, encoding='utf-8') as handle:
+                        for index, line in enumerate(handle):
+                            if not line.endswith('\n'): continue
+                            try:
+                                event = json.loads(line)
+                                if not isinstance(event, dict) or event.get('type') != 'event_msg': continue
+                                payload = event.get('payload')
+                                if not isinstance(payload, dict) or payload.get('type') != 'token_count': continue
+                                rate = payload.get('rate_limits')
+                                stamp = event_time(event.get('timestamp'))
+                                if not isinstance(rate, (dict, list)) or stamp is None: continue
+                                other = []
+                                rate_items = rate.items() if isinstance(rate, dict) else enumerate(rate)
+                                for key, value in rate_items:
+                                    if key in ('primary', 'secondary', 'credits', 'plan_type', 'limit_id', 'limit_name'): continue
+                                    if isinstance(value, dict):
+                                        if 'used_percent' in value: other.append(project_window(value))
+                                        else:
+                                            found = False
+                                            for bucket in ('primary', 'secondary'):
+                                                if bucket in value:
+                                                    other.append(project_window(value[bucket])); found = True
+                                            if not found: other.append(None)
+                                    elif isinstance(value, list):
+                                        other.extend(project_window(item) for item in value)
+                                main_rate = rate if isinstance(rate, dict) else {}
+                                observations.append((stamp, index, project_window(main_rate.get('primary')),
+                                                     project_window(main_rate.get('secondary')), other))
+                            except (ValueError, TypeError, AttributeError): continue
+                except (OSError, UnicodeError): observations = []
+                self.cache[path] = (signature, observations)
+                self.parsed_count += 1
+            for observation in self.cache[path][1]:
+                stamp, index, primary, secondary, other = observation
+                candidate = (stamp, path, index, primary, secondary, other)
+                if stamp <= now and (best is None or candidate[:3] > best[:3]): best = candidate
+        if best is None:
+            return [quota_window(None, None, now)], []
+        stamp, _, _, primary, secondary, other = best
+        windows = [quota_window(primary, stamp, now)]
+        if secondary is not None: windows.append(quota_window(secondary, stamp, now))
+        return windows, [quota_window(raw, stamp, now) for raw in other]
+
+
+def read_quota(reader=None, now=None, claude_path=None):
+    now = time.time() if now is None else now
+    reader = reader or CodexQuota(os.environ.get('WIRE_CODEX_SESSIONS', CODEX_SESSIONS))
+    windows, other = reader.read(now)
+    return {'claude': read_claude(claude_path or os.environ.get('WIRE_CLAUDE_QUOTA', CLAUDE_QUOTA), now),
+            'codex': windows, 'other': other, 'now': now}
+
+
+def quota_value(window):
+    if window['reason']: return '--'
+    used = window['used']
+    if 0 < used < 1: return '<1%'
+    return f"{100 if used == 100 else min(99, int(used + 0.5))}%"
+
+
+def quota_prefix(quota):
+    return ''.join(text for _, text in quota_parts(quota))
+
+
+# Closed terminal tokens: reuse request blue and existing foreground/unknown styles.
+QUOTA_METER_CELLS = 10
+QUOTA_EIGHTHS = 8
+QUOTA_BLOCKS = ' ▏▎▍▌▋▊▉█'
+QUOTA_EMPTY = '▱'
+QUOTA_FULL = '▰'
+QUOTA_TRACK = paint(239, 90)
+# Per-segment ramp, green → yellow → orange → red, so the bar changes color as it fills.
+QUOTA_RAMP = [paint(n256, n16) for n256, n16 in ((41, 32), (77, 32), (113, 32), (149, 32), (185, 33),
+                                                  (221, 33), (215, 33), (209, 91), (203, 91), (197, 91))]
+QUOTA_BOLD = '' if NO_COLOR else '\x1b[1;39m'
+QUOTA_ACCENT = paint(75, 94)
+QUOTA_UNKNOWN = paint(178, 33)
+
+
+def quota_parts(quota):
+    if quota is None:
+        quota = {'codex': [{'label': None, 'reason': 'missing'}],
+                 'claude': [{'label': '5h', 'reason': 'missing'}, {'label': 'wk', 'reason': 'missing'}]}
+    parts = []
+    for provider_index, (provider, windows) in enumerate((('Codex', quota['codex']), ('Claude', quota['claude']))):
+        if provider_index: parts.append((GREY, '  '))
+        parts.append((QUOTA_BOLD, provider + ' '))
+        for index, window in enumerate(windows):
+            if index: parts.append((GREY, ' · '))
+            label = 'week' if window['label'] == 'wk' and provider == 'Codex' else '7d' if window['label'] == 'wk' else window['label']
+            if label: parts.append(('', label + ' '))
+            if window['reason']:
+                parts.append((QUOTA_UNKNOWN, 'expired' if window['reason'] == 'expired' else '--'))
+                continue
+            used = window['used']
+            filled = min(QUOTA_METER_CELLS, round(used * QUOTA_METER_CELLS / 100))
+            if used > 0 and not filled: filled = 1
+            level = QUOTA_RAMP[max(0, filled - 1)]
+            parts += [(QUOTA_RAMP[i], QUOTA_FULL) for i in range(filled)]
+            parts += [(QUOTA_TRACK, QUOTA_EMPTY * (QUOTA_METER_CELLS - filled)),
+                      ('', ' '), ('\x1b[1m' + level if level else '', quota_value(window))]
+            left = (window.get('reset') or 0) - time.time()
+            if left > 0:
+                hours, minutes = divmod(int(left) // 60, 60)
+                text = f'{minutes}m' if not hours else f'{hours}h{minutes:02d}' if hours < 24 else f'{hours // 24}d{hours % 24}h'
+                parts.append((QUOTA_TRACK, ' ↻ ' + text))
+    return parts
+
+
+def iso_time(value):
+    return '--' if value is None else datetime.datetime.fromtimestamp(value, datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
+
+
+def quota_details(quota):
+    lines = ['Used percentages; scope: local root Claude and Codex contexts.',
+             'Every prefix percentage is used; unfilled meter capacity is remaining.',
+             'Meter: floor(32 × used / 100) eighths across four cells, at least one eighth for positive use; full only at 100% used.',
+             'One blue fill grows without warning thresholds. Percentages round to nearest integer; positive <1% and true 100% stay distinct.',
+             'Unknown -- and expired have no meter. Old unexpired records retain their used value.',
+             'Codex record age does not establish provider measurement freshness; Claude age is producer observation age.']
+    for provider, windows in (('Claude', quota['claude']), ('Codex', quota['codex']), ('Codex other shape (details only)', quota['other'])):
+        for index, window in enumerate(windows):
+            observed = window['observed']
+            value = '-- (' + window['reason'] + ')' if window['reason'] else str(window['used']) + '% used, ' + format(100 - window['used'], '.10g') + '% remaining'
+            bucket = ('five_hour', 'seven_day')[index] if provider == 'Claude' else ('primary' if index == 0 else 'secondary') if provider == 'Codex' else str(index + 1)
+            lines.append(f"{provider} {bucket}: "
+                         f"duration={str(window['minutes'])+'m' if window['minutes'] is not None else '--'} {value}; {'recorded' if provider.startswith('Codex') else 'observed'}={iso_time(observed)}; "
+                         f"age={age_text(observed, quota['now']) if observed is not None else '--'}; reset={iso_time(window['reset'])}")
+    return '\n'.join(lines)
+
+
+def refresh_quota(state, reader, now=None):
+    quota = read_quota(reader, now)
+    with state.lock:
+        if quota_prefix(quota) != quota_prefix(state.quota): state.dirty = True
+        state.quota = quota
+
+
+def poll_quota(state):
+    reader = CodexQuota(os.environ.get('WIRE_CODEX_SESSIONS', CODEX_SESSIONS))
+    while not state.stop.is_set():
+        refresh_quota(state, reader)
+        state.stop.wait(AGENT_INTERVAL)
+
+
+class State:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.messages = deque(maxlen=MESSAGE_HISTORY)
+        self.agents = []
+        self.ledger_unavailable = False
+        self.seats_read = False
+        self.seats_unavailable = True
+        self.quota = None
+        self.dirty = True
+        self.stop = threading.Event()
+
+    def mark(self):
+        with self.lock:
+            self.dirty = True
+
+
+def follow_ledger(state):
+    """Replay the ledger's last messages, then follow appends; skip/dedup: later records for an id are bookkeeping."""
+    seen = set()
+
+    def take(raw):
+        try:
+            record = json.loads(raw)
+            if record['id'] in seen or record.get('kind') not in KINDS:
+                return
+            seen.add(record['id'])
+            parts = render(record)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            return
+        with state.lock:
+            state.messages.append(parts)
+            state.dirty = True
+
+    position = 0
+    while not state.stop.is_set():
+        try:
+            size = os.path.getsize(LEDGER_PATH)
+            if size < position:
+                position = 0             # truncated or rotated: replay from the start
+            if size > position:
+                with open(LEDGER_PATH, encoding='utf-8') as handle:
+                    handle.seek(position)
+                    for raw in handle:
+                        if not raw.endswith('\n'):
+                            break        # partial append: read it on the next pass
+                        position += len(raw.encode('utf-8'))
+                        take(raw)
+            with state.lock:
+                if state.ledger_unavailable: state.dirty = True
+                state.ledger_unavailable = False
+        except (OSError, UnicodeError):
+            with state.lock:
+                if not state.ledger_unavailable: state.dirty = True
+                state.ledger_unavailable = True
+        state.stop.wait(LEDGER_INTERVAL)
+
+
+def herdr(*args):
+    run = subprocess.run(['herdr', *args], capture_output=True, text=True, timeout=AGENT_TIMEOUT)
+    if run.returncode != 0:
+        raise OSError(run.stderr.strip())
+    return json.loads(run.stdout)['result']
+
+
+def poll_agents(state):
+    """Poll `herdr agent list` (and tab labels) with a timeout so a slow server never stalls the band."""
+    tab_labels = {}
+    while not state.stop.is_set():
+        agents = None
+        try:
+            if os.environ.get('WIRE_ROSTER'):
+                with open(os.environ['WIRE_ROSTER']) as handle: agents = [tuple(a) for a in json.load(handle)]
+                SEAT_TAB.update((a[0], a[3]) for a in agents)
+                listed = []
+            else:
+                listed = herdr('agent', 'list')['agents']
+                if os.environ.get('HERDR_WORKSPACE_ID'):   # one team's wire shows one workspace, never the whole server
+                    listed = [a for a in listed if a.get('workspace_id') == os.environ['HERDR_WORKSPACE_ID']]
+            for workspace in {a.get('workspace_id') for a in listed} - {None}:
+                tab_labels.update((t['tab_id'], t.get('label', '')) for t in
+                                  herdr('tab', 'list', '--workspace', workspace)['tabs'])
+            if not os.environ.get('WIRE_ROSTER'):
+                SEAT_TAB.update((a.get('name'), tab_labels.get(a.get('tab_id'), '')) for a in listed if a.get('name'))
+                agents = [(a.get('name') or a.get('pane_id', '?'), bool(a.get('name')),
+                       a.get('agent_status', 'unknown'), tab_labels.get(a.get('tab_id'), ''))
+                      for a in listed]
+        except (subprocess.SubprocessError, OSError, ValueError, KeyError, TypeError):
+            agents = None
+        with state.lock:
+            unavailable = agents is None
+            if unavailable != state.seats_unavailable: state.dirty = True
+            state.seats_unavailable = unavailable
+            if agents is not None:
+                state.seats_read = True
+                if agents != state.agents:
+                    state.agents = agents
+                    state.dirty = True
+        state.stop.wait(AGENT_INTERVAL)
+
+
+def tab_rows(agents, rows):
+    """One roster row per tab: header `tab working/total`, then every working or blocked seat by name, idle
+    seats as one count. Height = number of tabs, width = activity. Beyond `rows` tabs, the quietest collapse
+    into one `+N tabs` row. Each row: (segments [(style, text, frames_or_None)], total_cells)."""
+    order = ['bridge', 'research', 'plan', 'build', 'ui']
+    tabs = sorted({tab for *_, tab in agents}, key=lambda t: (order.index(t) if t in order else len(order), t))
+    built = []
+    for tab in tabs:
+        color = TAB_COLORS.get(tab, GREY)
+        members = [a for a in agents if a[3] == tab]
+        active = [a for a in members if a[2] not in ('idle', 'done')]
+        quiet = len(members) - len(active)
+        working = sum(1 for a in members if a[2] == 'working')
+        segs = [(('' if NO_COLOR else '\x1b[1m') + color, f'{tab} {working}/{len(members)}', None)]
+        for name, named, status, _ in sorted(active, key=lambda a: a[2] != 'working'):
+            glyph, glyph_style = STATE_GLYPHS.get(status, STATE_GLYPHS['unknown'])
+            if status == 'working': segs.append(('', '  ', None)); segs.append((color, SPINNER[0], SPINNER))
+            else: segs.append(('', '  ', None)); segs.append((glyph_style, glyph, None))
+            segs.append(('', ' ', None)); segs.append((color if named else GREY, name, None))
+        if quiet: segs += [('', '  ', None), (color + DIM, f'○ {quiet} idle', None)]
+        built.append((len(active), segs))
+    if len(built) > rows and rows > 0:
+        built.sort(key=lambda b: (b[1][0][1].split()[0] != 'bridge', -b[0])); kept, rest = built[:rows-1], built[rows-1:]
+        kept.append((0, [(GREY, f'+{len(rest)} tabs', None)]))
+        built = kept
+    return [(segs, sum(cells(c) for _, t, _ in segs for c in t)) for _, segs in built]
+
+
+def message_budget(width):
+    return 72 if width >= 180 else 60 if width >= 118 else 48
+
+
+def wrap_row(segs, width):
+    """Wrap one tab row at seat boundaries into lines no wider than `width`; continuation lines are indented."""
+    lines, current, cur_w = [], [], 0
+    indent = [('', '   ', None)]
+    chunks, chunk = [], []
+    for seg in segs:                                  # a chunk = the glyph, the gap and the name of one seat
+        if seg[1] == '  ' and chunk: chunks.append(chunk); chunk = []
+        chunk.append(seg)
+    if chunk: chunks.append(chunk)
+    for chunk in chunks:
+        w = sum(cells(c) for _, t, _ in chunk for c in t)
+        if current and cur_w + w > width:
+            lines.append(current); current, cur_w = list(indent), 3
+        current += chunk; cur_w += w
+    if current: lines.append(current)
+    return lines
+
+
+def roster_plan(width, rows, agents):
+    """Roster lines (a tab may take several), block width; the wire column never drops below its budget."""
+    if rows <= 0 or not agents: return [], 0, 0
+    block = max(0, width - 1 - message_budget(width) - len(SEPARATOR))
+    tabs = tab_rows(agents, rows)
+    natural = max(w for _, w in tabs)
+    block = min(natural, block)
+    lines = []
+    for segs, _ in tabs:
+        lines += wrap_row(segs, block)
+    if len(lines) > rows: lines = lines[:rows-1] + [[(GREY, f'+{len(lines)-rows+1} more', None)]]
+    block = min(block, max(sum(cells(c) for _, t, _ in l for c in t) for l in lines))
+    return [(l, 0) for l in lines], block, len(agents)
+
+
+def layout(width, rows, messages, agents, frozen=False):
+    """Band only; the roster takes one row per tab on the right, the wire fills the rest."""
+    if rows <= 0: return [], []
+    available = max(0, width-1)
+    roster, block_width, _ = roster_plan(width, rows, agents)
+    message_width = max(0, available - (len(SEPARATOR) + block_width if roster else 0))
+    lines, spinners = [], []
+    for row in range(rows):
+        index = len(messages) - rows + row
+        parts = messages[index] if index >= 0 else None
+        if parts is not None and row < rows - 1: parts = faded(parts)
+        line = pad(fit(parts, message_width) if parts is not None else '', message_width)
+        if roster:
+            line += GREY + SEPARATOR + RESET
+            if row < len(roster):
+                segs, _ = roster[row]
+                col = message_width + len(SEPARATOR) + 1
+                for style, text, frames in segs:
+                    if frames and not frozen and col <= message_width + len(SEPARATOR) + block_width:
+                        spinners.append((row+1, col, frames, style))
+                    col += sum(map(cells, text))
+                line += pad(fit([(style, text) for style, text, _ in segs], block_width), block_width)
+            else: line += ' ' * block_width
+        lines.append(line.rstrip())
+    return lines, spinners
+
+
+def roster_shown(width, rows, agents):
+    return roster_plan(width, rows, agents)[2]
+
+
+def render_frame(width, height, messages, agents, seats_read=True, seats_unavailable=False, ledger_unavailable=False, quota=None):
+    if height <= 0: return [], []
+    if height == 1:
+        diagnostic = '! ledger unavailable' if ledger_unavailable else '? seats unavailable' if not seats_read else ''
+        return [fit([(paint(203,91), diagnostic)] if diagnostic else messages[-1] if messages else [('', 'No messages yet')], max(0,width-1))], []
+    rows = height - 1
+    lines, spinners = layout(width, rows, messages, agents, seats_unavailable)
+    shown = roster_shown(width, rows, agents)
+    health = []
+    if ledger_unavailable: health.append('! ledger unavailable')
+    if seats_unavailable: health.append('! seats unavailable' if seats_read else '? seats unavailable')
+    elif not agents: health.append('0 seats')
+    elif not shown: health.append(f'+{len(agents)} seats')
+    legend_line, legend_spinners = legend(width, health, quota)
+    lines.append(legend_line)
+    # No fresh-looking activity in roster legend after poll loss.
+    if not seats_unavailable:
+        spinners += [(height, col, frames, style) for col, frames, style in legend_spinners]
+    return lines, spinners
+
+
+def terminal_size():
+    """Ask the tty itself (not COLUMNS/LINES, which go stale across resizes)."""
+    try:
+        return os.get_terminal_size(sys.stdout.fileno())
+    except (OSError, ValueError):
+        return os.terminal_size((120, BAND_ROWS))
+
+
+def raise_interrupt(*_):
+    raise KeyboardInterrupt
+
+
+def legend(width, health=(), quota=None):
+    """Keep source health and state words; drop tabs first, then kind entries."""
+    diagnostics = []
+    for text in health:
+        if diagnostics: diagnostics.append((GREY, ' │ '))
+        if text.startswith(('!', '?')):
+            diagnostics += [(paint(203,91) if text[0]=='!' else paint(178,33), text[0]),
+                            ('' if NO_COLOR else '\x1b[1;39m', text[1:])]
+        else: diagnostics.append((GREY, text))
+    states = []
+    for status in LEGEND_STATES:
+        glyph, color = STATE_GLYPHS[status]
+        states += [(color, glyph or SPINNER[0]), (GREY, ' '+status+' ')]
+    kinds = []
+    for kind in LEGEND_KINDS:
+        glyph, color = KINDS[kind]
+        kinds += [(color, glyph), (GREY, ' '+kind+' ')]
+    tabs = []
+    for tab, frames in TAB_SPINNERS.items(): tabs += [(TAB_COLORS[tab], frames[0]+' '+tab+' ')]
+    prefix = quota_parts(quota) + [(GREY, ' │ ')] + diagnostics + ([(GREY, ' │ ')] if diagnostics else [])
+    choices = [kinds + states, states]
+    parts = prefix + states
+    full_legend = False
+    for index, choice in enumerate(choices):
+        candidate = prefix + choice
+        if sum(cells(c) for _,t in candidate for c in t) <= width-1:
+            parts = candidate
+            full_legend = index == 0
+            break
+    line = fit(parts, max(0,width-1))
+    shown = visible_cells(line)
+    clipped = sum(cells(c) for _, text in parts for c in text) > max(0, width - 1)
+    glyph_cells = shown - int(clipped and shown > 0)
+    indent = max(0, (width - shown) // 2) if full_legend else 0
+    position, spinners = 1, []
+    for index, (style, text) in enumerate(parts):
+        if text == SPINNER[0] and index+1 < len(parts) and parts[index+1][1].startswith(' working'):
+            spinners.append((position, SPINNER, style))
+        for tab, frames in TAB_SPINNERS.items():
+            if text == frames[0]+' '+tab+' ':
+                spinners.append((position, frames, style))
+        position += sum(map(cells,text))
+    return ' ' * indent + line, [(col + indent, frames, style)
+                                 for col, frames, style in spinners if col <= glyph_cells]
+
+
+def emit(text):
+    if NO_COLOR:
+        text = SGR.sub('', text)
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+
+def main():
+    if '--quota-details' in sys.argv[1:]:
+        print(quota_details(read_quota()))
+        return
+    state = State()
+    if not sys.stdout.isatty():
+        try:
+            seen = set()
+            with open(LEDGER_PATH) as handle:
+                for raw in handle:
+                    try:
+                        record = json.loads(raw)
+                        if record['id'] not in seen and record.get('kind') in KINDS:
+                            seen.add(record['id']); state.messages.append(render(record))
+                    except (ValueError, KeyError, TypeError, AttributeError): pass
+        except (OSError, UnicodeError): state.ledger_unavailable = True
+        try:
+            with open(os.environ['WIRE_ROSTER']) as handle: state.agents = [tuple(a) for a in json.load(handle)]
+            state.seats_read = True; state.seats_unavailable = False
+        except (KeyError, OSError, ValueError): pass
+        state.quota = read_quota()
+        print('\n'.join(render_frame(int(os.environ.get('COLUMNS',120)), int(os.environ.get('LINES',5)), list(state.messages), state.agents, state.seats_read, state.seats_unavailable, state.ledger_unavailable, state.quota)[0]))
+        return
+    threading.Thread(target=follow_ledger, args=(state,), daemon=True).start()
+    threading.Thread(target=poll_agents, args=(state,), daemon=True).start()
+    threading.Thread(target=poll_quota, args=(state,), daemon=True).start()
+    signal.signal(signal.SIGWINCH, lambda *_: state.mark())
+    signal.signal(signal.SIGTERM, raise_interrupt)
+
+    tty_attrs = None
+    try:                                  # keep key echo (and ^C) off the band; restored in finally
+        tty_attrs = termios.tcgetattr(sys.stdin)
+        quiet = list(tty_attrs)
+        quiet[3] &= ~(termios.ECHO | termios.ECHOCTL)
+        termios.tcsetattr(sys.stdin, termios.TCSANOW, quiet)
+    except (termios.error, ValueError, OSError):
+        pass
+    emit('\x1b[?1049h\x1b[?25l')                     # hide cursor; restored in finally
+    spinners, frame, rows, drawn_size = [], 0, BAND_ROWS, None
+    try:
+        while True:
+            size = terminal_size()
+            with state.lock:
+                dirty, state.dirty = state.dirty or size != drawn_size, False
+                messages, agents = list(state.messages), list(state.agents)
+                quota = state.quota
+                health = (state.seats_read, state.seats_unavailable, state.ledger_unavailable)
+            if dirty:
+                if size != drawn_size: emit('\x1b[2J')
+                drawn_size = size
+                lines, spinners = render_frame(size.columns, size.lines, messages, agents, *health, quota=quota)
+                out = ''.join(f'\x1b[{i + 1};1H\x1b[2K{line}' for i, line in enumerate(lines))
+                emit(out)
+            if spinners:                  # redraw only the spinner cells in place
+                emit(''.join(f'\x1b[{row};{col}H{style}{frames[frame % len(frames)]}{RESET}'
+                             for row, col, frames, style in spinners))
+            frame += 1
+            time.sleep(SPINNER_INTERVAL)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        state.stop.set()
+        emit(f'{RESET}\x1b[?1049l\x1b[?25h')   # park below band and legend, show cursor
+        if tty_attrs is not None:
+            termios.tcsetattr(sys.stdin, termios.TCSANOW, tty_attrs)
+
+
+if __name__ == '__main__':
+    main()

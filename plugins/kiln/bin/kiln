@@ -90,6 +90,7 @@ def main():
     worktree_created = False
     workspace_id, tab_id = "<not-created>", "<not-created>"
     panes, commands = {}, []
+    wire_pane = "<not-created>"
     try:
         if args.command == "route":
             launcher = runpy.run_path(str(PLUGIN / "bin/launch"))
@@ -141,9 +142,16 @@ def main():
         tab_id = "<bridge-tab>" if args.dry_run else workspace["tab"]["tab_id"]
         # Workspace creation already supplies a tab; name it instead of adding an empty tab.
         launcher["herdr"](["tab", "rename", tab_id, "bridge"], args.dry_run)
+        wire_pane = "<wire-pane>" if args.dry_run else workspace["root_pane"]["pane_id"]
         env = dict(os.environ, KILN_HOME=str(team), HERDR_WORKSPACE_ID=workspace_id)
         for command in commands:
             role = command[command.index("--address") + 1]
+            source, direction, ratio = {
+                "boss": (wire_pane, "down", "0.12"),
+                "orchestrator": (panes.get("boss", "<boss-pane>"), "down", "0.6"),
+                "gravedigah": (panes.get("orchestrator", "<orchestrator-pane>"), "right", "0.78"),
+            }[role]
+            command += ["--from", source, "--direction", direction, "--ratio", ratio]
             if args.dry_run:
                 print(printable(command, team, workspace_id))
                 panes[role] = f"<{role}-pane>"
@@ -152,12 +160,15 @@ def main():
                 if result.returncode:
                     raise ValueError(f"launch failed for {role}; team state retained at {team}")
                 panes[role] = json.loads((team / "seats" / f"{role}.json").read_text())["pane"]
+        launcher["herdr"](["pane", "rename", wire_pane, "wire · ledger · live"], args.dry_run)
+        launcher["herdr"](["pane", "run", wire_pane, "env", f"KILN_HOME={team}",
+                           "python3", str(PLUGIN / "bin/wire")], args.dry_run)
         for role, pane in panes.items():
             print(f"{role} pane: {pane}")
         print("boss address: boss")
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         if configured or worktree_created:
-            print(f"workspace: {workspace_id}; bridge tab: {tab_id}", file=sys.stderr)
+            print(f"workspace: {workspace_id}; bridge tab: {tab_id}; wire pane: {wire_pane}", file=sys.stderr)
             print("started panes: " + (", ".join(f"{role}={pane}" for role, pane in panes.items()) or "none"), file=sys.stderr)
             if workspace_id == "<not-created>":
                 print("create workspace and replace placeholder IDs with its result:", file=sys.stderr)

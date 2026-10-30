@@ -28,7 +28,12 @@ if args[:2] == ['pane', 'close'] and os.environ.get('FAKE_CLOSE_SEAT'):
     assert not pathlib.Path(os.environ['FAKE_CLOSE_SEAT']).exists()
 result = {}
 if args[:2] == ['workspace', 'create']:
-    result = {'workspace': {'workspace_id': 'w-test'}, 'tab': {'tab_id': 'w-test:t2'}}
+    result = {'workspace': {'workspace_id': 'w-test'}, 'tab': {'tab_id': 'w-test:t2'}, 'root_pane': {'pane_id': 'w-test:p2'}}
+elif args[:2] == ['pane', 'read']:
+    result = {'text': 'fake pane tail: native startup failed'}
+elif args[:2] == ['agent', 'list']:
+    result = {'agents': [{'name': 'local', 'workspace_id': 'w-test', 'tab_id': 'w-test:t1'},
+                         {'name': 'foreign', 'workspace_id': 'w-other', 'tab_id': 'w-other:t1'}]}
 elif args[:2] == ['agent', 'get']:
     count = sum(json.loads(line)[:2] == ['agent', 'get'] for line in log.read_text().splitlines())
     states = os.environ.get('FAKE_STATES', 'idle').split(',')
@@ -42,11 +47,26 @@ elif args[:2] == ['agent', 'get']:
 elif args[:2] == ['tab', 'create']:
     result = {'tab': {'tab_id': 'w-test:t3', 'label': args[args.index('--label') + 1]}, 'root_pane': {'pane_id': 'w-test:p-new'}}
 elif args[:2] == ['tab', 'list']:
-    result = {'tabs': [{'tab_id': 'w-test:t1', 'label': 'build', 'workspace_id': 'w-test'},
-                       {'tab_id': 'w-test:t2', 'label': 'bridge', 'workspace_id': 'w-test'}]}
+    tabs = [{'tab_id': 'w-test:t1', 'label': 'build', 'workspace_id': 'w-test'},
+            {'tab_id': 'w-test:t2', 'label': 'bridge', 'workspace_id': 'w-test'}]
+    for line in log.read_text().splitlines():
+        call = json.loads(line)
+        if call[:2] == ['tab', 'create']:
+            tabs.append({'tab_id': 'w-test:t3', 'label': call[call.index('--label') + 1], 'workspace_id': 'w-test'})
+    result = {'tabs': tabs}
 elif args[:2] == ['pane', 'list']:
-    result = {'panes': [{'pane_id': 'w-test:p1', 'tab_id': 'w-test:t1'},
-                        {'pane_id': 'w-test:p2', 'tab_id': 'w-test:t2'}]}
+    panes = {'w-test:p1': 'w-test:t1', 'w-test:p2': 'w-test:t2'}
+    number = 0
+    for line in log.read_text().splitlines():
+        call = json.loads(line)
+        if call[:2] == ['tab', 'create']:
+            panes['w-test:p-new'] = 'w-test:t3'
+        elif call[:2] == ['pane', 'split']:
+            number = number + 1 if os.environ.get('FAKE_BOOTSTRAP') else 1
+            panes['w-test:p' + str(number + 2)] = panes.get(call[2], 'w-test:t1')
+        elif call[:2] == ['pane', 'close']:
+            panes.pop(call[2], None)
+    result = {'panes': [{'pane_id': pane, 'tab_id': tab} for pane, tab in panes.items()]}
 elif args[:2] == ['pane', 'split']:
     number = sum(json.loads(line)[:2] == ['pane', 'split'] for line in log.read_text().splitlines()) if os.environ.get('FAKE_BOOTSTRAP') else 1
     result = {'pane': {'pane_id': 'w-test:p' + str(number + 2)}}

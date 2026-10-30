@@ -27,7 +27,7 @@ operational     = [ { model = "gpt-6.1-sol", effort = "medium" }, { model = "cla
 [lanes.claude-lean]
 boss            = { model = "claude-opus-5-5",   effort = "medium" }
 orchestrator    = { model = "claude-opus-5-5",   effort = "medium" }
-manager         = { model = "gpt-6.1-sol",       effort = "medium" }
+manager         = { model = "claude-opus-5-5",   effort = "medium" }   # Fred 2026-10-30: all managers Opus, every lane
 gravedigah     = { model = "gpt-6.1-sol",       effort = "medium" }
 chunkmaster     = { model = "gpt-6.1-sol",       effort = "medium" }
 implementer     = { model = "gpt-6.1-sol",       effort = "medium" }

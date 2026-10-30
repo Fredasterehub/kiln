@@ -321,6 +321,9 @@ def pretrust(root, dry_run):
                          "(team bootstrap trusts the team folder from the bridge)") from error
 
 
+BRIDGE = ("boss", "orchestrator", "gravedigah")
+
+
 def herdr(args, dry_run):
     if dry_run:
         print(shlex.join(["herdr", *args]))
@@ -339,7 +342,7 @@ def target_pane(tab, workspace, root, dry_run):
         if not matches:
             created = herdr(["tab", "create", "--workspace", workspace, "--label", tab,
                              "--cwd", root, "--no-focus"], False)
-            return created["root_pane"]["pane_id"], created["tab"]["label"]
+            return created["root_pane"]["pane_id"], created["tab"]["label"], True, []
         if len(matches) != 1:
             raise ValueError("--tab must identify exactly one tab in the seat workspace")
         tab = matches[0]["tab_id"]
@@ -347,8 +350,15 @@ def target_pane(tab, workspace, root, dry_run):
     if dry_run:
         print("# if tab is missing: " + shlex.join(["herdr", "tab", "create", "--workspace", workspace,
                                                    "--label", tab, "--cwd", root, "--no-focus"]))
-        return "<tab-pane>", tab
-    return next(p["pane_id"] for p in panes["panes"] if p["tab_id"] == tab), matches[0]["label"]
+        return "<tab-pane>", tab, False, []
+    return next(p["pane_id"] for p in panes["panes"] if p["tab_id"] == tab), matches[0]["label"], False, panes["panes"]
+
+
+def close_pane(pane, dry_run=False):
+    try:
+        herdr(["pane", "close", pane], dry_run)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+        print(f"launch: warning: could not close pane {pane}: {error}", file=sys.stderr)
 
 
 def main():
@@ -364,7 +374,8 @@ def main():
         except (OSError, ValueError, KeyError, TypeError) as error:
             parser.exit(1, f"launch: {error}\n")
         return
-    for key in ("tab", "address", "parent"):
+    parser.add_argument("--tab")
+    for key in ("address", "parent"):
         parser.add_argument(f"--{key}", required=True)
     parser.add_argument("--role", required=True, choices=SCHEMA["properties"]["role"]["enum"])
     parser.add_argument("--family", choices=SCHEMA["properties"]["family"]["enum"])
@@ -375,13 +386,19 @@ def main():
     for key in ("name", "card", "handoff", "worktree", "run"):
         parser.add_argument(f"--{key}")
     parser.add_argument("--wait-ms", type=int, default=1800000)
-    parser.add_argument("--direction", choices=("right", "down"), default="down")
+    parser.add_argument("--direction", choices=("right", "down"))
+    parser.add_argument("--ratio", type=float)
+    parser.add_argument("--from", dest="source", help="pane to split instead of the tab first pane")
     parser.add_argument("--extra-root", action="append", default=[])
     parser.add_argument("--dry-run", action="store_true", help="print commands and file contents without side effects")
     args = parser.parse_args()
     seat_path = None
     previous = None
+    tab_root = new_pane = None
+    starting = False
     try:
+        if args.ratio is not None and not 0 < args.ratio < 1:
+            raise ValueError("--ratio must be between 0 and 1 (exclusive)")
         home_value = os.environ.get("KILN_HOME")
         if not home_value and not args.dry_run:
             raise ValueError("KILN_HOME is required")
@@ -389,16 +406,29 @@ def main():
         if not re.fullmatch(SCHEMA["properties"]["parent"]["pattern"], args.parent):
             raise ValueError("invalid parent address")
         workspace = os.environ.get("HERDR_WORKSPACE_ID")
-        if not workspace and args.parent:
+        parent = {}
+        if args.parent and (not workspace or args.role == "worker"):
             parent_path = home / "seats" / f"{args.parent}.json"
-            parent = json.loads(parent_path.read_text()) if parent_path.exists() else {}
-            if not isinstance(parent, dict):
-                raise ValueError("parent seat must be an object")
-            workspace = parent.get("workspace")
+            try:
+                parent = json.loads(parent_path.read_text()) if parent_path.exists() else {}
+                if not isinstance(parent, dict):
+                    raise ValueError("parent seat must be an object")
+            except (OSError, ValueError) as error:
+                print(f"launch: warning: ignoring corrupt parent seat {args.parent}: {error}", file=sys.stderr)
+                parent = {}
+            workspace = workspace or parent.get("workspace")
         if not workspace:
             if not args.dry_run:
                 raise ValueError("HERDR_WORKSPACE_ID or a parent seat workspace is required")
             workspace = "<workspace>"
+        if not args.tab:
+            if args.role != "worker":
+                raise ValueError("--tab is required for non-worker seats")
+            if not parent.get("tab"):
+                if not args.dry_run:
+                    raise ValueError("--tab is required unless a worker has a parent seat tab")
+                print(f"# parent tab unknown in dry-run; using {args.parent}'s tab")
+            args.tab = "bridge-work" if parent.get("tab") == "bridge" or (not parent.get("tab") and args.parent in BRIDGE) else (parent.get("tab") or args.parent)
         lane, model, effort = routing(args)
         args.family = family(model)
         if args.family == "agy":
@@ -426,7 +456,30 @@ def main():
             warn_missing_hooks()
         if args.family == "claude":
             pretrust(root, args.dry_run)
-        target, seat["tab"] = target_pane(args.tab, workspace, root, args.dry_run)
+        target, seat["tab"], created_tab, live = target_pane(args.tab, workspace, root, args.dry_run)
+        tab_root = target if created_tab else None
+        direction = args.direction or "down"
+        if args.role == "worker":
+            workers = set()
+            for path in (home / "seats").glob("*.json"):
+                try:
+                    worker = json.loads(path.read_text())
+                    if not isinstance(worker, dict):
+                        raise ValueError("expected a seat object")
+                except (OSError, ValueError) as error:
+                    print(f"launch: warning: ignoring corrupt seat {path.stem}: {error}", file=sys.stderr)
+                    continue
+                if (worker.get("role") == "worker" and worker.get("tab") == seat["tab"]
+                        and worker.get("workspace") == workspace):
+                    workers.add(worker.get("pane"))
+            # Herdr lists panes in creation order, observed 2026-10-30 (wK:p8, pC, pE).
+            panes = [p["pane_id"] for p in live if p["pane_id"] in workers]
+            if panes:
+                target = panes[-1]
+            elif parent.get("tab") == seat["tab"]:
+                target = parent["pane"]
+            direction = args.direction or ("down" if panes or parent.get("tab") != seat["tab"] else "right")
+        target = args.source or target
         if args.card is None and args.role != "worker":
             card = f"manager-{seat['tab']}" if args.role == "manager" else args.role
             card_path = PLUGIN / "cards" / f"{card}.md"
@@ -454,10 +507,12 @@ def main():
                 print(f"launch: warning: ignoring corrupt previous seat {args.address}: {error}", file=sys.stderr)
         write_json(candidate, seat, args.dry_run)
         seat_path = candidate
-        result = herdr(["pane", "split", target, "--direction", args.direction, "--cwd", root, "--no-focus",
+        result = herdr(["pane", "split", target, "--direction", direction,
+                        *([] if args.ratio is None else ["--ratio", str(args.ratio)]), "--cwd", root, "--no-focus",
                         "--env", f"KILN_SEAT={seat_path}", "--env", f"KILN_HOME={home}",
                         "--env", f"KILN_PLUGIN={PLUGIN}"], args.dry_run)
         seat["pane"] = "<new-pane>" if args.dry_run else result["pane"]["pane_id"]
+        new_pane = seat["pane"]
         if previous and previous.get("pane") != seat["pane"]:
             print(f"launch: warning: replacing {args.address} from pane {previous.get('pane')} with {seat['pane']}", file=sys.stderr)
         write_json(seat_path, seat, args.dry_run)
@@ -469,16 +524,11 @@ def main():
         herdr(["pane", "rename", seat["pane"], label], args.dry_run)
         # Re-read immediately before start and re-apply once if the flag disappeared.
         if args.family == "claude" and not args.dry_run:
-            try:
-                pretrust(root, False)
-            except (OSError, ValueError, KeyError, TypeError):
-                try:
-                    herdr(["pane", "close", seat["pane"]], False)
-                except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as cleanup_error:
-                    print(f"launch: could not close pane {seat['pane']}: {cleanup_error}", file=sys.stderr)
-                raise
+            pretrust(root, False)
+        starting = True
         herdr(["agent", "start", args.address, "--kind", args.family, "--pane", seat["pane"],
                "--timeout", "30000", "--", *flags], args.dry_run)
+        starting = False
         try:
             received = markers(seat)
             unread = any(row.get("to") == args.address and row.get("id") not in received
@@ -487,7 +537,27 @@ def main():
                 herdr(["agent", "prompt", args.address, "inbox"], args.dry_run)
         except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
             print(f"launch: seat started; inbox nudge failed: {error}", file=sys.stderr)
+        if tab_root:
+            close_pane(tab_root, args.dry_run)
+        elif args.dry_run and not args.source:
+            print("# if tab was created, close its root after agent start: " +
+                  shlex.join(["herdr", "pane", "close", "<tab-pane>"]))
     except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.TimeoutExpired) as error:
+        if not args.dry_run:
+            if starting and new_pane:
+                try:
+                    read = subprocess.run(["herdr", "pane", "read", new_pane, "--lines", "20"], capture_output=True, text=True,
+                                          stdin=subprocess.DEVNULL, timeout=35)   # plain text, not the JSON envelope
+                    text = read.stdout if read.returncode == 0 else ""
+                    if not text:
+                        raise ValueError(read.stderr.strip() or "empty pane read")
+                    print(f"launch: pane {new_pane} tail:\n" + "\n".join(text.splitlines()[-20:]), file=sys.stderr)
+                except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as read_error:
+                    print(f"launch: could not read pane {new_pane}: {read_error}", file=sys.stderr)
+            if new_pane:
+                close_pane(new_pane)
+            if tab_root:
+                close_pane(tab_root)
         if seat_path is not None and not args.dry_run:
             if previous is not None:
                 write_json(seat_path, previous, False)

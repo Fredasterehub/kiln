@@ -68,7 +68,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
                 self.assertRegex(value, field['pattern'])
 
     def flags(self):
-        start = self.calls()[-1]
+        start = next(c for c in reversed(self.calls()) if c[:2] == ['agent', 'start'])
         self.assertEqual(start[:3], ['agent', 'start', self.seat()['address']])
         self.assertEqual(start[start.index('--timeout') + 1], '30000')
         return start[start.index('--') + 1:]
@@ -280,11 +280,146 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(self.calls()[2][2], 'w-test:p2')
         self.assertEqual(self.seat()['tab'], 'bridge')
 
+    def test_workers_default_to_parent_tab_and_live_worker_chain(self):
+        self.env['FAKE_BOOTSTRAP'] = '1'
+        self.launch()
+        parent = self.seat()
+        for address in ('first', 'second'):
+            self.run_tool('launch', '--address', address, '--role', 'worker',
+                          '--parent', 'build', '--root', str(self.root),
+                          '--run', str(self.base / address))
+            self.assertEqual(self.seat(address)['tab'], 'build')
+        splits = [c for c in self.calls() if c[:2] == ['pane', 'split']]
+        self.assertEqual([(c[2], c[c.index('--direction') + 1]) for c in splits],
+                         [('w-test:p1', 'down'), (parent['pane'], 'right'),
+                          (self.seat('first')['pane'], 'down')])
+        self.assertFalse(any(c[:2] == ['tab', 'create'] for c in self.calls()))
+
+    def test_worker_ignores_closed_worker_and_honors_explicit_split_controls(self):
+        self.launch()
+        parent = self.seat()
+        stale = dict(parent, address='stale', role='worker', pane='w-test:gone')
+        (self.home / 'seats/stale.json').write_text(json.dumps(stale))
+        self.run_tool('launch', '--address', 'first', '--role', 'worker', '--parent', 'build',
+                      '--root', str(self.root), '--run', str(self.base / 'first'))
+        split = [c for c in self.calls() if c[:2] == ['pane', 'split']][-1]
+        self.assertEqual((split[2], split[split.index('--direction') + 1]), (parent['pane'], 'right'))
+        self.launch('--from', 'w-test:p2', '--direction', 'right', '--ratio', '0.78')
+        split = [c for c in self.calls() if c[:2] == ['pane', 'split']][-1]
+        self.assertEqual((split[2], split[split.index('--ratio') + 1]), ('w-test:p2', '0.78'))
+
+    def worker(self, address='first', parent='build', *extra, ok=True):
+        return self.run_tool('launch', '--address', address, '--role', 'worker',
+                             '--parent', parent, '--root', str(self.root),
+                             '--run', str(self.base / address), *extra, ok=ok)
+
+    def test_bridge_workers_use_bridge_work_tab_and_chain_down(self):
+        self.env['FAKE_BOOTSTRAP'] = '1'
+        self.launch('--tab', 'bridge', '--role', 'orchestrator', '--address', 'orchestrator')
+        self.worker('first', 'orchestrator')
+        first = self.seat('first')
+        self.worker('second', 'orchestrator')
+        self.assertEqual((first['tab'], self.seat('second')['tab']), ('bridge-work', 'bridge-work'))
+        splits = [c for c in self.calls() if c[:2] == ['pane', 'split']]
+        self.assertEqual([(c[2], c[c.index('--direction') + 1]) for c in splits[1:]],
+                         [('w-test:p-new', 'down'), (first['pane'], 'down')])
+        created = [c for c in self.calls() if c[:2] == ['tab', 'create']]
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0][created[0].index('--label') + 1], 'bridge-work')
+        self.assertIn(['pane', 'close', 'w-test:p-new'], self.calls())
+
+    def test_worker_explicit_different_tab_is_honored(self):
+        self.launch()
+        self.worker('first', 'build', '--tab', 'other-workers')
+        self.assertEqual(self.seat('first')['tab'], 'other-workers')
+        split = [c for c in self.calls() if c[:2] == ['pane', 'split']][-1]
+        self.assertEqual(split[2], 'w-test:p-new')
+
+    def test_worker_without_parent_tab_and_manager_without_tab_fail(self):
+        (self.home / 'seats').mkdir()
+        (self.home / 'seats/build.json').write_text(json.dumps({'pane': 'w-test:p1'}))
+        result = self.worker(ok=False)
+        self.assertIn('parent seat tab', result.stderr)
+        result = self.run_tool('launch', '--address', 'plan', '--role', 'manager',
+                               '--parent', 'build', '--root', str(self.root), ok=False)
+        self.assertIn('--tab is required', result.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assertFalse((self.home / 'seats/first.json').exists())
+
+    def test_dry_worker_unknown_parent_and_split_plan(self):
+        for content in (None, '{broken', '[]', '{}'):
+            with self.subTest(content=content):
+                path = self.home / 'seats/build.json'
+                if content is not None:
+                    path.parent.mkdir(exist_ok=True)
+                    path.write_text(content)
+                result = self.worker('first', 'build', '--dry-run')
+                self.assertIn("# parent tab unknown in dry-run; using build's tab", result.stdout)
+                self.assertEqual(result.stdout.count('herdr pane list'), 1)
+                self.assertLess(result.stdout.index('herdr agent start'), result.stdout.index('close its root'))
+        result = self.worker('first', 'build', '--dry-run', '--from', 'w-test:p1')
+        self.assertNotIn('herdr pane close', result.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_corrupt_worker_seats_warn_and_do_not_block_launch(self):
+        self.launch()
+        for name, content in (('bad', '{broken'), ('array', '[]')):
+            (self.home / f'seats/{name}.json').write_text(content)
+        result = self.worker()
+        self.assertIn('ignoring corrupt seat bad', result.stderr)
+        self.assertIn('ignoring corrupt seat array', result.stderr)
+        split = [c for c in self.calls() if c[:2] == ['pane', 'split']][-1]
+        self.assertEqual(split[2], self.seat()['pane'])
+
+    def test_ratio_rejected_before_any_seat_write_or_herdr_call(self):
+        for ratio in ('0', '1', '-0.1', '1.1', 'nan', 'inf'):
+            with self.subTest(ratio=ratio):
+                self.assertIn('--ratio must be', self.launch('--ratio', ratio, ok=False).stderr)
+        self.assertFalse((self.home / 'seats/build.json').exists())
+        self.assertEqual(self.calls(), [])
+
+    def test_created_tab_split_failure_closes_root_and_restores_seat(self):
+        self.env['FAKE_FAIL'] = 'pane split'
+        result = self.launch('--tab', 'plan', ok=False)
+        self.assertIn('canned failure', result.stderr)
+        self.assertEqual(self.calls()[-1], ['pane', 'close', 'w-test:p-new'])
+        self.assertFalse((self.home / 'seats/build.json').exists())
+        self.assertFalse(any(c[:2] == ['agent', 'start'] for c in self.calls()))
+
+    def test_agent_start_failure_reads_tail_closes_panes_and_restores_seat(self):
+        previous = {'address': 'build', 'pane': 'old-pane'}
+        path = self.home / 'seats/build.json'
+        path.parent.mkdir()
+        path.write_text(json.dumps(previous))
+        self.env['FAKE_FAIL'] = 'agent start'
+        result = self.launch('--tab', 'plan', ok=False)
+        self.assertIn('fake pane tail: native startup failed', result.stderr)
+        self.assertIn('canned failure', result.stderr)
+        calls = self.calls()
+        started = next(i for i, c in enumerate(calls) if c[:2] == ['agent', 'start'])
+        self.assertEqual(calls[started + 1:], [['pane', 'read', 'w-test:p3', '--lines', '20'],
+                                             ['pane', 'close', 'w-test:p3'],
+                                             ['pane', 'close', 'w-test:p-new']])
+        self.assertEqual(json.loads(path.read_text()), previous)
+
+    def test_root_close_failure_warns_and_keeps_running_seat(self):
+        self.env['FAKE_FAIL'] = 'pane close'
+        result = self.launch('--tab', 'plan')
+        self.assertIn('warning: could not close pane w-test:p-new', result.stderr)
+        self.assertEqual(self.seat()['pane'], 'w-test:p3')
+        self.assertEqual(self.calls()[-1], ['pane', 'close', 'w-test:p-new'])
+        self.assertEqual(sum(c[:2] == ['agent', 'start'] for c in self.calls()), 1)
+
     def test_missing_tab_is_created_and_start_failure_is_not_retried(self):
         self.launch('--tab', 'plan')
         self.assertIn(['tab', 'create', '--workspace', 'w-test', '--label', 'plan',
                        '--cwd', str(self.root), '--no-focus'], self.calls())
         self.assertEqual(self.seat()['tab'], 'plan')
+        calls = self.calls()
+        split = next(i for i, c in enumerate(calls) if c[:2] == ['pane', 'split'])
+        started = next(i for i, c in enumerate(calls) if c[:2] == ['agent', 'start'])
+        self.assertLess(split, started)
+        self.assertEqual(calls[started + 1], ['pane', 'close', 'w-test:p-new'])
         self.assertIn(['pane', 'split', 'w-test:p-new'], [c[:3] for c in self.calls()])
         previous = self.seat()
         self.env['FAKE_FAIL'] = 'agent start'
@@ -416,7 +551,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         for bosses in ('claude', 'gpt'):
             (self.base / 'routing.toml').write_text(routing.replace('bosses = "claude"', f'bosses = "{bosses}"'))
             with patch.object(launch, 'CONFIG', self.base):
-                for role, model in (('manager', 'gpt-6.1-sol'),
+                for role, model in (('manager', 'claude-opus-5-5'),
                                     ('boss', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6-astra'),
                                     ('orchestrator', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6.1-sol')):
                     args = argparse.Namespace(role=role, family=None, model=None, effort=None)
@@ -426,7 +561,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         project = self.base / 'repo'
         subprocess.run(['git', 'init', '-q', str(project)], check=True)
         (self.home / 'team.toml').write_text('lane="claude-lean"\nbosses="gpt"\nproject=' + json.dumps(str(project)) + '\n')
-        for role, model in (('manager', 'gpt-6.1-sol'), ('boss', 'gpt-6-astra'), ('orchestrator', 'gpt-6.1-sol')):
+        for role, model in (('manager', 'claude-opus-5-5'), ('boss', 'gpt-6-astra'), ('orchestrator', 'gpt-6.1-sol')):
             self.launch('--role', role)
             self.assertEqual((self.seat()['lane'], self.seat()['model']), ('claude-lean', model))
         self.launch('--role', 'boss', '--model', 'claude-opus-5-5', '--effort', 'low')
@@ -518,7 +653,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
         config = tomllib.loads((PLUGIN / 'config/routing.toml').read_text())
         lane = config['lanes']['claude-lean']
         self.assertEqual(set(lane), set(config['lanes']['balanced']))
-        for role in ('manager', 'gravedigah', 'chunkmaster', 'implementer', 'investigator'):
+        self.assertEqual(lane['manager'], dict(model='claude-opus-5-5', effort='medium'))
+        for role in ('gravedigah', 'chunkmaster', 'implementer', 'investigator'):
             self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='medium'))
         for role in ('mechanical', 'research_gpt', 'research_claude'):
             self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='low'))
