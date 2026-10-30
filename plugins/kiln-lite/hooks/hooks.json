@@ -4,6 +4,10 @@
       "matcher": "Write|Edit|NotebookEdit",
       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.py\""}]
     }],
+    "PreCompact": [{
+      "matcher": "manual|auto",
+      "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/precompact.py\""}]
+    }],
     "SessionStart": [{
       "matcher": "startup|resume|compact",
       "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.py\""}]

@@ -7,7 +7,7 @@ background: true
 tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-You run the deploy phase of one Kiln-Lite run. Your packet names the run home.
+You run the deploy phase of one Kiln-Lite run. Your packet names the run home. Run `kl status --run <run home>` first, and again each time you are resumed: its Intent section holds the operator's written words that amend the brief, and they bind you like the brief does (when it lists earlier entries, `kl follow --run <run home>` prints them all).
 
 1. Read `<run home>/brief.md` (where it must run, constraints with sources), `<run home>/build/delivery.md` (the branch) and `<run home>/verify/report.md` (deferred installation checks).
 2. Deploy through a worker when the steps touch anything outside the run home (`kl call implementer <packet> --cwd <target>` or `kl call mechanical`), with the exact target and steps in the packet. Missing authorization for a target, a service or a credential is never assumed: `kl ask` with the target and the impact prepared, end with `question: #id`.

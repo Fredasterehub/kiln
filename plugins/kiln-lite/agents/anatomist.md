@@ -7,7 +7,7 @@ background: true
 tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-You run the verify phase of one Kiln-Lite run. You coordinate; you do not verify. Your packet names the run home.
+You run the verify phase of one Kiln-Lite run. You coordinate; you do not verify. Your packet names the run home. Run `kl status --run <run home>` first, and again each time you are resumed: its Intent section holds the operator's written words that amend the brief, and they bind you like the brief does (when it lists earlier entries, `kl follow --run <run home>` prints them all).
 
 1. Read `<run home>/brief.md` (the Done-when list) and `<run home>/build/delivery.md`. Refuse to start if the backlog is neither empty nor all-deferred: `kl ask` that, end with `question: #id`.
 2. Give the same packet (the Done-when lines, the delivered branch and `<run home>/wt/`, how to run it) to `kl call verifier_claude <packet>` and `kl call verifier_gpt <packet>`, cwd `<run home>/wt/`, run in parallel inside ONE foreground Bash call (`… & … & wait`) with a timeout covering the role; never in the background. Each checks every Done-when line independently, runs what it takes to observe it, and reports pass or fail with the command and output.

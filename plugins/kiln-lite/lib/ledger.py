@@ -66,7 +66,7 @@ def render(rows):
     unfinished = [r for i, r in enumerate(calls) if r["status"] != "done"
                   and not any(c["status"] == "done" and
                               ((c.get("resume") and c.get("resume") in (r.get("ids") or {}).values())
-                               or (r["status"] in ("failed", "rejected") and c.get("role") == r.get("role")))
+                               or (r["status"] in ("failed", "rejected", "unparsed") and c.get("role") == r.get("role")))
                               for c in calls[i+1:])]
     live = live_runners(rows)
     accepted = next((r.get("artifact_kind", r.get("phase")) for r in reversed(rows) if r["kind"] == "accept"), None)
@@ -76,6 +76,7 @@ def render(rows):
     sections = {
         "Run": [f'{start.get("project", "")} / {start.get("slug", "")}'],
         "Phase": [phase],
+        "Intent": [r.get("text", "") for r in rows if r["kind"] == "note"],
         "Accepted": [r.get("artifact", "") for r in rows if r["kind"] == "accept"],
         "Live runners": [f'{r.get("runner")} {runner_phase} {r.get("agent_id")} since {r.get("time")} '
                          f'last call: {next((c["n"] for c in reversed(rows[i+1:]) if c["kind"] == "call" and c.get("runner") == r.get("runner")), "none")}'

@@ -276,7 +276,8 @@ def main(argv=None):
             print("Lore Keepah: " + records(home)[0]["slug"])
             for row in records(home):
                 values = (row.get("time"), "call-start" if row["kind"] == "call_start" else row["kind"], row.get("role", ""), row.get("model", ""),
-                          row.get("status", ""), row.get("result", row.get("worktree", "")))
+                          row.get("trigger") or "" if row["kind"] == "compact" else row.get("status", ""),
+                          row.get("text") if row["kind"] == "note" else row.get("result", row.get("worktree", "")))
                 print(" ".join(str(v).replace("\n", " ") for v in values))
         return 0
     except (OSError, ValueError, KeyError, IndexError) as exc:

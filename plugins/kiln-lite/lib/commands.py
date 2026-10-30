@@ -14,6 +14,8 @@ from lib.paths import run_path
 
 
 def add_parsers(sub):
+    note = sub.add_parser('note')
+    note.add_argument('text')
     ask = sub.add_parser('ask')
     ask.add_argument('text')
     answer = sub.add_parser('answer')
@@ -38,7 +40,7 @@ def add_parsers(sub):
     council.add_argument('--lens', choices=['conceptual', 'operational'])
     council.add_argument('--models')
     council.add_argument('--no-argon', action='store_true')
-    for cmd in (ask, answer, dispatch, accept, gate, council):
+    for cmd in (note, ask, answer, dispatch, accept, gate, council):
         cmd.add_argument('--run')
 
 
@@ -320,7 +322,11 @@ def council(args, home):
 def execute(args):
     from lib.core import find_home
     home = find_home(args.run)
-    if args.command == 'ask':
+    if args.command == 'note':
+        if not args.text.strip():
+            raise ValueError('note text must not be empty or whitespace-only.')
+        append(home, 'note', text=args.text)
+    elif args.command == 'ask':
         print(append(home, 'question', text=args.text)['id'])
     elif args.command == 'answer':
         args.id = args.id.removeprefix('#')
