@@ -12,4 +12,4 @@ Run one targeted exchange round only on a disagreement that could change the dec
 Ask plan approval for defects, meaning only a brief promise the plan would fail, with evidence, and "what can be removed, and which brief promise would then fail"; never ask for a simpler equivalent of a mechanism.
 Write `council/<q>/result.md`: explicit agreements (silence is not agreement), every idea attributed, conflicts side by side with evidence, exchange changes and failed seats; give no blend, ranking or verdict.
 Send answer citing the asker's question and `council/<q>/result.md`.
-Serve automatic brainstorm-close and plan-approval councils; hold milestone councils only on demand; immediately close each accepted question worker with `$KILN_PLUGIN/bin/team close <address>`, which closes its pane too.
+Serve the automatic plan-approval council; hold every other council on demand; immediately close each accepted question worker with `$KILN_PLUGIN/bin/team close <address>`, which closes its pane too.

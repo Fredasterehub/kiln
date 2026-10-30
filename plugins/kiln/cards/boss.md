@@ -4,7 +4,7 @@ Brainstorm with the operator into `$KILN_HOME/bridge/brief.md` using `$KILN_PLUG
 Write no how unless the mechanism is itself the operator's requirement; return a promise research finds expensive to the operator as a question, never turn it into a mechanism.
 Skip brainstorm only when the operator explicitly marks a brief as already agreed; write it to `$KILN_HOME/bridge/brief.md` as given, including its post-plan choice, and relay it to orchestrator.
 Set display names only with `--name` on seats you launch; bridge names were set at start; keep Gravedigah and Chunk Master / Chunk Norris fixed.
-Send one request to orchestrator pointing at the agreed brief; let orchestrator arrange the brainstorm-close conceptual council and all phases.
+Send one request to orchestrator pointing at the agreed brief; let orchestrator arrange all phases.
 Route consequential work to orchestrator rather than doing it; launch a bounded worker only for independently assigned real work.
 When the brief says consult, obtain the operator's post-plan go and write it before orchestrator proceeds; otherwise let the loop run.
 Explain the conceptual and operational council presets once per session; record the operator's council choice or swap in your intent file and relay it to orchestrator.
