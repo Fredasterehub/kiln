@@ -45,7 +45,7 @@ def live_runners(rows):
             phase = row.get("phase") or RUNNER_PHASES.get(name, name)
             live[row.get("runner")] = (i, row, phase)
         elif row["kind"] == "accept":
-            phase = row.get("artifact_kind")
+            phase = row.get("phase") or row.get("artifact_kind")
             live = {name: value for name, value in live.items()
                     if value[2] != ("build" if phase == "milestone" else phase)}
     return live
@@ -60,6 +60,9 @@ def inferred_runner(rows, role):
 def render(rows):
     start = next((r for r in rows if r["kind"] == "start"), {})
     calls = [r for r in rows if r["kind"] == "call"]
+    completed = {r["n"] for r in calls}
+    pending = [r for r in rows if r["kind"] == "call_start" and r["n"] not in completed]
+    now = datetime.now(timezone.utc)
     unfinished = [r for i, r in enumerate(calls) if r["status"] != "done"
                   and not any(c["status"] == "done" and
                               ((c.get("resume") and c.get("resume") in (r.get("ids") or {}).values())
@@ -74,9 +77,9 @@ def render(rows):
         "Run": [f'{start.get("project", "")} / {start.get("slug", "")}'],
         "Phase": [phase],
         "Accepted": [r.get("artifact", "") for r in rows if r["kind"] == "accept"],
-        "Live runners": [f'{r.get("runner")} {r.get("agent_id")} {r.get("time")} '
+        "Live runners": [f'{r.get("runner")} {runner_phase} {r.get("agent_id")} since {r.get("time")} '
                          f'last call: {next((c["n"] for c in reversed(rows[i+1:]) if c["kind"] == "call" and c.get("runner") == r.get("runner")), "none")}'
-                         for i, r, _ in live.values()],
+                         for i, r, runner_phase in live.values()],
         "Unfinished calls": [f'{r["n"]} {r["role"]}: {r["status"]} {r["result"]}'
                              for r in unfinished],
         "Questions": [f'{r.get("id")}: {r.get("text", "")}' for r in rows
@@ -87,7 +90,7 @@ def render(rows):
         "Milestones done": [f'{r.get("milestone", "")} {r.get("artifact", "")}'.strip()
                             for r in rows if r["kind"] == "accept" and r.get("artifact_kind") == "milestone"],
         "Next action": ["Answer the open question." if any(r["kind"] == "question" and r.get("id") not in answered for r in rows)
-                        else "Inspect unfinished calls." if unfinished
+                        else "Inspect unfinished calls." if unfinished or pending
                         else "Dispatch the next worker."],
     }
     lines = []
@@ -97,6 +100,10 @@ def render(rows):
         lines.extend(str(item).replace("\n", " ") for item in items[-4:])
         if len(items) > 4:
             lines.append(f"({len(items) - 4} earlier entries in ledger.jsonl)")
+        if title == "Unfinished calls":
+            for row in pending:
+                age = max(0, (now - datetime.fromisoformat(row["time"])).total_seconds() / 60)
+                lines.append(f'{row["n"]} {row["role"]} {row["model"]}: unfinished, age {age:.1f} minutes')
     return "\n".join(lines) + "\n"
 
 

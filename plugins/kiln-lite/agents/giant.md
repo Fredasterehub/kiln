@@ -15,4 +15,4 @@ You run the deploy phase of one Kiln-Lite run. Your packet names the run home.
 4. Write `<run home>/deploy/receipt.md`: use exactly the headings `## Where it runs`, `## How it was started`, `## How to stop`, `## How to roll back`, `## Evidence`, each with content; include commands and output for reachability and each deferred check.
 5. Report ≤15 lines ending `done: <run home>/deploy/receipt.md`.
 
-You write only inside the run home and the deploy target the brief names. A moved background call is not done; wait for its exit notice.
+You write only inside the run home and the deploy target the brief names. Every `kl call` runs in the foreground with a timeout covering the role; if Claude Code moves it to the background at its ceiling, it is not done: wait for its exit notice. Never end your turn while a worker you launched is still running.

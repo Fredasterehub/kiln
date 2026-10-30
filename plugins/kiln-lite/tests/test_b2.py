@@ -97,18 +97,40 @@ class B2Tests(unittest.TestCase):
         self.assertEqual([r['kind'] for r in rows], ['start', 'question', 'question', 'answer', 'dispatch'])
         self.assertEqual(rows[1]['id'], 'q1')
         self.assertEqual(rows[3]['question'], 'q1')
+        self.assertEqual(rows[-1]['phase'], 'research')
+        self.assertEqual(rows[-1]['packet'], '/packet')
         text = (self.home / 'run.md').read_text()
         self.assertIn('q2: Choose port?', text)
         self.assertIn('q1: Local as briefed.', text)
         self.assertNotIn('q1: Choose local?', text)
-        self.assertIn('algalon runner-123', text)
+        self.assertIn('algalon research runner-123', text)
+        self.assertIn(f'algalon research runner-123 since {rows[-1]["time"]}', text)
         self.assertIn('last call: none', text)
         self.call('researcher')
         self.assertIn('last call: 1', (self.home / 'run.md').read_text())
         self.write('research/report.md', 'Attributed findings.')
         self.write('research/sources.md', 'Command: python3 --version')
         self.assertEqual(self.accept('research', 'research/report.md')[0], 0)
-        self.assertNotIn('algalon runner-123', (self.home / 'run.md').read_text())
+        self.assertNotIn('algalon research runner-123', (self.home / 'run.md').read_text())
+
+    def test_dispatch_explicit_phase_and_later_acceptance(self):
+        append(self.home, 'accept', artifact_kind='plan', phase='plan', artifact='/earlier')
+        self.assertEqual(self.run_kl('dispatch', 'kiln-lite:algalon', '--agent-id', 'custom',
+                                     '--phase', 'plan', '--packet', 'plan/packet.md')[0], 0)
+        row = records(self.home)[-1]
+        self.assertEqual((row['phase'], row['packet']), ('plan', 'plan/packet.md'))
+        expected = f'kiln-lite:algalon plan custom since {row["time"]}'
+        self.assertIn(expected, (self.home/'run.md').read_text())
+        append(self.home, 'accept', artifact_kind='research', phase='research', artifact='/other')
+        self.assertIn(expected, (self.home/'run.md').read_text())
+        append(self.home, 'accept', phase='plan', artifact='/later')
+        self.assertNotIn(expected, (self.home/'run.md').read_text())
+
+    def test_dispatch_optional_packet_and_phase_defaults(self):
+        self.assertEqual(self.run_kl('dispatch', 'kiln-lite:pluribus', '--agent-id', 'planner')[0], 0)
+        row = records(self.home)[-1]
+        self.assertEqual(row['phase'], 'plan')
+        self.assertIsNone(row['packet'])
 
     def test_unknown_question_refuses_without_row(self):
         before = records(self.home)
@@ -578,8 +600,8 @@ class B2Tests(unittest.TestCase):
         self.call('architect')
         self.call('researcher_claude')
         view = (self.home / 'run.md').read_text().splitlines()
-        self.assertIn('last call: 3', next(line for line in view if 'algalon r1' in line))
-        self.assertIn('last call: 2', next(line for line in view if 'pluribus r2' in line))
+        self.assertIn('last call: 3', next(line for line in view if 'algalon research r1' in line))
+        self.assertIn('last call: 2', next(line for line in view if 'pluribus plan r2' in line))
         self.write('brief.md', BRIEF)
         self.accept('brief', 'brief.md')
         self.assertIn('## Phase\nresearch\n', (self.home / 'run.md').read_text())

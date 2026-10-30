@@ -24,7 +24,7 @@ I dispatch a runner with the Agent tool, in the background, with a short packet:
 - `kiln-lite:chunk-norris` (Chunk Norris, build) → one per milestone; I pass the milestone's plan rows (default: one capability per milestone, in plan order) → `build/build.md`, chunks, and on the last milestone `build/delivery.md`
 - `kiln-lite:anatomist` (The Anatomist, verify) → `verify/report.md`
 - `kiln-lite:giant` (Release the Giant, deploy) → `deploy/receipt.md`
-Right after spawning one I record it: `kl dispatch <runner> --agent-id <id>`. I dispatch the next phase only after the previous one is accepted and every operator answer it depends on is written. I never dispatch a runner for a phase or milestone that `kl status` lists as live: I resume that one instead, by name, or by the agent id `kl status` shows after a compaction.
+Right after spawning one I record it: `kl dispatch <runner> --agent-id <id> --phase <phase>`. I dispatch the next phase only after the previous one is accepted and every operator answer it depends on is written. I never dispatch a runner for a phase or milestone that `kl status` lists as live: I resume that one instead, by name, or by the agent id `kl status` shows after a compaction.
 
 ## 3. Questions
 A runner ends its turn with `question: #id` when it needs the owner. I answer from the brief or the operator's written words when they settle it; otherwise I ask the operator one question at a time, recommendation first. I write the answer with `kl answer <id> "<text>"` before anything else, then resume the runner with it. I never answer with a number or a mechanism the brief does not contain: that is the operator's call or the runner's design.

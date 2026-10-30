@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from lib.ledger import append, records
+from lib.ledger import append, records, RUNNER_PHASES
 from lib.worktree import head_sha, worktree_mark
 from lib.paths import run_path
 
@@ -328,7 +328,8 @@ def execute(args):
             raise ValueError(f'unknown question {args.id}')
         append(home, 'answer', question=args.id, text=args.text)
     elif args.command == 'dispatch':
-        append(home, 'dispatch', runner=args.runner, agent_id=args.agent_id, packet=args.packet, phase=args.phase)
+        phase = args.phase or RUNNER_PHASES.get(args.runner.removeprefix('kiln-lite:'))
+        append(home, 'dispatch', runner=args.runner, agent_id=args.agent_id, packet=args.packet, phase=phase)
     elif args.command == 'accept':
         return accept_artifact(args, home)
     elif args.command == 'gate':

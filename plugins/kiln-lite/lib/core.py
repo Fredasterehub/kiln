@@ -13,7 +13,7 @@ import time
 import tomllib
 
 from lib.adapters import argv_for, parse_output, status_line
-from lib.ledger import append, records, inferred_runner
+from lib.ledger import append, records, inferred_runner, render
 from lib.worktree import head_sha, worktree_mark
 from lib.paths import run_path
 
@@ -140,7 +140,10 @@ def call_worker(args, emit=True):
     if not re.fullmatch(r"[a-z_]+(?:\.\d+)?", role):
         raise ValueError("invalid role")
     route, card = resolve_role((home / "lane.txt").read_text().strip(), role, args.model, args.effort)
-    packet = run_path(home, args.packet).read_text(encoding="utf-8")
+    packet_path = run_path(home, args.packet)
+    if not packet_path.is_file():
+        raise ValueError("packet must be a path to an existing file (a .md file; not the text)")
+    packet = packet_path.read_text(encoding="utf-8")
     previous = resume_meta(home, args.resume) if args.resume else None
     runner = os.environ.get("KILN_LITE_RUNNER") or inferred_runner(records(home), role)
     card_text = card.read_text(encoding="utf-8")
@@ -164,6 +167,7 @@ def call_worker(args, emit=True):
     if previous:
         launch_cwd = Path(previous["launch_cwd"])
     argv = argv_for(route, launch_cwd, call, card, packet, args.resume, home)
+    effort = None if route["cli"] == "agy" else route["effort"]
     started = time.monotonic()
     error = None
     with (call / "events.jsonl").open("wb") as stdout, (call / "stderr.log").open("wb") as stderr:
@@ -171,6 +175,9 @@ def call_worker(args, emit=True):
             with subprocess.Popen(argv, cwd=launch_cwd, stdout=stdout, stderr=stderr,
                                   stdin=subprocess.DEVNULL if route["cli"] == "agy" else subprocess.PIPE,
                                   start_new_session=True) as proc:
+                append(home, "call_start", n=n, role=role, cli=route["cli"],
+                       model=route["model"], effort=effort, packet=str(packet_path),
+                       launch_cwd=str(launch_cwd), pid=proc.pid)
                 try:
                     proc.communicate(input=None if route["cli"] == "agy" else packet.encode(),
                                      timeout=route["timeout_s"])
@@ -211,7 +218,6 @@ def call_worker(args, emit=True):
     after = worktree_mark(cwd, home) if read_only else None
     if read_only and before != after:
         status, headline = "rejected", "rejected worktree-changed"
-    effort = None if route["cli"] == "agy" else route["effort"]
     meta.update(requested_model=route["model"], requested_effort=effort, cli=route["cli"],
                 resume=args.resume, wall_seconds=wall,
                 cwd=str(launch_cwd if getattr(args, "call_cwd", False) else cwd), read_only=read_only,
@@ -244,7 +250,7 @@ def main(argv=None):
     begin.add_argument("--project", default=".")
     call = sub.add_parser("call", help="call a routed worker, fresh or resumed")
     call.add_argument("role")
-    call.add_argument("packet")
+    call.add_argument("packet", help="path to the packet file (a .md file; not the text)")
     for flag in ("resume", "cwd", "model", "effort"):
         call.add_argument(f"--{flag}")
     call.add_argument("--read-only", action="store_true")
@@ -264,11 +270,12 @@ def main(argv=None):
             return execute(args)
         home = find_home(args.run)
         if args.command == "status":
-            print(json.dumps(records(home), indent=2) if args.json else (home / "run.md").read_text(), end="\n" if args.json else "")
+            rows = records(home)
+            print(json.dumps(rows, indent=2) if args.json else render(rows), end="\n" if args.json else "")
         else:
             print("Lore Keepah: " + records(home)[0]["slug"])
             for row in records(home):
-                values = (row.get("time"), row["kind"], row.get("role", ""), row.get("model", ""),
+                values = (row.get("time"), "call-start" if row["kind"] == "call_start" else row["kind"], row.get("role", ""), row.get("model", ""),
                           row.get("status", ""), row.get("result", row.get("worktree", "")))
                 print(" ".join(str(v).replace("\n", " ") for v in values))
         return 0

@@ -1,5 +1,6 @@
 """B1 integration tests: temporary Git projects and fake CLIs, no model calls."""
 import contextlib
+from datetime import datetime, timedelta, timezone
 import io
 import json
 import os
@@ -26,6 +27,7 @@ args = sys.argv[1:]
 stdin_data = sys.stdin.read()
 packet = args[args.index('-p')+1] if cli == 'agy' else stdin_data
 folder = pathlib.Path(re.search(r'Call artifacts: (.+)', packet).group(1))
+(folder/'launch-ledger.json').write_text((folder.parent.parent/'ledger.jsonl').read_text())
 (folder/'invocation.json').write_text(json.dumps(dict(argv=args, packet=packet, cwd=os.getcwd(), stdin=stdin_data,
     env={k:v for k,v in os.environ.items() if k.startswith(('ANTHROPIC_', 'CLAUDE_CODE_'))})))
 mode = os.environ.get('FAKE_MODE', '')
@@ -199,6 +201,78 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue((self.home/'run.md').exists())
         self.assertTrue((self.home/'build/gates').is_dir())
 
+    def test_call_start_is_durable_before_worker_finishes(self):
+        for role in ('implementer', 'architect'):
+            with self.subTest(role=role):
+                code, output, folder, meta = self.call(role)
+                self.assertEqual(code, 0, output)
+                snapshot = [json.loads(line) for line in (folder/'launch-ledger.json').read_text().splitlines()]
+                start = snapshot[-1]
+                end = records(self.home)[-1]
+                self.assertEqual(start['kind'], 'call_start')
+                self.assertEqual(start['n'], end['n'])
+                self.assertFalse(any(r['kind'] == 'call' and r['n'] == start['n'] for r in snapshot))
+                self.assertEqual(start['role'], role)
+                self.assertEqual(start['cli'], meta['cli'])
+                self.assertEqual(start['model'], meta['requested_model'])
+                self.assertEqual(start['effort'], meta['requested_effort'])
+                self.assertEqual(start['packet'], str(self.packet))
+                self.assertEqual(start['launch_cwd'], meta['launch_cwd'])
+                self.assertGreater(start['pid'], 0)
+                self.assertNotIn(': unfinished, age', (self.home/'run.md').read_text())
+                self.assertIn(f'call-start {role} {start["model"]}', self.run_kl('follow')[1])
+
+    def test_interrupted_call_retains_start_without_completion(self):
+        communicate = subprocess.Popen.communicate
+
+        def interrupt_worker(proc, *args, **kwargs):
+            if proc.args[0] == 'codex':
+                raise KeyboardInterrupt
+            return communicate(proc, *args, **kwargs)
+
+        with patch.object(subprocess.Popen, 'communicate', interrupt_worker):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_kl('call', 'implementer', str(self.packet))
+        rows = records(self.home)
+        self.assertEqual([r['kind'] for r in rows], ['start', 'call_start'])
+        self.assertIn('1 implementer gpt-6.1-sol: unfinished, age 0.0 minutes', (self.home/'run.md').read_text())
+
+    def test_unfinished_ages_refresh_and_match_by_number(self):
+        old = datetime.now(timezone.utc) - timedelta(minutes=12)
+        with patch('lib.ledger.datetime', wraps=datetime) as clock:
+            clock.now.return_value = old
+            for n in range(1, 7):
+                append(self.home, 'call_start', n=n, role='implementer', model='test-model')
+        append(self.home, 'call', n=2, role='implementer', status='done', result='/result')
+        (self.home/'run.md').write_text('stale view')
+        code, view = self.run_kl('status')
+        self.assertEqual(code, 0)
+        for n in (1, 3, 4, 5, 6):
+            self.assertIn(f'{n} implementer test-model: unfinished, age 12.0 minutes', view)
+        self.assertNotIn('2 implementer test-model: unfinished', view)
+        self.assertIn('Inspect unfinished calls.', view)
+
+    def test_packet_help_and_non_file_refusal(self):
+        with self.assertRaises(SystemExit) as raised, contextlib.redirect_stdout(io.StringIO()) as output:
+            main(['call', '--help'])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn('path to the packet file (a .md file; not the text)', ' '.join(output.getvalue().split()))
+        for value in ('Packet text\nwith instructions', 'missing.md', str(self.home/'research')):
+            with self.subTest(value=value):
+                before = records(self.home)
+                code, output = self.run_kl('call', 'implementer', value)
+                self.assertEqual(code, 1)
+                self.assertEqual(output, 'kl: packet must be a path to an existing file (a .md file; not the text)\n')
+                self.assertEqual(records(self.home), before)
+                self.assertEqual(list((self.home/'calls').iterdir()), [])
+
+    def test_packet_resolves_relative_to_run_home(self):
+        packet = self.home/'research/packet.md'
+        packet.write_text('Run-relative packet.\n')
+        code, output = self.run_kl('call', 'implementer', 'research/packet.md')
+        self.assertEqual(code, 0, output)
+        self.assertEqual(records(self.home)[-2]['packet'], str(packet))
+
     def test_codex_receipts_and_resume(self):
         code, output, call, meta = self.call()
         self.assertEqual(code,0,output)
@@ -264,6 +338,8 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(meta['launch_cwd'],str(call))
         self.assertEqual(meta['product_cwd'],str(self.home/'wt'))
         self.assertIsNone(meta['requested_effort'])
+        self.assertEqual(records(self.home)[-2]['kind'], 'call_start')
+        self.assertIsNone(records(self.home)[-2]['effort'])
         self.assertEqual(invocation['packet'],(call/'packet.md').read_text())
         code, _, call, meta = self.call('advisor','--resume','conversation-one')
         self.assertEqual(code,0)
@@ -463,7 +539,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(len(text.splitlines()),len(records(self.home))+1)
         self.assertIn('call implementer gpt-6.1-sol done',text)
         code, text = self.run_kl('status','--json')
-        self.assertEqual(len(json.loads(text)),2)
+        self.assertEqual([row['kind'] for row in json.loads(text)], ['start', 'call_start', 'call'])
         os.chdir(self.home/'wt')
         self.assertEqual(self.run_kl('status')[0],0)
 
