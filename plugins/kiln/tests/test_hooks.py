@@ -376,6 +376,81 @@ class HookTests(unittest.TestCase):
             else:
                 self.blocked(result, 'fence')
 
+    def test_reply_polling_loops_are_denied_for_bosses(self):
+        commands = (
+            'end=$((SECONDS+1800)); while [ $SECONDS -lt $end ]; do '
+            'grep -q manager-done "$KILN_HOME/ledger.jsonl" && break; sleep 2; done',
+            'until grep -q answer "${KILN_HOME}/ledger.jsonl"; do sleep 1; done',
+            'for attempt in 1 2 3; do cat "$KILN_HOME/inbox/build.json"; done',
+            'end=$((SECONDS+1800)); while [ $SECONDS -lt $end ]; do '
+            '[ -s $KILN_HOME/research/report.md ] && grep -q \'"to": "orchestrator"\' '
+            '$KILN_HOME/ledger.jsonl && break; sleep 5; done',
+        )
+        for family in STOP_INPUTS:
+            for role in ('boss', 'orchestrator', 'manager', 'chunkmaster'):
+                self.save(role=role)
+                for command in commands:
+                    with self.subTest(family=family, role=role, command=command):
+                        result = self.fence('Bash', {'command': command}, family=family)
+                        self.assertTrue(result.stdout, 'reply polling loop was allowed')
+                        reason = self.blocked(result, 'fence')
+                        self.assertEqual(reason, 'Bash: wait for a reply by ending your turn; the row wakes you')
+
+    def test_reply_polling_uses_seat_inbox_path(self):
+        inbox = str(self.home / 'custom/inbox/build.json')
+        self.save(inbox=inbox)
+        command = f'while true; do cat "{inbox}"; sleep 1; done'
+        for family in STOP_INPUTS:
+            result = self.fence('Bash', {'command': command}, family=family)
+            self.assertTrue(result.stdout, 'seat inbox polling loop was allowed')
+            self.blocked(result, 'fence')
+
+    def test_reply_polling_false_positives_are_allowed(self):
+        commands = (
+            'cat > bridge/accept.md <<EOF\nAccepted for plan; see ledger.jsonl row r12\nEOF',
+            'cat <<\'EOF\'\nfor reference; do see ledger.jsonl; done\nEOF',
+            'bin/team inbox --mark; while [ ! -f worker/status.txt ]; do sleep 1; done',
+            'for f in research/*.md; do grep -c inbox $f; done',
+            'grep -c for $KILN_HOME/ledger.jsonl',
+            'cat $KILN_HOME/ledger.jsonl; while [ ! -f worker/status.txt ]; do sleep 1; done',
+            'while [ ! -f worker/status.txt ]; do sleep 1; done; cat $KILN_HOME/ledger.jsonl',
+        )
+        for family in STOP_INPUTS:
+            for command in commands:
+                with self.subTest(family=family, command=command):
+                    self.allowed(self.fence('Bash', {'command': command}, family=family))
+
+    def test_reply_polling_matches_nested_loop_spans(self):
+        commands = (
+            'while true; do for f in *.txt; do cat "$f"; done; cat $KILN_HOME/ledger.jsonl; done',
+            '(until false; do cat $KILN_HOME/ledger.jsonl; done)',
+            'if true; then for f in *.txt; do cat $KILN_HOME/ledger.jsonl; done; fi',
+            'true & while true; do cat $KILN_HOME/ledger.jsonl; done',
+            'true | while true; do cat $KILN_HOME/ledger.jsonl; done',
+            'true\nwhile true; do cat $KILN_HOME/ledger.jsonl; done',
+        )
+        for family in STOP_INPUTS:
+            for command in commands:
+                with self.subTest(family=family, command=command):
+                    self.blocked(self.fence('Bash', {'command': command}, family=family), 'fence')
+
+    def test_reply_polling_fence_allows_worker_file_wait_and_plain_reads(self):
+        commands = (
+            'end=$((SECONDS+30)); while [ $SECONDS -lt $end ]; do '
+            'test -f "$KILN_HOME/runs/worker/status.txt" && break; sleep 1; done',
+            'cat "$KILN_HOME/ledger.jsonl"',
+            '"$KILN_PLUGIN/bin/team" inbox --mark',
+            'for file in *.txt; do cat "$file"; done',
+        )
+        for family in STOP_INPUTS:
+            for command in commands:
+                with self.subTest(family=family, command=command):
+                    self.allowed(self.fence('Bash', {'command': command}, family=family))
+            for role in ('gravedigah', 'worker'):
+                self.save(role=role)
+                self.allowed(self.fence('Bash', {'command': 'while true; do cat "$KILN_HOME/ledger.jsonl"; done'}, family=family))
+            self.save(role='manager')
+
     def test_typing_only_to_workers_and_never_boss(self):
         self.child('build-impl', pane='w4:p3')
         self.child('boss', pane='w4:p9')

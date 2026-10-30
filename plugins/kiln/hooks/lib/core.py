@@ -130,7 +130,7 @@ def fence(seat, payload, adapter):
             return f"path {value} is outside declared roots; use a declared writable path"
     if tool != "Bash" or seat["role"] not in BOSSES:
         return None
-    # Literal Herdr forms only. Never interpret shell writes or nested programs.
+    # Literal words only. Never interpret shell writes or nested programs.
     lexer = shlex.shlex(data["command"], posix=True, punctuation_chars=";&|()\n")
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
@@ -142,6 +142,36 @@ def fence(seat, payload, adapter):
         return None
     def boundary(word):
         return bool(word) and all(c in ";&|()\n" for c in word)
+    # Track literal loop spans, not unrelated words elsewhere in the command.
+    loops, heredocs = [], []
+    command_position, in_heredoc = True, False
+    inbox = re.compile(r'(?:^|/)inbox/' + re.escape(seat["address"]) + r'\.json$')
+    for index, word in enumerate(words):
+        if in_heredoc:
+            if (word == heredocs[0] and "\n" in words[index - 1]
+                    and (index + 1 == len(words) or "\n" in words[index + 1])):
+                heredocs.pop(0)
+                in_heredoc = bool(heredocs)
+            continue
+        if word.startswith("<<") and not word.startswith("<<<"):
+            delimiter = word[2:].lstrip("-")
+            if not delimiter and index + 1 < len(words):
+                delimiter = words[index + 1]
+            if delimiter:
+                heredocs.append(delimiter)
+        if boundary(word) and "\n" in word and heredocs:
+            in_heredoc = True
+        if command_position and word in {"while", "until", "for"}:
+            loops.append([False, False])  # Seen do, seen a reply path.
+        elif command_position and word == "do" and loops:
+            loops[-1][0] = True
+        elif command_position and word == "done" and loops and loops[-1][0]:
+            if loops.pop()[1]:
+                return "wait for a reply by ending your turn; the row wakes you"
+        if Path(word).name == "ledger.jsonl" or inbox.search(word):
+            for loop in loops:
+                loop[1] = True
+        command_position = (boundary(word) and word[-1] in ";&|(\n") or word in {"do", "then"}
     for index, word in enumerate(words):
         if Path(word).name != "herdr" or (index and not boundary(words[index - 1])):
             continue

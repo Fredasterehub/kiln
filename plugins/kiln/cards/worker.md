@@ -12,7 +12,7 @@ For a question to your own launcher, put the question in the status line without
 Write result and final status only in the current packet's paths inside your assigned run folder; use `status.txt` initially and `status-fix<n>.txt` for fix rounds.
 Keep each round separate: initial `result.md`, then `result-fix<n>.md` with its own fix packet and status, so stale results cannot close new work.
 Write result ≤40 lines: answers first, verified versus inferred, changes, checks run, skipped checks, open points and evidence paths.
-Finish with the one-line status `HH:MM done: <result path>` and end your turn; Herdr state and chat text are not the result.
+Finish with the one-line status `HH:MM done: <result path>` and end your turn; a Claude worker ends every turn with no background command still running; Herdr state and chat text are not the result.
 Implement test-first: show the failing test, then minimum code to green; supply the requested diff; never commit.
 As gate runner, run the full assigned check set on the exact head, retain logs and change no product files; as reviewer, stay read-only, report all findings with blocking/minor tags and evidence, and give no verdict; only the owner accepts or escalates.
 Call a finding blocking only for an unmet requirement/Done-when, failing reproduction command, violated external interface or seam the plan names, or security/data-loss risk.
