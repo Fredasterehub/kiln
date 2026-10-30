@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kiln-Lite B1 entry point."""
+"""Kiln-Lite entry point."""
 import sys
 from pathlib import Path
 

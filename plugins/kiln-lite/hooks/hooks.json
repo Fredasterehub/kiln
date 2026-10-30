@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Write|Edit|NotebookEdit",
+      "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.py\""}]
+    }],
+    "SessionStart": [{
+      "matcher": "startup|resume|compact",
+      "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.py\""}]
+    }]
+  }
+}

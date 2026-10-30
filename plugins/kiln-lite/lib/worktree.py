@@ -27,30 +27,39 @@ def worktree_mark(root, run):
     if run_path.is_relative_to(Path(root)):
         excluded = run_path.relative_to(root).as_posix()
         paths = ["--", ".", f":(top,exclude,literal){excluded}"]
+    # Hash the resulting tree, not HEAD-relative diff/status encodings: staging
+    # and committing unchanged bytes must leave the fingerprint unchanged.
+    names = set(output("ls-files", "--cached", "-z", *paths).split(b"\0"))
+    names.update(output("ls-files", "--others", "--exclude-standard", "-z", *paths).split(b"\0"))
     digest = hashlib.sha256()
-    head = git("rev-parse", "--verify", "HEAD")
-    digest.update(head.stdout if head.returncode == 0 else b"")
-    digest.update(output("status", "--porcelain=v1", "-z", *paths))
-    if head.returncode == 0:
-        digest.update(output("diff", "HEAD", "--binary", *paths))
-    else:
-        # An unborn branch has no HEAD tree; retain both index and worktree changes.
-        digest.update(output("diff", "--cached", "--binary", *paths))
-        digest.update(output("diff", "--binary", *paths))
-    for name in output("ls-files", "-o", "--exclude-standard", "-z", *paths).split(b"\0"):
-        if not name:
-            continue
+    for name in sorted(names - {b""}):
         path = Path(root) / os.fsdecode(name)
         if path.is_symlink():
-            contents = os.fsencode(os.readlink(path))
-        elif path.is_dir():
-            nested_head = git("rev-parse", "--verify", "HEAD", directory=path)
-            contents = nested_head.stdout if nested_head.returncode == 0 else b""
-        else:
+            kind, contents = b"link", os.fsencode(os.readlink(path))
+        elif path.is_file():
+            kind = b"exec" if path.stat().st_mode & 0o111 else b"file"
             contents = path.read_bytes()
-        # Frame binary contents so embedded NULs cannot blur file boundaries.
-        digest.update(name + b"\0" + len(contents).to_bytes(8, "big") + contents)
+        elif path.is_dir():
+            # A tracked file replaced by a directory, or an uninitialized
+            # submodule, still resolves to this repository: do not recurse
+            # back into the same tree.
+            nested = git("rev-parse", "--show-toplevel", directory=path)
+            nested_root = Path(os.fsdecode(nested.stdout.rstrip(b"\n"))) if nested.returncode == 0 else None
+            mark = worktree_mark(path, run) if nested_root and nested_root != Path(root) else directory_mark(path, run)
+            kind, contents = b"tree", mark.encode()
+        else:
+            continue  # A tracked deletion has no resulting tree entry.
+        digest.update(name + b"\0" + kind + b"\0" + len(contents).to_bytes(8, "big") + contents)
     return digest.hexdigest()
+
+
+def head_sha(root):
+    try:
+        result = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "HEAD"],
+                                capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    except FileNotFoundError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 def directory_mark(root, run):

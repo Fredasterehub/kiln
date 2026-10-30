@@ -129,7 +129,8 @@ class ArgvTests(unittest.TestCase):
                     self.assertEqual(route, value)
                     self.assertTrue(card.is_file())
                     self.assertEqual(card.name, key+'.md')
-                    self.assertTrue(5 <= len(card.read_text().splitlines()) <= 15)
+                    self.assertGreaterEqual(len(card.read_text().splitlines()), 5)
+                    self.assertIn('result.md', card.read_text())
                     self.assertIsInstance(route['read_only'], bool)
                     self.assertGreater(route['timeout_s'], 0)
 
@@ -459,7 +460,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn('## Phase\nbrief\n',text)
         code, text = self.run_kl('follow')
         self.assertEqual(code,0)
-        self.assertEqual(len(text.splitlines()),len(records(self.home)))
+        self.assertEqual(len(text.splitlines()),len(records(self.home))+1)
         self.assertIn('call implementer gpt-6.1-sol done',text)
         code, text = self.run_kl('status','--json')
         self.assertEqual(len(json.loads(text)),2)

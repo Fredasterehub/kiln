@@ -10,7 +10,7 @@ CLAUDE_UNSET = (
 )
 
 
-def argv_for(route, cwd, call, card, packet, resume=None):
+def argv_for(route, cwd, call, card, packet, resume=None, run_home=None):
     cli, model, effort = (route[k] for k in ("cli", "model", "effort"))
     if cli == "codex":
         argv = ["codex", "exec"] + (["resume"] if resume else [])
@@ -28,7 +28,7 @@ def argv_for(route, cwd, call, card, packet, resume=None):
                  "--model", model, "--effort", effort, "--permission-mode", "bypassPermissions",
                  "--append-system-prompt-file", str(card), "--strict-mcp-config",
                  "--settings", '{"fallbackModel":[],"switchModelsOnFlag":false}',
-                 "--output-format", "json", "--add-dir", str(call)]
+                 "--output-format", "json", "--add-dir", str(run_home or call)]
         return argv + (["--resume", resume] if resume else [])
     if cli == "agy":
         argv = ["agy", "-p", packet, "--model", model, "--sandbox", "--disable-slash-commands",
