@@ -8,8 +8,8 @@ launcher's location, so a copied plugin needs no repository-level config.
 | Family / seat | Native arguments |
 | --- | --- |
 | Claude | `--model <id> --effort <e> --settings <inline-json>` |
-| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <root> -c approval_policy=never --add-dir <KILN_HOME> -c sandbox_workspace_write.network_access=true` |
-| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s workspace-write -C <worktree-or-root> -c approval_policy=never --add-dir <KILN_HOME>` |
+| Codex, persistent | `--model <id> -c model_reasoning_effort=<e> -s danger-full-access -C <root> -c approval_policy=never --add-dir <KILN_HOME>` |
+| Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s danger-full-access -C <worktree-or-root> -c approval_policy=never --add-dir <KILN_HOME>` |
 
 Both families receive one `--add-dir <dir>` per declared extra root; `--run`
 adds its directory to that list. `--worktree` supplies the writable root and

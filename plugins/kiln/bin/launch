@@ -103,10 +103,8 @@ def native(seat, hook_config, home):
                  "--settings", json.dumps(settings, separators=(",", ":"))]
     elif seat["family"] == "codex":
         flags = ["--model", model, "-c", f"model_reasoning_effort={effort}",
-                 "-s", "workspace-write", "-C", root, "-c", "approval_policy=never",
+                 "-s", "danger-full-access", "-C", root, "-c", "approval_policy=never",
                  "--add-dir", str(home)]
-        if seat["role"] != "worker":
-            flags += ["-c", "sandbox_workspace_write.network_access=true"]
     for directory in seat["extra_roots"]:
         flags += ["--add-dir", directory]
     return flags
