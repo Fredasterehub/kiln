@@ -14,10 +14,9 @@ Status: v0 under construction on branch `v4` (orphan). Previous Kiln (v3.2.2) li
 Start a team from the operator's unsandboxed shell:
 
 ```sh
-plugins/kiln/bin/kiln start --team /path/to/team --project /path/to/repo --workspace "My team" --lane claude-lean --bosses claude --names director=Oracle,super=Robin
+plugins/kiln/bin/kiln start --team /path/to/team --project /path/to/repo --workspace "My team" --lane claude-lean --bosses claude --names boss=Oracle,orchestrator=Robin
 ```
 
 Add `--dry-run` to inspect the plan without writes or Herdr calls. The three
-bridge seats share `team/bridge`; the super manager starts phase managers as
-work begins. [Family contracts and phase-launch shape](docs/families.md) describe
+bridge seats (boss, orchestrator, Gravedigger) share `team/bridge`; the orchestrator opens each phase tab and its manager when first needed and never closes them. [Family contracts and phase-launch shape](docs/families.md) describe
 routing, role-card defaults, and trust behavior.
