@@ -75,8 +75,7 @@ is terminal. Missing status is unfinished. Persistent children never count.
 For Claude seats only, an armed wait is `waits/<worker>.pid`, containing the live
 background wait process PID; zombies/dead/invalid PIDs are unarmed. Claude Stop's
 command records that PID and waits for it to finish. Codex Stop never reads wait
-markers: with a live worker it gives a plain foreground wait instruction, since
-sandbox-local PIDs cannot establish host process liveness.
+markers: it gives a plain foreground wait instruction for every live worker.
 `seat.wait_ms` supplies the Herdr timeout in milliseconds;
 `wait_ms` is required in the schema; `launch --wait-ms` defaults to 1800000.
 The hook also uses that default for legacy seat files missing wait_ms. Claude must execute the Bash payload with
@@ -104,9 +103,12 @@ receipt must remain until outgoing hooks have finished. Hooks never publish the 
 
 ## Fence and family coverage
 
-The fence's write rule is root + extra_roots + payload scratchpad_dir when
-present, plus the exact seat.handoff file as an exception. The exact seat.card
-file is always read-only, including when it lies inside an allowed root. Neither
+For builders the fence's write rule is root + extra_roots + payload scratchpad_dir
+when present, plus the exact seat.handoff file as an exception. Workers launched
+with `--read-only` instead get only seat.run + payload scratchpad_dir + the exact
+seat.handoff file; root and extra_roots grant no writes. Their cwd/root stays
+at the supplied worktree or root for reading and running commands. The exact
+seat.card file is always read-only, including when it lies inside an allowed root. Neither
 card nor handoff grants access to its parent directory. The launcher only
 records those paths: it adds neither directory to extra_roots or --add-dir.
 Paths resolve against payload cwd with symlinks resolved. NotebookEdit
@@ -148,11 +150,32 @@ still undergoes the target check. Child addresses/panes are allowed except
 the boss and this seat's address; help cannot exempt a separate command.
 
 
-Claude shell writes have **no native directory scope**; no Edit allow rules are
-installed or claimed as a boundary. Codex shell writes use its native sandbox,
-which includes all of KILN_HOME via --add-dir: a seat can write other receipts,
-seat records, rotations, waits and the ledger. This is a known integrity gap;
-the edit-tool fence does not prevent shell writes to those files.
+Every seat runs open: Claude inherits the operator's bypass mode and Codex uses
+`danger-full-access` (since commit 6494e1a). Neither family relies on an OS
+sandbox for write scope. Shell writes are never parsed; the fence covers
+edit-tool writes only, so shell commands can still change files outside that scope.
+
+`launch --read-only` is valid only for worker roles and records `read_only: true`.
+Reviewers and council/opinion workers use it; gate runners and verify workers
+do not, because their checks can create build output.
+When the root is inside a Git worktree, it also records `worktree_mark`: SHA-256
+over `git rev-parse HEAD`, `git status --porcelain=v1 -z`, `git diff HEAD --binary`,
+and each untracked non-ignored file's path and contents, enumerated by
+`git ls-files -o --exclude-standard -z`. Commands run from the worktree's top
+directory. Literal Git pathspecs exclude the seat's own run folder from status,
+diff and untracked enumeration, including when it is inside the worktree.
+Untracked paths are NUL-terminated and contents prefixed with an eight-byte
+big-endian length; symlinks contribute their link text. Outside Git there is no mark.
+Known gaps: ignored files, and edits inside an untracked nested repository (only its
+HEAD is hashed).
+`team close <address>` recomputes any recorded mark before removing the seat or
+closing its pane. A changed mark refuses with
+`team: worktree changed since launch: reject this review`; `--force` overrides.
+If the root is gone, close instead refuses with
+`team: worktree gone: cannot check this review; use --force`.
+An unchanged mark or absent mark closes as before. The check compares worktree
+state, including existing dirt, rather than requiring a clean launch. It is an
+acceptance check, not shell-write prevention; ignored files are excluded.
 
 ## Listener
 

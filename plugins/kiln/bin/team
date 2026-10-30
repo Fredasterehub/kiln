@@ -15,6 +15,7 @@ from contextlib import contextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.ledger import live_pid, markers, pending, read_json, records, workers
+from hooks.lib.worktree import worktree_mark
 
 
 def address(value):
@@ -176,7 +177,7 @@ def main():
     commands.add_parser("pending", help="print received rows with no done/answer citation")
     close_parser = commands.add_parser("close", help="remove an accepted worker's seat record")
     close_parser.add_argument("address")
-    close_parser.add_argument("--force", action="store_true", help="also allow closing a persistent seat")
+    close_parser.add_argument("--force", action="store_true", help="also allow closing a persistent seat or changed worktree")
     args = parser.parse_args()
     try:
         home = Path(environment("KILN_HOME")).resolve()
@@ -199,6 +200,11 @@ def main():
                 target = read_json(path)
                 if target is not None and target.get("role") not in ("worker", "advisor") and not args.force:
                     raise ValueError("closing a persistent seat requires --force")
+                if target and "worktree_mark" in target and not args.force:
+                    if not Path(target["root"]).is_dir():
+                        raise ValueError("worktree gone: cannot check this review; use --force")
+                    if worktree_mark(target["root"], target["run"]) != target["worktree_mark"]:
+                        raise ValueError("worktree changed since launch: reject this review")
                 path.unlink(missing_ok=True)
             if target and target.get("pane"):
                 try:
@@ -233,7 +239,7 @@ def main():
                     raise ValueError("tail must be nonnegative")
                 rows = rows[-args.tail:] if args.tail else []
             emit(rows)
-    except (OSError, ValueError, KeyError, TypeError) as error:
+    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"team: {error}\n")
 
 

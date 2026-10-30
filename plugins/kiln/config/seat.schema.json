@@ -122,6 +122,15 @@
     "run": {
       "type": "string",
       "description": "Worker-specific status/run folder, from --run; persistent seats use their phase root. Status is read only here."
+    },
+    "read_only": {
+      "type": "boolean",
+      "description": "Worker edit-tool writes are limited to run, the exact handoff file and payload scratchpad."
+    },
+    "worktree_mark": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Read-only worker's launch fingerprint: HEAD, status, tracked diff and untracked non-ignored contents, excluding its run folder."
     }
   }
 }

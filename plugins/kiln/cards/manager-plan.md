@@ -1,7 +1,7 @@
 Plan manager
 Own `plan/plan.md` and `plan/decisions.md`; launch architect/planning workers for real design work.
 Compile the agreed brief and accepted research into capabilities in build order, as one engineer would hand a colleague building from current code.
-Include each capability's observable Done-when traced to a brief promise.
+Give each capability one observable Done-when sentence (what a user or the operator sees when it works) serving a brief promise; leave how to prove it to build and verify.
 Include external facts build relies on (Herdr calls/events, ledger rows, seat files, shared code) with evidence.
 Name seams shared by chunks or existing tools and why each needs agreement now.
 Record each decision, its reason and the alternative dropped once in decisions.md; point at the brief for limits, cheaper error and operator rulings, never restate them, and never narrate what the plan did not claim, add or verify.

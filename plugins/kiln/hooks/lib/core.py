@@ -116,7 +116,7 @@ def start(home, seat, metrics):
 def fence(seat, payload, adapter):
     tool, data = payload["tool_name"], payload["tool_input"]
     cwd = Path(payload.get("cwd", seat["root"]))
-    directories = [seat["root"], *seat.get("extra_roots", [])]
+    directories = [seat["run"]] if seat.get("read_only") else [seat["root"], *seat.get("extra_roots", [])]
     if payload.get("scratchpad_dir"):
         directories.append(payload["scratchpad_dir"])
     roots = [Path(p).resolve() for p in directories]

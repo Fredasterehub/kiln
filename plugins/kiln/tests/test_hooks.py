@@ -402,6 +402,34 @@ class HookTests(unittest.TestCase):
         for value in ('../outside', str(self.root) + '-other/file', 'escape/outside'):
             self.blocked(self.fence('Write', {'file_path': value}), 'fence')
 
+    def test_read_only_write_scope_both_families_and_builder_root(self):
+        handoff = self.root / 'handoff.md'
+        card = self.extra / 'card.md'
+        scratch = self.home / 'scratch'
+        other_extra = self.home / 'other-extra'
+        for family in STOP_INPUTS:
+            self.save(role='worker', read_only=True, run=str(self.extra),
+                      extra_roots=[str(self.extra), str(other_extra)],
+                      handoff=str(handoff), card=str(card), family=family)
+
+            def write(path, allowed):
+                tool = 'Write' if family == 'claude' else 'apply_patch'
+                data = ({'file_path': str(path)} if family == 'claude' else
+                        {'command': f'*** Begin Patch\n*** Add File: {path}\n*** End Patch'})
+                result = self.run_hook('fence', payload=dict(tool_name=tool, tool_input=data,
+                                                           scratchpad_dir=str(scratch)))
+                self.allowed(result) if allowed else self.blocked(result, 'fence')
+
+            for path in (self.extra / 'result.md', handoff, scratch / 'notes'):
+                write(path, True)
+            for path in (self.root / 'source', other_extra / 'file', self.extra.parent / 'outside', card):
+                write(path, False)
+            self.allowed(self.fence('Read', {'file_path': '/anywhere'}))
+            self.allowed(self.fence('Bash', {'command': 'echo x > /anywhere'}))
+            self.save(read_only=False)
+            write(self.root / 'source', True)
+            write(other_extra / 'file', True)
+
     def test_codex_apply_patch_all_operations_and_move_target(self):
         for role in ('worker', 'manager'):
             self.save(role=role)
@@ -411,6 +439,29 @@ class HookTests(unittest.TestCase):
                 self.assertTrue(reason.startswith('apply_patch:'))
         self.blocked(self.fence('apply_patch', {'command': '*** Begin Patch\n*** Update File: okay\n*** Move to: ../outside\n*** End Patch'}, family='codex'), 'fence')
         self.allowed(self.fence('apply_patch', {'command': f'*** Begin Patch\n*** Add File: {self.extra}/ok\n*** End Patch'}, family='codex'))
+
+    def test_read_only_relative_traversal_symlink_and_patch_move(self):
+        (self.extra / 'escape').symlink_to(self.root, target_is_directory=True)
+        for family in STOP_INPUTS:
+            self.save(role='worker', read_only=True, run=str(self.extra), family=family)
+            for value, permitted in (('result.md', True), ('../root/source', False),
+                                     ('escape/source', False)):
+                with self.subTest(family=family, path=value):
+                    tool = 'Write' if family == 'claude' else 'apply_patch'
+                    data = ({'file_path': value} if family == 'claude' else
+                            {'command': f'*** Begin Patch\n*** Add File: {value}\n*** End Patch'})
+                    result = self.run_hook('fence', payload=dict(cwd=str(self.extra),
+                                                               tool_name=tool, tool_input=data))
+                    self.allowed(result) if permitted else self.blocked(result, 'fence')
+        for source, destination, permitted in (('result.md', 'renamed.md', True),
+                                                ('result.md', '../root/source', False),
+                                                ('result.md', 'escape/source', False),
+                                                ('../root/source', 'result.md', False)):
+            with self.subTest(source=source, destination=destination):
+                command = f'*** Begin Patch\n*** Update File: {source}\n*** Move to: {destination}\n*** End Patch'
+                result = self.run_hook('fence', family='codex', payload=dict(cwd=str(self.extra),
+                                           tool_name='apply_patch', tool_input={'command': command}))
+                self.allowed(result) if permitted else self.blocked(result, 'fence')
 
     def test_everything_else_allowed_no_poll_or_shell_write_policy(self):
         for family in STOP_INPUTS:

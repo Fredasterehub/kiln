@@ -21,6 +21,7 @@ CONFIG = PLUGIN / "config"
 HOOKS = PLUGIN / "hooks"
 sys.path.insert(0, str(PLUGIN))
 from lib.ledger import markers, records
+from hooks.lib.worktree import worktree_mark
 
 SCHEMA = json.loads((CONFIG / "seat.schema.json").read_text())
 
@@ -112,10 +113,13 @@ def native(seat, hook_config, home):
 
 def validate(seat):
     """Validate the flat seat schema, including the wait timeout."""
-    if set(SCHEMA["required"]) - seat.keys() or seat.keys() - SCHEMA["properties"].keys():
+    properties = SCHEMA["properties"]
+    if set(SCHEMA["required"]) - seat.keys() or seat.keys() - properties.keys():
         raise ValueError("seat fields do not match schema")
     for key, value in seat.items():
-        prop = SCHEMA["properties"][key]
+        prop = properties[key]
+        if prop["type"] == "boolean" and type(value) is not bool:
+            raise ValueError(f"{key} must be a boolean")
         if prop["type"] == "string" and not isinstance(value, str):
             raise ValueError(f"{key} must be a string")
         if prop["type"] == "array" and (not isinstance(value, list) or any(not isinstance(v, str) for v in value)):
@@ -390,6 +394,7 @@ def main():
     parser.add_argument("--ratio", type=float)
     parser.add_argument("--from", dest="source", help="pane to split instead of the tab first pane")
     parser.add_argument("--extra-root", action="append", default=[])
+    parser.add_argument("--read-only", action="store_true", help="worker writes only in its run, handoff and scratchpad")
     parser.add_argument("--dry-run", action="store_true", help="print commands and file contents without side effects")
     args = parser.parse_args()
     seat_path = None
@@ -397,6 +402,8 @@ def main():
     tab_root = new_pane = None
     starting = False
     try:
+        if args.read_only and args.role != "worker":
+            raise ValueError("--read-only requires --role worker")
         if args.ratio is not None and not 0 < args.ratio < 1:
             raise ValueError("--ratio must be between 0 and 1 (exclusive)")
         home_value = os.environ.get("KILN_HOME")
@@ -451,6 +458,11 @@ def main():
                     extra_roots=extra_roots, parent=args.parent, model=model,
                     effort=effort, lane=lane, pane="", workspace=workspace, wait_ms=args.wait_ms,
                     inbox="" if transient else str(home / "inbox" / f"{args.address}.json"))
+        if args.read_only:
+            seat["read_only"] = True
+            mark = worktree_mark(root, seat["run"])
+            if mark is not None:
+                seat["worktree_mark"] = mark
         for key in ("name", "card", "handoff"):
             value = getattr(args, key)
             if value is not None:

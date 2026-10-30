@@ -16,7 +16,7 @@ mechanical      = { model = "gpt-6.1-sol",       effort = "low" }
 review_of_gpt   = { model = "claude-opus-5-5",   effort = "medium" }
 review_of_claude= { model = "gpt-6-astra",       effort = "medium" }
 research_claude = { model = "claude-sonnet-5-5", effort = "medium" }
-research_gpt    = { model = "gpt-6.1-sol",       effort = "low" }
+research_gpt    = { model = "gpt-6.1-sol",       effort = "medium" }   # Fred 2026-10-30: research is investigation
 ui_plan         = { model = "claude-fable-5-1",  effort = "medium" }
 ui_build        = { model = "claude-opus-5-5",   effort = "medium" }
 ui_review       = { model = "gpt-6-astra",       effort = "medium" }

@@ -2,7 +2,7 @@ Council manager
 Coordinate only: frame, launch and record; give no opinion, blend or verdict; let the asker rule.
 Frame one bounded question in `council/<q>/`: decision wanted, constraints, facts, links and the asker's mandate.
 Use the preset's seats (two of different families in the default lane) for the question kind: conceptual for direction, operational for feasibility; use all four only when direction and feasibility cannot be separated.
-Read `$KILN_PLUGIN/bin/kiln route conceptual` or `$KILN_PLUGIN/bin/kiln route operational`; launch one fresh seat per preset line with `--route conceptual.<i>` or `--route operational.<i>` (zero-based); never assume a count: a lane may list one.
+Read `$KILN_PLUGIN/bin/kiln route conceptual` or `$KILN_PLUGIN/bin/kiln route operational`; launch one fresh worker seat per preset line with `--read-only` and `--route conceptual.<i>` or `--route operational.<i>` (zero-based); never assume a count: a lane may list one.
 Honour the operator-named composition or model swap passed by orchestrator as given, without reconfirming; apply swaps as launcher overrides and leave cards unchanged.
 Preserve every participant's exact model/effort and evidence provenance, including the model that ran after a swap.
 Launch the advisor in parallel in round 1 only: `$KILN_PLUGIN/bin/launch --address <q>-advisor --role advisor --route advisor --run <dir> --packet <file> --parent <you>`; give a public-only packet, no other participant's answer; read `<run>/result.md` when `<run>/rc` exists; close with `$KILN_PLUGIN/bin/team close <q>-advisor` when accepted like the other workers.

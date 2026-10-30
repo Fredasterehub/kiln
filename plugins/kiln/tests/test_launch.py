@@ -1,6 +1,7 @@
 import argparse
 import contextlib
 import errno
+import hashlib
 import importlib.machinery
 import importlib.util
 import json
@@ -59,6 +60,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
             field = schema['properties'][key]
             if field['type'] == 'string':
                 self.assertIsInstance(value, str)
+            elif field['type'] == 'boolean':
+                self.assertIs(type(value), bool)
             elif field['type'] == 'array':
                 self.assertIsInstance(value, list)
                 self.assertTrue(all(isinstance(v, str) for v in value))
@@ -123,6 +126,183 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(set(settings['hooks']), {'PreToolUse', 'Stop'})
         self.assertEqual(self.seat()['model'], 'claude-opus-5-5')
         self.assertEqual(self.seat()['inbox'], '')
+
+    def test_read_only_refused_for_every_non_worker_role(self):
+        for role in load_launcher().SCHEMA['properties']['role']['enum']:
+            if role != 'worker':
+                with self.subTest(role=role):
+                    result = self.launch('--role', role, '--read-only', ok=False)
+                    self.assertIn('--read-only requires --role worker', result.stderr)
+        self.assertEqual(self.calls(), [])
+
+    def test_read_only_record_outside_git_and_builder_unchanged(self):
+        self.launch('--role', 'worker', '--read-only')
+        seat = self.seat()
+        self.assertIs(seat['read_only'], True)
+        self.assertNotIn('worktree_mark', seat)
+        self.assertEqual(seat['root'], str(self.root))
+        self.assert_schema(seat)
+        load_launcher().validate(seat)
+        self.run_tool('team', 'close', 'build')
+        self.assertFalse((self.home / 'seats/build.json').exists())
+        self.launch('--role', 'worker')
+        self.assertNotIn('read_only', self.seat())
+        self.assertNotIn('worktree_mark', self.seat())
+
+    def git(self, root, *args):
+        return subprocess.run(['git', '-C', str(root), *args], check=True,
+                              capture_output=True).stdout
+
+    def review_worktree(self, name):
+        root = self.base / name
+        root.mkdir()
+        self.git(root, 'init')
+        (root / 'tracked').write_text('original\n')
+        self.git(root, 'add', 'tracked')
+        self.git(root, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                 'commit', '-m', 'initial')
+        return root
+
+    def test_read_only_mark_and_unchanged_close_with_dirty_baseline(self):
+        root = self.review_worktree('review')
+        (root / 'tracked').write_text('baseline change\n')
+        (root / 'untracked').write_text('baseline file\n')
+        nested = root / 'subdir'
+        nested.mkdir()
+        content = (root / 'untracked').read_bytes()
+        expected = hashlib.sha256(self.git(root, 'rev-parse', 'HEAD')
+                                  + self.git(root, 'status', '--porcelain=v1', '-z')
+                                  + self.git(root, 'diff', 'HEAD', '--binary')
+                                  + b'untracked\0' + len(content).to_bytes(8, 'big') + content).hexdigest()
+        self.launch('--role', 'worker', '--read-only', '--worktree', str(nested))
+        seat = self.seat()
+        self.assertEqual(seat['root'], str(nested))
+        self.assertEqual(seat['worktree_mark'], expected)
+        self.assert_schema(seat)
+        load_launcher().validate(seat)
+        self.run_tool('team', 'close', 'build')
+        self.assertFalse((self.home / 'seats/build.json').exists())
+        self.assertEqual(self.calls()[-1], ['pane', 'close', seat['pane']])
+
+    def test_read_only_close_rejects_changes_and_force_closes(self):
+        for change in ('tracked', 'untracked', 'staged', 'already-dirty', 'commit', 'untracked-edit'):
+            with self.subTest(change=change):
+                root = self.review_worktree(change)
+                if change == 'already-dirty':
+                    (root / 'tracked').write_text('baseline change\n')
+                if change == 'untracked-edit':
+                    (root / 'new-file').write_text('baseline untracked\n')
+                self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+                seatpath = self.home / 'seats/build.json'
+                original = seatpath.read_bytes()
+                seat = self.seat()
+                if change == 'untracked-edit':
+                    subprocess.run(['sh', '-c', 'printf "shell edit\\n" >> "$1"',
+                                    'review', str(root / 'new-file')], check=True)
+                else:
+                    (root / ('new-file' if change == 'untracked' else 'tracked')).write_text('review change\n')
+                if change == 'staged':
+                    self.git(root, 'add', 'tracked')
+                if change == 'commit':
+                    self.git(root, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                             'commit', '-am', 'review change')
+                calls = self.calls()
+                result = self.run_tool('team', 'close', 'build', ok=False)
+                self.assertEqual(result.stderr, 'team: worktree changed since launch: reject this review\n')
+                self.assertEqual(seatpath.read_bytes(), original)
+                self.assertEqual(self.calls(), calls)
+                self.run_tool('team', 'close', 'build', '--force')
+                self.assertFalse(seatpath.exists())
+                self.assertEqual(self.calls()[-1], ['pane', 'close', seat['pane']])
+
+    def test_read_only_run_inside_worktree_is_excluded_from_every_input(self):
+        for tracked in (False, True):
+            with self.subTest(tracked=tracked):
+                root = self.review_worktree(f'in-tree-run-{tracked}')
+                run = root / 'artifacts' / 'review[1]'
+                if tracked:
+                    run.mkdir(parents=True)
+                    (run / 'tracked-result').write_text('old result\n')
+                    self.git(root, 'add', '.')
+                    self.git(root, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                             'commit', '-m', 'tracked run output')
+                nested = root / 'subdir'
+                nested.mkdir()
+                self.launch('--role', 'worker', '--read-only', '--worktree', str(nested), '--run', str(run))
+                run.mkdir(parents=True, exist_ok=True)
+                (run / 'result.md').write_text('review output\n')
+                if tracked:
+                    (run / 'tracked-result').write_text('updated result\n')
+                    self.git(root, 'add', str(run / 'tracked-result'))
+                # A second launch at the same state must produce the same mark.
+                original_mark = self.seat()['worktree_mark']
+                self.run_tool('team', 'close', 'build')
+                self.launch('--role', 'worker', '--read-only', '--worktree', str(nested), '--run', str(run))
+                self.assertEqual(self.seat()['worktree_mark'], original_mark)
+                (root / 'artifacts' / 'outside').write_text('must still be detected\n')
+                self.assertIn('worktree changed', self.run_tool('team', 'close', 'build', ok=False).stderr)
+                self.run_tool('team', 'close', 'build', '--force')
+
+    def test_read_only_gone_worktree_refuses_with_own_message_and_force_closes(self):
+        root = self.review_worktree('gone')
+        self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+        seatpath = self.home / 'seats/build.json'
+        original = seatpath.read_bytes()
+        calls = self.calls()
+        root.rename(root.with_name('moved'))
+        result = self.run_tool('team', 'close', 'build', ok=False)
+        self.assertEqual(result.stderr, 'team: worktree gone: cannot check this review; use --force\n')
+        self.assertEqual(seatpath.read_bytes(), original)
+        self.assertEqual(self.calls(), calls)
+        self.run_tool('team', 'close', 'build', '--force')
+        self.assertFalse(seatpath.exists())
+
+    def test_read_only_metadata_uses_shipped_schema(self):
+        launch = load_launcher()
+        self.launch('--role', 'worker', '--read-only')
+        self.assertEqual(launch.SCHEMA['properties']['read_only']['type'], 'boolean')
+        self.assertEqual(launch.SCHEMA['properties']['worktree_mark']['type'], 'string')
+        for key, value in (('read_only', 'true'), ('worktree_mark', 'invalid')):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                launch.validate(self.seat() | {key: value})
+
+    def test_read_only_untracked_nested_repository_hashes_head(self):
+        for committed in (False, True):
+            with self.subTest(committed=committed):
+                root = self.review_worktree(f'outer-{committed}')
+                nested = root / 'nested'
+                nested.mkdir()
+                self.git(nested, 'init')
+                if committed:
+                    self.git(nested, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                             'commit', '--allow-empty', '-m', 'nested initial')
+                self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+                self.assertIn('worktree_mark', self.seat())
+                self.run_tool('team', 'close', 'build')
+                self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+                self.git(nested, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+                         'commit', '--allow-empty', '-m', 'nested change')
+                calls = self.calls()
+                result = self.run_tool('team', 'close', 'build', ok=False)
+                self.assertIn('worktree changed since launch', result.stderr)
+                self.assertTrue((self.home / 'seats/build.json').exists())
+                self.assertEqual(self.calls(), calls)
+                self.run_tool('team', 'close', 'build', '--force')
+
+    def test_read_only_repository_without_commit_can_launch_and_close(self):
+        root = self.base / 'unborn'
+        root.mkdir()
+        self.git(root, 'init')
+        (root / 'new-file').write_text('initial content\n')
+        self.git(root, 'add', 'new-file')
+        self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+        self.assertIn('worktree_mark', self.seat())
+        self.run_tool('team', 'close', 'build')
+        self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+        (root / 'new-file').write_text('changed staged content\n')
+        self.git(root, 'add', 'new-file')
+        self.assertIn('worktree changed since launch', self.run_tool('team', 'close', 'build', ok=False).stderr)
+        self.run_tool('team', 'close', 'build', '--force')
 
     def test_codex_worker_worktree_run_leaves_hook_files_untouched(self):
         worktree, run = self.base / 'worktree', self.base / 'run'
@@ -535,6 +715,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         shutil.copy2(PLUGIN / 'bin/launch', target / 'bin/launch')
         shutil.copytree(PLUGIN / 'config', target / 'config')
         shutil.copytree(PLUGIN / 'lib', target / 'lib')
+        shutil.copytree(PLUGIN / 'hooks', target / 'hooks')
         shutil.copytree(PLUGIN / 'cards', target / 'cards')
         return target
 
@@ -697,7 +878,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertFalse(any(c[:2] == ['pane', 'split'] for c in self.calls()))
 
     def test_routes_select_lane_entries_and_explicit_overrides(self):
-        for route, model, effort in [('research_gpt', 'gpt-6.1-sol', 'low'),
+        for route, model, effort in [('research_gpt', 'gpt-6.1-sol', 'medium'),
                                      ('conceptual.0', 'gpt-6-astra', 'medium'),
                                      ('conceptual.1', 'claude-fable-5-1', 'medium')]:
             self.launch('--role', 'worker', '--route', route)

@@ -16,17 +16,21 @@ launcher's location, so a copied plugin needs no repository-level config.
 | Codex, worker | `--model <id> -c model_reasoning_effort=<e> -s danger-full-access -C <worktree-or-root> -c approval_policy=never --add-dir <KILN_HOME>` |
 
 Both families receive one `--add-dir <dir>` per declared extra root; `--run`
-adds its directory to that list. `--worktree` supplies the writable root and
+adds its directory to that list. `--worktree` supplies the seat root and
 makes `--root` optional. Paths are absolute. Codex always receives KILN_HOME
-as an additional writable directory so seats can append rows and mark inboxes.
-`approval_policy=never` lets Codex run unattended within its native sandbox.
+via `--add-dir`. `approval_policy=never` lets Codex run unattended;
+`danger-full-access` leaves shell writes unrestricted.
 
 Claude inherits the operator's permission mode: the launcher emits no
 `--permission-mode` and no Edit permission allow rules. The fence covers native
-edit tools only. Claude shell writes have no native directory scope. Codex's
-sandbox includes all KILN_HOME via --add-dir; shell writes can alter other seats'
+edit tools only. Claude shell writes have no native directory scope. Codex also
+runs without an OS sandbox; shell writes can alter other seats'
 receipts, records and ledger state. This is a known integrity gap, not covered
-by the edit-tool fence. Settings retain fallbackModel=[] and switchModelsOnFlag=false.
+by the edit-tool fence. Worker `--read-only` restricts edit-tool writes to its
+run, exact handoff and payload scratchpad; root and extra roots remain readable.
+At acceptance, `team close` rejects a changed recorded Git worktree fingerprint
+unless `--force` is supplied (see [fence coverage](hooks.md#fence-and-family-coverage)).
+Settings retain fallbackModel=[] and switchModelsOnFlag=false.
 
 Claude receives Stop → `stop.sh`, PreToolUse → `fence.sh`, and, for persistent
 roles, SessionStart → `start.sh`, via inline settings only. The existing
@@ -135,8 +139,9 @@ Substitute research, plan, verify, deploy, or council for build. Persistent
 roots contain phase artifacts; product edits happen through product worktrees.
 Codex seats on build, verify, and deploy also receive the product's Git common
 dir as an extra root, resolved by `git -C <project> rev-parse
---path-format=absolute --git-common-dir`, so Git metadata writes work inside
-the native sandbox. The operator's checkout is not added as a writable root.
+--path-format=absolute --git-common-dir`, as a declared path for Git metadata
+edits. Read-only workers grant it no edit-tool writes. The operator's checkout
+is not added as a writable root.
 
 The active lane supplies model/effort defaults; `balanced` and `claude-lean`
 are available. `claude-lean` keeps boss/orchestrator on Opus medium; managers,
@@ -179,7 +184,7 @@ file. New config is 0600; malformed TOML refuses without changing it.
 Codex 0.165 applies in-Git trust to the main repository root, including its
 worktrees; with that root trusted a worktree opens directly (live probes,
 2026-10-29; smoke run 1 stalled without it). Outside Git there is no folder
-trust dialog. Later sandboxed launchers need no profile writes; hook-review
+trust dialog. Later launchers need no profile writes; hook-review
 diagnostics remain read-only.
 
 Before `pane split`, Claude checks `$HOME/.claude.json` read-only for an exact
@@ -187,7 +192,7 @@ resolved root or ancestor key with `hasTrustDialogAccepted` equal to true.
 Claude trust carries down to child folders (live probe, Claude 2.1.312,
 2026-10-29). When any ancestor is trusted there is no lock, write, or backup.
 Team bootstrap trusts the team folder once from the bridge; later seat roots
-belong under that folder so sandboxed launchers need no profile writes.
+belong under that folder so launchers need no profile writes.
 Otherwise the launcher sets only `projects[<root>].hasTrustDialogAccepted = true`,
 preserving other JSON values. It holds a `.claude.json.kiln.lock` flock across
 read, backup, and atomic replacement. A unique same-directory temp file receives
