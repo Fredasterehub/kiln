@@ -336,7 +336,8 @@ def herdr(args, dry_run):
                             stdin=subprocess.DEVNULL, timeout=35)
     if result.returncode:
         raise ValueError(result.stderr.strip() or "Herdr failed")
-    return json.loads(result.stdout)["result"]
+    # Some Herdr commands (pane run) print nothing on success.
+    return json.loads(result.stdout)["result"] if result.stdout.strip() else None
 
 
 def target_pane(tab, workspace, root, dry_run):
