@@ -129,7 +129,7 @@ check Add/Update/Delete headers and both ends of Move. A patch invoked through B
 is a shell write and is not inspected. These are documented 0.165.0 wire contracts,
 not new live captures; real shell/patch capture remains step 4 acceptance.
 
-Bash rules apply only to director/super/manager/chunkmaster. The hook recognizes
+Bash rules apply only to boss/orchestrator/manager/chunkmaster. The hook recognizes
 literal Herdr wait/typing command forms, not a shell program. Unbalanced quoting
 (for example in a heredoc) can make shlex fail. Such commands are allowed unless
 the raw text names `herdr agent prompt`, `herdr pane send-text`,
@@ -145,7 +145,7 @@ even an empty string, option-looking value or `--`, is checked literally. Later 
 a fence exemption: `pane send-keys X a -h` sends keys;
 `pane send-text X --help` sends text. `agent prompt X hi -h` fails native option validation, but
 still undergoes the target check. Child addresses/panes are allowed except
-the director and this seat's address; help cannot exempt a separate command.
+the boss and this seat's address; help cannot exempt a separate command.
 
 
 Claude shell writes have **no native directory scope**; no Edit allow rules are

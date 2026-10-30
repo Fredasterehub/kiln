@@ -46,7 +46,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         if '--role' in extra and extra[extra.index('--role') + 1] == 'worker' and '--run' not in extra:
             extra = (*extra, '--run', str(self.base / 'worker-run'))
         return self.run_tool('launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
-                             '--root', str(self.root), '--parent', 'super', *extra, ok=ok)
+                             '--root', str(self.root), '--parent', 'orchestrator', *extra, ok=ok)
 
     def seat(self, addr='build'):
         return json.loads((self.home / 'seats' / f'{addr}.json').read_text())
@@ -276,7 +276,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(marker.read_text(), 'fired')
 
     def test_tab_id_and_bridge_label_resolution(self):
-        self.launch('--tab', 'w-test:t2', '--role', 'helper')
+        self.launch('--tab', 'w-test:t2', '--role', 'gravedigger')
         self.assertEqual(self.calls()[2][2], 'w-test:p2')
         self.assertEqual(self.seat()['tab'], 'bridge')
 
@@ -308,7 +308,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         routing = (PLUGIN / 'config/routing.toml').read_text()
         (self.base / 'routing.toml').write_text(routing.replace('bosses = "claude"', 'bosses = "gpt"'))
         with patch.object(launch, 'CONFIG', self.base):
-            for role, model in [('director', 'gpt-6-astra'), ('super', 'gpt-6.1-sol'), ('helper', 'gpt-6.1-sol')]:
+            for role, model in [('boss', 'gpt-6-astra'), ('orchestrator', 'gpt-6.1-sol'), ('gravedigger', 'gpt-6.1-sol')]:
                 args = argparse.Namespace(role=role, family='codex', model=None, effort=None)
                 self.assertEqual(launch.routing(args), ('balanced', model, 'medium'))
             args.model, args.effort = 'gpt-6.1-sol', 'low'
@@ -329,8 +329,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
         routing.write_text(routing.read_text().replace('bosses = "claude"', 'bosses = "gpt"'))
         subprocess.run([str(target / 'bin/launch'), '--help'], env=self.env,
                        capture_output=True, text=True, check=True)
-        args = [str(target / 'bin/launch'), '--tab', 'bridge', '--address', 'director',
-                '--role', 'director', '--root', str(self.root), '--parent', '', '--dry-run']
+        args = [str(target / 'bin/launch'), '--tab', 'bridge', '--address', 'boss',
+                '--role', 'boss', '--root', str(self.root), '--parent', '', '--dry-run']
         result = subprocess.run(args, env=self.env, capture_output=True, text=True, check=True)
         self.assertIn('--kind codex', result.stdout)
         self.assertIn('--model gpt-6-astra', result.stdout)
@@ -417,8 +417,8 @@ class LaunchTests(Sandbox, unittest.TestCase):
             (self.base / 'routing.toml').write_text(routing.replace('bosses = "claude"', f'bosses = "{bosses}"'))
             with patch.object(launch, 'CONFIG', self.base):
                 for role, model in (('manager', 'gpt-6.1-sol'),
-                                    ('director', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6-astra'),
-                                    ('super', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6.1-sol')):
+                                    ('boss', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6-astra'),
+                                    ('orchestrator', 'claude-opus-5-5' if bosses == 'claude' else 'gpt-6.1-sol')):
                     args = argparse.Namespace(role=role, family=None, model=None, effort=None)
                     self.assertEqual(launch.routing(args), ('claude-lean', model, 'medium'))
 
@@ -426,10 +426,10 @@ class LaunchTests(Sandbox, unittest.TestCase):
         project = self.base / 'repo'
         subprocess.run(['git', 'init', '-q', str(project)], check=True)
         (self.home / 'team.toml').write_text('lane="claude-lean"\nbosses="gpt"\nproject=' + json.dumps(str(project)) + '\n')
-        for role, model in (('manager', 'gpt-6.1-sol'), ('director', 'gpt-6-astra'), ('super', 'gpt-6.1-sol')):
+        for role, model in (('manager', 'gpt-6.1-sol'), ('boss', 'gpt-6-astra'), ('orchestrator', 'gpt-6.1-sol')):
             self.launch('--role', role)
             self.assertEqual((self.seat()['lane'], self.seat()['model']), ('claude-lean', model))
-        self.launch('--role', 'director', '--model', 'claude-opus-5-5', '--effort', 'low')
+        self.launch('--role', 'boss', '--model', 'claude-opus-5-5', '--effort', 'low')
         self.assertEqual((self.seat()['model'], self.seat()['effort']), ('claude-opus-5-5', 'low'))
         for content in ('lane="missing"', 'bosses="missing"', 'invalid = ['):
             (self.home / 'team.toml').write_text(content)
@@ -438,7 +438,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
             self.assertEqual(self.calls(), before)
 
     def test_default_role_cards_resolve_tab_label_and_workers_get_none(self):
-        for role in ('director', 'super', 'helper', 'chunkmaster'):
+        for role in ('boss', 'orchestrator', 'gravedigger', 'chunkmaster'):
             self.launch('--role', role)
             self.assertEqual(self.seat()['card'], str(PLUGIN / 'cards' / f'{role}.md'))
         self.launch('--tab', 'w-test:t1')
@@ -452,7 +452,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_parent_workspace_fallback_and_environment_precedence(self):
         self.env.pop('HERDR_WORKSPACE_ID')
-        path = self.home / 'seats/super.json'
+        path = self.home / 'seats/orchestrator.json'
         path.parent.mkdir()
         path.write_text(json.dumps({'workspace': 'parent-workspace'}))
         self.launch('--tab', 'verify')
@@ -463,11 +463,19 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.launch()
         self.assertEqual(self.seat()['workspace'], 'env-workspace')
 
+    def test_retired_roles_refused_before_pane_creation(self):
+        for role in ('director', 'super', 'helper'):
+            with self.subTest(role=role):
+                result = self.launch('--role', role, ok=False)
+                self.assertIn('invalid choice', result.stderr)
+                self.assertEqual(self.calls(), [])
+                self.assertFalse((self.home / 'seats').exists())
+
     def test_missing_default_card_refuses_before_split(self):
         target = self.copy_plugin()
-        (target / 'cards/director.md').unlink()
-        result = subprocess.run([str(target / 'bin/launch'), '--tab', 'bridge', '--address', 'director',
-                                 '--role', 'director', '--model', 'gpt-6-astra', '--parent', '',
+        (target / 'cards/boss.md').unlink()
+        result = subprocess.run([str(target / 'bin/launch'), '--tab', 'bridge', '--address', 'boss',
+                                 '--role', 'boss', '--model', 'gpt-6-astra', '--parent', '',
                                  '--root', str(self.root)], env=self.env, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('default card not found', result.stderr)
@@ -479,7 +487,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
                                      ('conceptual.1', 'claude-fable-5-1', 'medium')]:
             self.launch('--role', 'worker', '--route', route)
             self.assertEqual((self.seat()['model'], self.seat()['effort']), (model, effort))
-        self.launch('--role', 'director', '--route', 'research_gpt', '--model', 'gpt-6-astra', '--effort', 'high')
+        self.launch('--role', 'boss', '--route', 'research_gpt', '--model', 'gpt-6-astra', '--effort', 'high')
         self.assertEqual((self.seat()['model'], self.seat()['effort']), ('gpt-6-astra', 'high'))
         module = load_launcher()
         args = argparse.Namespace(role='worker', route='advisor', family=None, model=None, effort=None)
@@ -510,7 +518,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         config = tomllib.loads((PLUGIN / 'config/routing.toml').read_text())
         lane = config['lanes']['claude-lean']
         self.assertEqual(set(lane), set(config['lanes']['balanced']))
-        for role in ('manager', 'helper', 'chunkmaster', 'implementer', 'investigator'):
+        for role in ('manager', 'gravedigger', 'chunkmaster', 'implementer', 'investigator'):
             self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='medium'))
         for role in ('mechanical', 'research_gpt', 'research_claude'):
             self.assertEqual(lane[role], dict(model='gpt-6.1-sol', effort='low'))
@@ -535,7 +543,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.launch('--wait-ms', '0', ok=False)
 
     def test_codex_matcher_and_plugin_env(self):
-        self.launch('--role', 'helper')
+        self.launch('--role', 'gravedigger')
         self.assertIn('KILN_PLUGIN=' + str(PLUGIN), self.calls()[2])
         launch = load_launcher()
         self.assertEqual(launch.hooks('manager')['PreToolUse'][0]['matcher'], 'Bash|apply_patch')
@@ -562,7 +570,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_codex_card_handoff_paths_do_not_add_writable_directories(self):
         card, handoff = self.base / 'cards/build.md', self.base / 'handoffs/build.md'
-        self.launch('--family', 'codex', '--role', 'helper', '--card', str(card), '--handoff', str(handoff))
+        self.launch('--family', 'codex', '--role', 'gravedigger', '--card', str(card), '--handoff', str(handoff))
         self.assertEqual(self.seat()['extra_roots'], [])
         flags = self.flags()
         self.assertNotIn(str(card.parent), flags)
@@ -571,12 +579,12 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_routing_defaults_and_pane_role_words(self):
         launch = load_launcher()
-        for role, model in [('manager', 'claude-opus-5-5'), ('helper', 'gpt-6.1-sol'),
+        for role, model in [('manager', 'claude-opus-5-5'), ('gravedigger', 'gpt-6.1-sol'),
                             ('chunkmaster', 'gpt-6.1-sol')]:
             args = argparse.Namespace(role=role, family=None, model=None, effort=None)
             self.assertEqual(launch.routing(args), ('balanced', model, 'medium'))
-        for role, label in [('director', 'director'), ('super', 'super manager'), ('manager', 'build manager'),
-                            ('helper', 'helper'), ('chunkmaster', 'chunk master'), ('worker', 'worker')]:
+        for role, label in [('boss', 'boss'), ('orchestrator', 'orchestrator'), ('manager', 'build manager'),
+                            ('gravedigger', 'gravedigger'), ('chunkmaster', 'chunk master'), ('worker', 'worker')]:
             self.launch('--role', role)
             self.assertEqual(self.calls()[-2][3].split(' · ')[1], label)
 
@@ -589,10 +597,10 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertEqual(self.calls(), [])
 
     def test_missing_hooks_warn_without_refusal_and_install_clears_warning(self):
-        result = self.launch('--role', 'helper')
+        result = self.launch('--role', 'gravedigger')
         self.assertIn('warning: Codex Kiln hooks are not installed', result.stderr)
         self.run_tool('launch', 'install-hooks', '--family', 'codex')
-        self.assertNotIn('not installed', self.launch('--role', 'helper').stderr)
+        self.assertNotIn('not installed', self.launch('--role', 'gravedigger').stderr)
 
     def test_failed_relaunch_restores_the_previous_record(self):
         self.launch()
@@ -692,7 +700,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertTrue(all(key in result.stdout.splitlines() for key in keys))
         config = path.parent / 'config.toml'
         config.write_text(''.join('[hooks.state.' + json.dumps(key) + ']\ntrusted_hash = "sha256:reviewed"\n' for key in keys))
-        self.assertNotIn('need /hooks review', self.launch('--role', 'helper').stderr)
+        self.assertNotIn('need /hooks review', self.launch('--role', 'gravedigger').stderr)
         self.assertTrue(path.is_symlink())
 
     def test_split_direction_defaults_down_and_accepts_right(self):
@@ -706,7 +714,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
 
     def test_codex_launch_never_creates_or_changes_profile_files(self):
         profile = Path(self.env['CODEX_HOME'])
-        self.launch('--role', 'helper')
+        self.launch('--role', 'gravedigger')
         self.assertFalse(profile.exists())
         profile.mkdir()
         config = profile / 'config.toml'
@@ -714,7 +722,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         original = config.read_bytes()
         profile.chmod(0o500)
         try:
-            self.launch('--role', 'helper')
+            self.launch('--role', 'gravedigger')
             self.assertEqual(config.read_bytes(), original)
             self.assertEqual(list(profile.iterdir()), [config])
         finally:
@@ -773,7 +781,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
             for code in (errno.EACCES, errno.EPERM, errno.EROFS):
                 module = load_launcher()
                 args = ['launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
-                        '--root', str(self.root), '--parent', 'super']
+                        '--root', str(self.root), '--parent', 'orchestrator']
                 with patch.dict('os.environ', self.env), patch('sys.argv', args), \
                         patch.object(module, stage, side_effect=OSError(code, 'denied')), \
                         patch.object(module, 'herdr') as herdr, contextlib.redirect_stderr(io.StringIO()) as errors:
@@ -794,7 +802,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
                 path.write_text(json.dumps({'projects': {str(self.root.parent): {'hasTrustDialogAccepted': True}}}))
             return original(args, dry_run)
         args = ['launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
-                '--root', str(self.root), '--parent', 'super']
+                '--root', str(self.root), '--parent', 'orchestrator']
         with patch.dict('os.environ', self.env), patch('sys.argv', args), \
                 patch.object(module, 'trust_lock', wraps=module.trust_lock) as lock, \
                 patch.object(module, 'herdr', side_effect=checked):
@@ -859,7 +867,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
                 self.assertTrue(data['projects'][str(self.root)]['hasTrustDialogAccepted'])
             return original(args, dry_run)
         args = ['launch', '--tab', 'build', '--address', 'build', '--role', 'manager',
-                '--root', str(self.root), '--parent', 'super']
+                '--root', str(self.root), '--parent', 'orchestrator']
         with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'herdr', side_effect=checked):
             module.main()
 
@@ -901,7 +909,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
                 self.assertTrue(module.trust_flag(path.read_bytes(), str(self.root)))
             return original(args, dry_run)
         args = ['launch', '--tab', 'build', '--address', 'build', '--role',
-                'manager', '--root', str(self.root), '--parent', 'super']
+                'manager', '--root', str(self.root), '--parent', 'orchestrator']
         with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'herdr', side_effect=checked):
             module.main()
         self.assertEqual(calls[-1], ['agent', 'start'])
@@ -911,7 +919,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         def lost(path, content, mode):
             path.write_bytes(b'{}')
         args = ['launch', '--tab', 'build', '--address', 'build', '--role',
-                'manager', '--root', str(self.root), '--parent', 'super']
+                'manager', '--root', str(self.root), '--parent', 'orchestrator']
         with patch.dict('os.environ', self.env), patch('sys.argv', args), patch.object(module, 'atomic_bytes', side_effect=lost), \
                 patch.object(module, 'herdr') as herdr, contextlib.redirect_stderr(io.StringIO()) as errors:
             with self.assertRaises(SystemExit):
@@ -942,7 +950,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
             if len(writes) == 2:
                 target.write_bytes(b'{}')
         args = ['launch', '--tab', 'build', '--address', 'build', '--role',
-                'manager', '--root', str(self.root), '--parent', 'super']
+                'manager', '--root', str(self.root), '--parent', 'orchestrator']
         with patch.dict('os.environ', self.env), patch('sys.argv', args), \
                 patch.object(module, 'atomic_bytes', side_effect=lost_again), \
                 patch.object(module, 'herdr', side_effect=checked), contextlib.redirect_stderr(io.StringIO()) as errors:

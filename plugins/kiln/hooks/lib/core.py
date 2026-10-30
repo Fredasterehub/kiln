@@ -15,8 +15,8 @@ PLUGIN = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PLUGIN))
 from lib.ledger import live_pid, markers, pending, read_json, records, workers
 
-PERSISTENT = {"director", "super", "manager", "helper", "chunkmaster"}
-BOSSES = {"director", "super", "manager", "chunkmaster"}
+PERSISTENT = {"boss", "orchestrator", "manager", "gravedigger", "chunkmaster"}
+BOSSES = {"boss", "orchestrator", "manager", "chunkmaster"}
 TEAM = shlex.quote(str(PLUGIN / "bin/team"))
 SENTENCE = "this is enough; read rules, ledger and panes only where an item points you"
 
@@ -160,12 +160,12 @@ def fence(seat, payload, adapter):
             target = tail[2]  # Literal target, including options, empty strings and --.
             home = Path(os.environ["KILN_HOME"])
             children = workers(home, seat)
-            addresses = {c["address"] for c in children} - {"director", seat["address"]}
+            addresses = {c["address"] for c in children} - {"boss", seat["address"]}
             panes = {c["pane"] for c in children if c["address"] in addresses}
-            director = read_json(home / "seats/director.json", {}).get("pane")
-            allowed = addresses - {director} if tail[0] == "agent" else panes - {director, None}
+            boss = read_json(home / "seats/boss.json", {}).get("pane")
+            allowed = addresses - {boss} if tail[0] == "agent" else panes - {boss, None}
             if target not in allowed:
-                return f"target {target} is outside my workers; use a worker target (never the director's pane)"
+                return f"target {target} is outside my workers; use a worker target (never the boss's pane)"
     return None
 
 

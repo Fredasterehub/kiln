@@ -19,8 +19,8 @@ def names(value):
     result = {}
     for item in value.split(",") if value else ():
         role, separator, name = item.partition("=")
-        if role not in ("director", "super") or not separator or not name or role in result:
-            raise argparse.ArgumentTypeError("names must be director=<name>,super=<name>; helper is Gravedigger")
+        if role not in ("boss", "orchestrator") or not separator or not name or role in result:
+            raise argparse.ArgumentTypeError("names must be boss=<name>,orchestrator=<name>; gravedigger is Gravedigger")
         result[role] = name
     return result
 
@@ -64,8 +64,8 @@ def trust_codex(project, launcher, dry_run):
 def launch_commands(team, names):
     return [[str(PLUGIN / "bin/launch"), "--tab", "bridge", "--address", role,
              "--role", role, "--root", str(team / "bridge"), "--parent", parent,
-             "--name", "Gravedigger" if role == "helper" else names.get(role, role)]
-            for role, parent in (("director", ""), ("super", "director"), ("helper", "super"))]
+             "--name", "Gravedigger" if role == "gravedigger" else names.get(role, role)]
+            for role, parent in (("boss", ""), ("orchestrator", "boss"), ("gravedigger", "orchestrator"))]
 
 
 def printable(command, team, workspace):
@@ -154,7 +154,7 @@ def main():
                 panes[role] = json.loads((team / "seats" / f"{role}.json").read_text())["pane"]
         for role, pane in panes.items():
             print(f"{role} pane: {pane}")
-        print("director address: director")
+        print("boss address: boss")
     except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         if configured or worktree_created:
             print(f"workspace: {workspace_id}; bridge tab: {tab_id}", file=sys.stderr)

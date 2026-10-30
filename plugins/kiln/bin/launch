@@ -69,7 +69,7 @@ def routing(args, all_entries=False):
             raise ValueError("route must select one model/effort entry")
     except (KeyError, IndexError, TypeError, ValueError) as error:
         raise ValueError(f"invalid routing entry: {route or key}") from error
-    if not route and args.role in ("director", "super") and bosses == "gpt":
+    if not route and args.role in ("boss", "orchestrator") and bosses == "gpt":
         choice = config["boss_lanes"]["gpt"][args.role]
     if all_entries:
         return [(entry["model"], entry["effort"]) for entry in entries]
@@ -466,7 +466,7 @@ def main():
         short = {"claude-opus-5-5": "opus-5.5", "claude-fable-5-1": "fable-5.1",
                  "claude-sonnet-5-5": "sonnet-5.5", "gpt-6.1-sol": "sol-6.1",
                  "gpt-6-astra": "astra", "gemini-4-argon-high": "argon-high"}[model]
-        role_text = {"super": "super manager", "manager": f"{seat['tab']} manager", "chunkmaster": "chunk master"}.get(args.role, args.role)
+        role_text = {"manager": f"{seat['tab']} manager", "chunkmaster": "chunk master"}.get(args.role, args.role)
         label = f"{args.name or args.address} · {role_text} · {short}"
         herdr(["pane", "rename", seat["pane"], label], args.dry_run)
         # Re-read immediately before start and re-apply once if the flag disappeared.

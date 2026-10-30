@@ -74,13 +74,13 @@ Codex handles review of other project hooks; Kiln adds no foreign-hook guard.
 
 `plugins/kiln/bin/kiln start --team <team-dir> --project <repo>
 --workspace <label> [--lane balanced|claude-lean] [--bosses claude|gpt]
-[--names director=Oracle,super=Robin] [--dry-run]` bootstraps a team.
+[--names boss=Oracle,orchestrator=Robin] [--dry-run]` bootstraps a team.
 It creates ledger.jsonl, seats/, inbox/, and bridge/, research/, plan/, build/,
 verify/, deploy/, council/, waits/, listeners/. It trusts the team folder once for Claude, writes
 team.toml with lane, bosses, project, branch, and trunk paths, creates a Herdr
-workspace, and renames its initial tab to bridge. Director, super (parent
-director), and helper (parent super) all use bridge/ as their root; helper's
-fixed display name is Gravedigger. It prints their pane IDs and director address.
+workspace, and renames its initial tab to bridge. Boss, orchestrator (parent
+boss), and gravedigger (parent orchestrator) all use bridge/ as their root; gravedigger's
+fixed display name is Gravedigger. It prints their pane IDs and boss address.
 Unspecified lane/bosses use the plugin routing defaults; unnamed bosses use
 their addresses. Starting a configured team again refuses before any changes.
 Bootstrap creates branch `kiln/<slug>` from the product HEAD in
@@ -101,8 +101,8 @@ commands with placeholder IDs and performs no writes or Herdr calls.
 
 The launcher reads lane and bosses from KILN_HOME/team.toml over the shipped
 routing defaults; explicit --model/--effort still take precedence. When --card
-is absent, persistent roles use the shipped cards/director.md, super.md,
-helper.md, or chunkmaster.md; phase managers use cards/manager-<resolved-tab>.md.
+is absent, persistent roles use the shipped cards/boss.md, orchestrator.md,
+gravedigger.md, or chunkmaster.md; phase managers use cards/manager-<resolved-tab>.md.
 A missing default card refuses launch before the split. Workers have no default
 seat card: their packets refer to cards/worker.md. The shared hand-off table
 ships at `$KILN_PLUGIN/handoffs.md` ([table](../plugins/kiln/handoffs.md)).
@@ -118,13 +118,13 @@ read-only lookup and works for `advisor` without launching an agy seat. A list
 key such as `conceptual` or `operational` prints one model/effort line per entry
 in lane order; `conceptual.0` still selects just the first entry.
 
-The super manager launches each phase manager only when work starts (council
+The orchestrator launches each phase manager only when work starts (council
 at the first question), with address equal to the phase. The launcher creates
 a missing tab in HERDR_WORKSPACE_ID, falling back to the parent seat's recorded
-workspace when the variable is absent. Use this shape from the super's pane:
+workspace when the variable is absent. Use this shape from the orchestrator's pane:
 
 ```sh
-plugins/kiln/bin/launch --tab build --address build --role manager --root "$KILN_HOME/build" --parent super
+plugins/kiln/bin/launch --tab build --address build --role manager --root "$KILN_HOME/build" --parent orchestrator
 ```
 
 Substitute research, plan, verify, deploy, or council for build. Persistent
@@ -135,14 +135,14 @@ dir as an extra root, resolved by `git -C <project> rev-parse
 the native sandbox. The operator's checkout is not added as a writable root.
 
 The active lane supplies model/effort defaults; `balanced` and `claude-lean`
-are available. `claude-lean` keeps director/super on Opus medium; managers,
-helper, chunkmaster, implementer and investigator use Sol medium. Mechanical
+are available. `claude-lean` keeps boss/orchestrator on Opus medium; managers,
+gravedigger, chunkmaster, implementer and investigator use Sol medium. Mechanical
 and both research slots use Sol low. Review of GPT uses Opus medium and review
 of Claude uses Astra medium. Conceptual is Astra medium (Argon is the advisor);
 operational is Sol medium + Opus medium. UI plan/build/review are respectively
 Astra/Sol/Opus medium; advisor is Argon high. Adding this lane does not change
 the active selection. `bosses="gpt"` applies on top of either lane, overriding
-only director (Astra medium) and super (Sol medium). Explicit model/effort override independently.
+only boss (Astra medium) and orchestrator (Sol medium). Explicit model/effort override independently.
 Family is derived from the final model; optional `--family` checks a caller's
 explicit choice. Generic workers default to `implementer`, or `review_of_gpt`
 when Claude is selected. No advisor seat exists: Argon runs as a plain
@@ -152,8 +152,8 @@ when Claude is selected. No advisor seat exists: Argon runs as a plain
 The launcher selects a tab by unique label or ID within HERDR_WORKSPACE_ID,
 splits its first listed pane with `--direction down` by default (`--direction
 right|down` selects another direction), and stores the resolved tab label. Labels use
-`<name-or-address> · <role-text> · <short-model>`; role text is `director`,
-`super manager`, `<tab> manager`, `helper`, `chunk master`, or `worker`.
+`<name-or-address> · <role-text> · <short-model>`; role text is `boss`,
+`orchestrator`, `<tab> manager`, `gravedigger`, `chunk master`, or `worker`.
 Herdr startup uses `agent start <addr> --kind <family> --pane <new-pane>
 --timeout 30000 -- <native-arguments>`. Failed split/start restores the previous
 seat record on a relaunch, or removes the record for a new seat. Corrupt prior

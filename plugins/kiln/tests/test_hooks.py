@@ -42,7 +42,7 @@ class HookTests(unittest.TestCase):
         self.seatpath = self.home / 'seats/build.json'
         self.seat = dict(address='build', role='manager', family='claude', pane='w4:p1',
                          root=str(self.root), run=str(self.root), extra_roots=[str(self.extra)],
-                         inbox=str(self.home / 'inbox/build.json'), tab='build', parent='super',
+                         inbox=str(self.home / 'inbox/build.json'), tab='build', parent='orchestrator',
                          workspace='w4', model='claude-opus-5-5', effort='medium', wait_ms=1800000)
         self.env = dict(os.environ, KILN_HOME=str(self.home), KILN_SEAT=str(self.seatpath), HERDR_PANE_ID='w4:p1', KILN_PLUGIN=str(HOOKS.parent))
         self.save()
@@ -60,7 +60,7 @@ class HookTests(unittest.TestCase):
         return run
 
     def row(self, id='r1', kind='request', to='build', **updates):
-        return dict(id=id, kind=kind, to=to, **{'from': 'super'}, task='task',
+        return dict(id=id, kind=kind, to=to, **{'from': 'orchestrator'}, task='task',
                     headline='work', path=None, time='2026-10-29T00:00:00+00:00', cites=None) | updates
 
     def rows(self, *rows, read=()):
@@ -160,7 +160,7 @@ class HookTests(unittest.TestCase):
 
     def test_all_persistent_roles_get_unread_refusal(self):
         self.rows(self.row())
-        for role in ('director', 'super', 'manager', 'helper', 'chunkmaster'):
+        for role in ('boss', 'orchestrator', 'manager', 'gravedigger', 'chunkmaster'):
             self.save(role=role)
             self.blocked(self.run_hook())
 
@@ -267,7 +267,7 @@ class HookTests(unittest.TestCase):
         handoff.write_text('HANDOFF open item')
         self.save(card=str(card), handoff=str(handoff))
         self.rows(self.row(), self.row('unread'), self.row('complete'),
-                  self.row('d1', kind='answer', to='super', cites='complete'),
+                  self.row('d1', kind='answer', to='orchestrator', cites='complete'),
                   self.row('update-id', kind='update'), read=['r1', 'complete', 'update-id'])
         for family in STOP_INPUTS:
             result = self.run_hook('start', family=family)
@@ -313,7 +313,7 @@ class HookTests(unittest.TestCase):
 
     def test_shipped_persistent_cards_start_within_budget_without_handoff(self):
         cards = HOOKS.parent / 'cards'
-        names = ('director', 'super', 'helper', 'chunkmaster', 'manager-research',
+        names = ('boss', 'orchestrator', 'gravedigger', 'chunkmaster', 'manager-research',
                  'manager-plan', 'manager-build', 'manager-verify', 'manager-deploy', 'manager-council')
         common = (cards / 'common.md').read_text().rstrip('\n')
         for family in STOP_INPUTS:
@@ -326,7 +326,7 @@ class HookTests(unittest.TestCase):
                     context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
                     self.assertEqual(context.count(common), 1)
                     self.assertLessEqual(len(context.splitlines()), 40)
-                    self.assertLessEqual(len(card.read_text().splitlines()), 28)
+                    self.assertLessEqual(len(card.read_text().splitlines()), 20)
 
     def test_start_warning_excludes_handoff_but_counts_all_other_sections(self):
         card, handoff = self.home / 'card.md', self.home / 'handoff.md'
@@ -368,19 +368,19 @@ class HookTests(unittest.TestCase):
             self.save(family='claude')
 
     def test_bash_fence_only_four_roles(self):
-        for role in ('director', 'super', 'manager', 'chunkmaster', 'helper', 'worker'):
+        for role in ('boss', 'orchestrator', 'manager', 'chunkmaster', 'gravedigger', 'worker'):
             self.save(role=role)
             result = self.fence('Bash', {'command': 'herdr agent wait w'})
-            if role in ('helper', 'worker'):
+            if role in ('gravedigger', 'worker'):
                 self.allowed(result)
             else:
                 self.blocked(result, 'fence')
 
-    def test_typing_only_to_workers_and_never_director(self):
+    def test_typing_only_to_workers_and_never_boss(self):
         self.child('build-impl', pane='w4:p3')
-        self.child('director', pane='w4:p9')
+        self.child('boss', pane='w4:p9')
         for family in STOP_INPUTS:
-            for prefix, good, bad in (('herdr agent prompt', 'build-impl', 'director'),
+            for prefix, good, bad in (('herdr agent prompt', 'build-impl', 'boss'),
                                        ('herdr pane send-text', 'w4:p3', 'w4:p9'),
                                        ('herdr pane send-keys', 'w4:p3', 'unowned')):
                 self.allowed(self.fence('Bash', {'command': f'{prefix} {good} hello'}, family=family))
@@ -389,7 +389,7 @@ class HookTests(unittest.TestCase):
                 self.assertIn('worker', reason)
 
     def test_tool_write_roots_for_all_roles_claude(self):
-        for role in ('director', 'super', 'manager', 'chunkmaster', 'helper', 'worker'):
+        for role in ('boss', 'orchestrator', 'manager', 'chunkmaster', 'gravedigger', 'worker'):
             self.save(role=role)
             for tool in ('Edit', 'Write'):
                 for path in ('file.txt', str(self.extra / 'file.txt')):
@@ -414,7 +414,7 @@ class HookTests(unittest.TestCase):
 
     def test_everything_else_allowed_no_poll_or_shell_write_policy(self):
         for family in STOP_INPUTS:
-            for command in ('echo herdr agent wait w', "echo 'herdr agent prompt director hi'", 'while true; do sleep 1; done', 'echo text > /outside', 'herdr agent get w'):
+            for command in ('echo herdr agent wait w', "echo 'herdr agent prompt boss hi'", 'while true; do sleep 1; done', 'echo text > /outside', 'herdr agent get w'):
                 self.allowed(self.fence('Bash', {'command': command}, family=family))
             self.allowed(self.fence('Read', {'file_path': '/outside'}, family=family))
 
@@ -517,21 +517,21 @@ class HookTests(unittest.TestCase):
         self.assertFalse((self.home / 'listeners').exists())
 
     def test_persistent_children_never_count_as_live_workers(self):
-        self.child('helper', role='helper', pane='helper-pane')
+        self.child('gravedigger', role='gravedigger', pane='gravedigger-pane')
         self.child('unrelated', parent='plan', pane='other-pane')
         for family in STOP_INPUTS:
             self.allowed(self.run_hook(family=family))
-            self.allowed(self.fence('Bash', {'command': 'herdr pane send-text helper-pane hi'}))
+            self.allowed(self.fence('Bash', {'command': 'herdr pane send-text gravedigger-pane hi'}))
             self.blocked(self.fence('Bash', {'command': 'herdr agent prompt unrelated hi'}), 'fence')
-        (self.home / 'seats/helper.json').unlink()
-        self.blocked(self.fence('Bash', {'command': 'herdr pane send-text helper-pane hi'}), 'fence')
+        (self.home / 'seats/gravedigger.json').unlink()
+        self.blocked(self.fence('Bash', {'command': 'herdr pane send-text gravedigger-pane hi'}), 'fence')
 
     def test_custom_receipt_pending_matches_team_for_all_row_kinds(self):
         custom = self.home / 'custom.json'
         self.save(inbox=str(custom))
         self.rows(self.row(), self.row('question', kind='question'), self.row('update', kind='update'),
                   self.row('unread'), self.row('complete'),
-                  self.row('answer', kind='answer', to='super', cites='complete'),
+                  self.row('answer', kind='answer', to='orchestrator', cites='complete'),
                   self.row('elsewhere', to='plan'), read=['unread'])
         custom.write_text(json.dumps({'read': ['r1', 'question', 'update', 'complete', 'elsewhere']}))
         result = subprocess.run([str(HOOKS.parent / 'bin/team'), 'pending'], env=self.env,
@@ -689,7 +689,7 @@ class HookTests(unittest.TestCase):
         self.save(card=str(card))
         result = self.run_hook('start')
         context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
-        for line in ('Role: manager', 'Root: ' + str(self.root), 'Inbox: ' + self.seat['inbox'], 'Parent: super'):
+        for line in ('Role: manager', 'Root: ' + str(self.root), 'Inbox: ' + self.seat['inbox'], 'Parent: orchestrator'):
             self.assertIn(line, context)
         record = json.loads((self.home / 'hooks.log').read_text())
         self.assertEqual(record['bad_lines'], 2)
@@ -844,15 +844,15 @@ class HookTests(unittest.TestCase):
             for command in ('herdr agent prompt', 'herdr pane send-text', 'herdr pane send-keys'):
                 self.allowed(self.fence('Bash', {'command': command}, family=family))
             self.allowed(self.fence('Bash', {'command': 'herdr agent prompt impl hello'}, family=family))
-            for command in ('herdr agent prompt director hi', 'herdr pane send-text unowned hi',
-                            'herdr pane send-keys unowned Enter', 'herdr agent prompt director --helpful',
+            for command in ('herdr agent prompt boss hi', 'herdr pane send-text unowned hi',
+                            'herdr pane send-keys unowned Enter', 'herdr agent prompt boss --helpful',
                             'herdr agent prompt --unknown-option', 'herdr agent prompt ""',
                             'herdr agent prompt -- impl hello'):
                 self.blocked(self.fence('Bash', {'command': command}, family=family), 'fence')
 
     def test_help_does_not_exempt_another_herdr_command(self):
         for family in STOP_INPUTS:
-            for command in ('herdr agent prompt --help; herdr agent prompt director hi',
+            for command in ('herdr agent prompt --help; herdr agent prompt boss hi',
                             'echo --help; herdr pane send-keys unowned Enter',
                             'herdr agent wait impl; herdr agent prompt --help'):
                 self.blocked(self.fence('Bash', {'command': command}, family=family), 'fence')
@@ -965,7 +965,7 @@ class HookTests(unittest.TestCase):
                                     ('herdr pane send-keys X a -h', 'X'),
                                     ('herdr pane send-text X --help', 'X'),
                                     ('herdr agent prompt X hi -h', 'X'),
-                                    ('herdr pane send-keys director -- C-c -h', 'director')):
+                                    ('herdr pane send-keys boss -- C-c -h', 'boss')):
                 with self.subTest(family=family, command=command):
                     reason = self.blocked(self.fence('Bash', {'command': command}, family=family), 'fence')
                     self.assertIn('target ' + target + ' is outside my workers', reason)

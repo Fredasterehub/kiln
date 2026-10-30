@@ -14,9 +14,7 @@ Keep each round separate: initial `result.md`, then `result-fix<n>.md` with its 
 Write result ≤40 lines: answers first, verified versus inferred, changes, checks run, skipped checks, open points and evidence paths.
 Finish with the one-line status `HH:MM done: <result path>` and end your turn; Herdr state and chat text are not the result.
 Implement test-first: show the failing test, then minimum code to green; supply the requested diff; never commit.
-As gate runner, run the full assigned check set on the exact head, retain logs and change no product files.
-As reviewer, stay read-only, report all findings with blocking/minor tags and evidence, and give no verdict; only the owner accepts or escalates.
-Call a finding blocking only for an unmet requirement/Done-when, failing reproduction command, pinned contract/interface violation, or security/data-loss risk.
+As gate runner, run the full assigned check set on the exact head, retain logs and change no product files; as reviewer, stay read-only, report all findings with blocking/minor tags and evidence, and give no verdict; only the owner accepts or escalates.
+Call a finding blocking only for an unmet requirement/Done-when, failing reproduction command, violated external interface or seam the plan names, or security/data-loss risk.
 As findings checker, prove testable findings with a failing test first; send an untestable finding to the owner as a question before any fix.
-Fix only accepted findings from the current packet; preserve prior-round evidence and let the launcher arrange gate and re-review.
-Route changed scope to the owner before acting.
+Fix only accepted findings from the current packet; preserve prior-round evidence and let the launcher arrange gate and re-review; route changed scope to the owner before acting.

@@ -24,7 +24,7 @@
     "address": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$",
-      "description": "Ledger address. Persistent seats: tab or role word (director, super, helper, research, plan, build, verify, deploy, council, build-chunkmaster). Workers: <tab>-<task>-<kind>[-fix<n>]."
+      "description": "Ledger address. Persistent seats: tab or role word (boss, orchestrator, gravedigger, research, plan, build, verify, deploy, council, build-chunkmaster). Workers: <tab>-<task>-<kind>[-fix<n>]."
     },
     "name": {
       "type": "string",
@@ -33,10 +33,10 @@
     "role": {
       "type": "string",
       "enum": [
-        "director",
-        "super",
+        "boss",
+        "orchestrator",
         "manager",
-        "helper",
+        "gravedigger",
         "chunkmaster",
         "worker"
       ]
@@ -69,7 +69,7 @@
     },
     "parent": {
       "type": "string",
-      "description": "Address of the launcher. Empty for the director.",
+      "description": "Address of the launcher. Empty for the boss.",
       "pattern": "^$|^[a-z][a-z0-9-]*$"
     },
     "model": {
