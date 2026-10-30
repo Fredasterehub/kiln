@@ -197,7 +197,7 @@ def main():
             with locked(home):
                 path = home / "seats" / f"{address(args.address)}.json"
                 target = read_json(path)
-                if target is not None and target.get("role") != "worker" and not args.force:
+                if target is not None and target.get("role") not in ("worker", "advisor") and not args.force:
                     raise ValueError("closing a persistent seat requires --force")
                 path.unlink(missing_ok=True)
             if target and target.get("pane"):

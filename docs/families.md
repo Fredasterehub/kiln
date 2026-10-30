@@ -1,5 +1,9 @@
 # Pinned family contract (Kiln 4, kernel step 2)
 
+| Family | Launch |
+| --- | --- |
+| agy | advisor (one-shot in a pane) |
+
 `plugins/kiln/bin/launch` emits native arguments after Herdr's `--`.
 The plugin ships its own [routing](../plugins/kiln/config/routing.toml) and
 [seat schema](../plugins/kiln/config/seat.schema.json), resolved from the
@@ -145,9 +149,10 @@ the active selection. `bosses="gpt"` applies on top of either lane, overriding
 only boss (Astra medium) and orchestrator (Sol medium). Explicit model/effort override independently.
 Family is derived from the final model; optional `--family` checks a caller's
 explicit choice. Generic workers default to `implementer`, or `review_of_gpt`
-when Claude is selected. No advisor seat exists: Argon runs as a plain
-`agy -p <sanitized-prompt> --model gemini-4-argon-high --effort high --sandbox
---output-format json` command, outside this launcher, with no hooks or inbox.
+when Claude is selected. Argon launches with `--role advisor --route advisor
+--run <dir> --packet <file> --parent <you>` in the parent tab, using the worker
+split layout. It has no hooks or inbox; read `result.md` when `rc` exists,
+then close the accepted seat with `team close`.
 
 The launcher selects a tab by unique label or ID within HERDR_WORKSPACE_ID,
 splits its first listed pane with `--direction down` by default (`--direction

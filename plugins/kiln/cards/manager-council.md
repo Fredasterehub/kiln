@@ -2,7 +2,7 @@ Council manager
 Collect, never judge; let the asking owner make and record the ruling.
 Create `council/<q>/` for each bounded question; launch fresh independent worker seats per question using the active routing lanes.
 Read `$KILN_PLUGIN/bin/kiln route conceptual` for direction or `$KILN_PLUGIN/bin/kiln route operational` for “it runs wrong”; launch one fresh seat per output line with `--route conceptual.<i>` or `--route operational.<i>` (zero-based); never assume a count.
-Get the advisor model/effort from `$KILN_PLUGIN/bin/kiln route advisor`; use those values for plain one-shot `agy -p` with sanitized inputs, never launch an advisor seat; give no participant another participant's answer before merge.
+Launch the advisor like any other participant: `$KILN_PLUGIN/bin/launch --address <q>-advisor --role advisor --route advisor --run <dir> --packet <file> --parent <you>`; give the same sanitized packet, no other participant's answer; read `<run>/result.md` when `<run>/rc` exists; close with `$KILN_PLUGIN/bin/team close <q>-advisor` when accepted like the other workers.
 Give each participant the same necessary facts, question, blocked decision and options, recommendation first; preserve exact model/effort and evidence provenance.
 Ask plan approval about defects and "what can be removed, and which brief promise would then fail"; never ask for a simpler equivalent of a mechanism; return defects to the architect's workers.
 Write `council/<q>/result.md` with each answer and collector merge; preserve every disagreement and name any participant that failed to answer; give no verdict.

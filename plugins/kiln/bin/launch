@@ -383,7 +383,7 @@ def main():
     parser.add_argument("--route", help="active lane entry, e.g. research_gpt or conceptual.0")
     for key in ("model", "effort"):
         parser.add_argument(f"--{key}", choices=SCHEMA["properties"][key]["enum"])
-    for key in ("name", "card", "handoff", "worktree", "run"):
+    for key in ("name", "card", "handoff", "worktree", "run", "packet"):
         parser.add_argument(f"--{key}")
     parser.add_argument("--wait-ms", type=int, default=1800000)
     parser.add_argument("--direction", choices=("right", "down"))
@@ -405,9 +405,20 @@ def main():
         home = Path(home_value).resolve() if home_value else Path("<KILN_HOME>")
         if not re.fullmatch(SCHEMA["properties"]["parent"]["pattern"], args.parent):
             raise ValueError("invalid parent address")
+        lane, model, effort = routing(args)
+        args.family = family(model)
+        transient = args.role in ("worker", "advisor")
+        if args.family == "agy":
+            if not args.packet:
+                raise ValueError("--packet is required for agy")
+            args.packet = absolute(args.packet)
+            if not Path(args.packet).is_file():
+                raise ValueError("--packet must name a file")
+            if not args.run:
+                raise ValueError("--run is required for agy")
         workspace = os.environ.get("HERDR_WORKSPACE_ID")
         parent = {}
-        if args.parent and (not workspace or args.role == "worker"):
+        if args.parent and (not workspace or transient):
             parent_path = home / "seats" / f"{args.parent}.json"
             try:
                 parent = json.loads(parent_path.read_text()) if parent_path.exists() else {}
@@ -422,28 +433,24 @@ def main():
                 raise ValueError("HERDR_WORKSPACE_ID or a parent seat workspace is required")
             workspace = "<workspace>"
         if not args.tab:
-            if args.role != "worker":
+            if not transient:
                 raise ValueError("--tab is required for non-worker seats")
             if not parent.get("tab"):
                 if not args.dry_run:
                     raise ValueError("--tab is required unless a worker has a parent seat tab")
                 print(f"# parent tab unknown in dry-run; using {args.parent}'s tab")
             args.tab = "bridge-work" if parent.get("tab") == "bridge" or (not parent.get("tab") and args.parent in BRIDGE) else (parent.get("tab") or args.parent)
-        lane, model, effort = routing(args)
-        args.family = family(model)
-        if args.family == "agy":
-            raise ValueError("agy runs as a plain command, not a seat")
-        if not (args.worktree or args.root):
+        if not (args.worktree or args.root or (args.family == "agy" and args.run)):
             raise ValueError("--root or --worktree is required")
         if args.role == "worker" and not args.run:
             raise ValueError("--run is required for a worker seat")
-        root = absolute(args.worktree or args.root)
+        root = absolute(args.run if args.family == "agy" else (args.worktree or args.root))
         extra_roots = list(dict.fromkeys(absolute(p) for p in args.extra_root + ([args.run] if args.run else [])))
         seat = dict(address=args.address, role=args.role, family=args.family, tab=args.tab,
-                    root=root, run=absolute(args.run) if args.role == "worker" else root,
+                    root=root, run=absolute(args.run) if transient else root,
                     extra_roots=extra_roots, parent=args.parent, model=model,
                     effort=effort, lane=lane, pane="", workspace=workspace, wait_ms=args.wait_ms,
-                    inbox="" if args.role == "worker" else str(home / "inbox" / f"{args.address}.json"))
+                    inbox="" if transient else str(home / "inbox" / f"{args.address}.json"))
         for key in ("name", "card", "handoff"):
             value = getattr(args, key)
             if value is not None:
@@ -451,15 +458,17 @@ def main():
         if args.handoff is None:
             seat["handoff"] = str(Path(root) / f"handoff-{args.address}.md")
         validate(seat)
-        config = hooks(args.role, args.family)
+        config = {} if args.family == "agy" else hooks(args.role, args.family)
         if args.family == "codex":
             warn_missing_hooks()
         if args.family == "claude":
             pretrust(root, args.dry_run)
+        if args.family == "agy" and not args.dry_run:
+            Path(seat["run"]).mkdir(parents=True, exist_ok=True)
         target, seat["tab"], created_tab, live = target_pane(args.tab, workspace, root, args.dry_run)
         tab_root = target if created_tab else None
         direction = args.direction or "down"
-        if args.role == "worker":
+        if transient:
             workers = set()
             for path in (home / "seats").glob("*.json"):
                 try:
@@ -469,7 +478,7 @@ def main():
                 except (OSError, ValueError) as error:
                     print(f"launch: warning: ignoring corrupt seat {path.stem}: {error}", file=sys.stderr)
                     continue
-                if (worker.get("role") == "worker" and worker.get("tab") == seat["tab"]
+                if (worker.get("role") in ("worker", "advisor") and worker.get("tab") == seat["tab"]
                         and worker.get("workspace") == workspace):
                     workers.add(worker.get("pane"))
             # Herdr lists panes in creation order, observed 2026-10-30 (wK:p8, pC, pE).
@@ -480,7 +489,7 @@ def main():
                 target = parent["pane"]
             direction = args.direction or ("down" if panes or parent.get("tab") != seat["tab"] else "right")
         target = args.source or target
-        if args.card is None and args.role != "worker":
+        if args.card is None and not transient:
             card = f"manager-{seat['tab']}" if args.role == "manager" else args.role
             card_path = PLUGIN / "cards" / f"{card}.md"
             if not card_path.is_file():
@@ -495,7 +504,7 @@ def main():
             common = git.stdout.strip()
             if common not in extra_roots:
                 extra_roots.append(common)
-        flags = native(seat, config, home)
+        flags = [] if args.family == "agy" else native(seat, config, home)
         candidate = home / "seats" / f"{args.address}.json"
         if candidate.exists():
             try:
@@ -520,8 +529,19 @@ def main():
                  "claude-sonnet-5-5": "sonnet-5.5", "gpt-6.1-sol": "sol-6.1",
                  "gpt-6-astra": "astra", "gemini-4-argon-high": "argon-high"}[model]
         role_text = {"manager": f"{seat['tab']} manager", "chunkmaster": "chunk master"}.get(args.role, args.role)
-        label = f"{args.name or args.address} · {role_text} · {short}"
+        label = f"{args.name or ('argon' if args.family == 'agy' else args.address)} · {role_text} · {short}"
         herdr(["pane", "rename", seat["pane"], label], args.dry_run)
+        if args.family == "agy":
+            run = Path(seat["run"])
+            command = (f'agy -p "$(cat {shlex.quote(args.packet)})" '
+                       + shlex.join(["--model", model, "--effort", effort,
+                                     "--output-format", "text", "--print-timeout", "15m"])
+                       + f" > {shlex.quote(str(run / 'result.md'))} 2> {shlex.quote(str(run / 'stderr.log'))}; "
+                       + f"echo $? > {shlex.quote(str(run / 'rc'))}")
+            herdr(["pane", "run", seat["pane"], command], args.dry_run)
+            if tab_root:
+                close_pane(tab_root, args.dry_run)
+            return
         # Re-read immediately before start and re-apply once if the flag disappeared.
         if args.family == "claude" and not args.dry_run:
             pretrust(root, False)

@@ -38,14 +38,16 @@
         "manager",
         "gravedigah",
         "chunkmaster",
-        "worker"
+        "worker",
+        "advisor"
       ]
     },
     "family": {
       "type": "string",
       "enum": [
         "claude",
-        "codex"
+        "codex",
+        "agy"
       ]
     },
     "tab": {
@@ -65,7 +67,7 @@
     },
     "inbox": {
       "type": "string",
-      "description": "Path of the seat's inbox marker file. Workers have none (empty string): nobody writes to a worker."
+      "description": "Path of the seat's inbox marker file. Workers and advisors have none (empty string): nobody writes to these seats."
     },
     "parent": {
       "type": "string",
@@ -79,7 +81,8 @@
         "claude-fable-5-1",
         "claude-sonnet-5-5",
         "gpt-6.1-sol",
-        "gpt-6-astra"
+        "gpt-6-astra",
+        "gemini-4-argon-high"
       ]
     },
     "effort": {

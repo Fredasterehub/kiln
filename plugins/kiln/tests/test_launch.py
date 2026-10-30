@@ -161,10 +161,90 @@ class LaunchTests(Sandbox, unittest.TestCase):
         self.assertIn('model_reasoning_effort=high', flags)
         self.assertEqual(self.seat()['model'], 'gpt-6-astra')
 
-    def test_advisor_is_a_plain_command_not_a_seat(self):
-        self.launch('--family', 'agy', '--role', 'advisor', ok=False)
-        self.launch('--model', 'gemini-4-argon-high', ok=False)
+    def advisor(self, *extra, ok=True):
+        return self.run_tool('launch', '--address', 'q-advisor', '--role', 'advisor',
+                             '--route', 'advisor', '--run', str(self.base / 'argon run'),
+                             '--parent', 'build', *extra, ok=ok)
+
+    def test_advisor_requires_packet_before_any_herdr_call(self):
+        result = self.advisor(ok=False)
+        self.assertIn('--packet is required', result.stderr)
         self.assertEqual(self.calls(), [])
+        self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_advisor_runs_in_parent_tab_without_agent_hooks_or_inbox(self):
+        self.env['FAKE_BOOTSTRAP'] = '1'
+        self.launch()
+        parent = self.seat()
+        packet = self.base / "packet ' with spaces.md"
+        packet.write_text('same sanitized facts; no other answers')
+        before = len(self.calls())
+        self.advisor('--packet', str(packet))
+        seat = self.seat('q-advisor')
+        self.assert_schema(seat)
+        self.assertEqual((seat['role'], seat['family'], seat['tab']), ('advisor', 'agy', 'build'))
+        self.assertEqual((seat['model'], seat['effort']), ('gemini-4-argon-high', 'high'))
+        self.assertEqual(seat['inbox'], '')
+        self.assertNotIn('hooks', seat)
+        self.assertNotIn('card', seat)
+        self.assertFalse((self.home / 'inbox').exists())
+        self.assertEqual(seat['root'], seat['run'])
+        calls = self.calls()[before:]
+        split = next(c for c in calls if c[:2] == ['pane', 'split'])
+        self.assertEqual((split[2], split[split.index('--direction') + 1]), (parent['pane'], 'right'))
+        self.assertFalse(any(c[0] == 'agent' for c in calls))
+        self.assertIn(['pane', 'rename', seat['pane'], 'argon · advisor · argon-high'], calls)
+        command = next(c for c in calls if c[:2] == ['pane', 'run'])
+        self.assertEqual(command[2], seat['pane'])
+        self.assertIn('--model gemini-4-argon-high --effort high', command[3])
+        self.assertIn('--output-format text --print-timeout 15m', command[3])
+        self.assertNotIn('--sandbox', command[3])
+        # Execute the actual pane command against a fake agy, including a failed turn.
+        fake = self.base / 'bin/agy'
+        fake.write_text('#!/usr/bin/env python3\nimport json, sys\n'
+                        'print(json.dumps(sys.argv[1:]))\n'
+                        'print("diagnostic", file=sys.stderr)\nsys.exit(7)\n')
+        fake.chmod(0o755)
+        subprocess.run(['sh', '-c', command[3]], env=self.env, check=True)
+        run = Path(seat['run'])
+        self.assertEqual(json.loads((run / 'result.md').read_text()),
+                         ['-p', packet.read_text(), '--model', 'gemini-4-argon-high',
+                          '--effort', 'high', '--output-format', 'text', '--print-timeout', '15m'])
+        self.assertEqual((run / 'rc').read_text(), '7\n')
+        self.assertEqual((run / 'stderr.log').read_text(), 'diagnostic\n')
+        # Advisors participate in the same live child pane chain as workers.
+        self.worker('after-advisor', 'build')
+        split = next(c for c in reversed(self.calls()) if c[:2] == ['pane', 'split'])
+        self.assertEqual((split[2], split[split.index('--direction') + 1]), (seat['pane'], 'down'))
+        self.run_tool('team', 'close', 'q-advisor')
+        self.assertFalse((self.home / 'seats/q-advisor.json').exists())
+        self.assertEqual(self.calls()[-1], ['pane', 'close', seat['pane']])
+
+    def test_advisor_splits_down_from_last_live_worker(self):
+        self.env['FAKE_BOOTSTRAP'] = '1'
+        self.launch()
+        self.worker('first', 'build')
+        packet = self.base / 'packet.md'
+        packet.write_text('sanitized facts')
+        self.advisor('--packet', str(packet))
+        split = next(c for c in reversed(self.calls()) if c[:2] == ['pane', 'split'])
+        self.assertEqual((split[2], split[split.index('--direction') + 1]),
+                         (self.seat('first')['pane'], 'down'))
+        self.assertEqual(self.seat('q-advisor')['tab'], 'build')
+
+    def test_advisor_dry_run_prints_pane_command_without_side_effects(self):
+        packet = self.base / 'packet.md'
+        packet.write_text('sanitized packet')
+        result = self.advisor('--packet', str(packet), '--dry-run')
+        lines = [shlex.split(line) for line in result.stdout.splitlines() if not line.startswith('#')]
+        self.assertEqual([line[1:3] for line in lines],
+                         [['tab', 'list'], ['pane', 'list'], ['pane', 'split'],
+                          ['pane', 'rename'], ['pane', 'run']])
+        self.assertIn(str(packet), lines[-1][4])
+        self.assertIn('agy -p', lines[-1][4])
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(list(self.home.iterdir()), [])
+        self.assertFalse((self.base / 'argon run').exists())
 
     def test_dry_run_no_writes_or_herdr_and_full_commands(self):
         for extra in [[], ['--family', 'codex', '--role', 'worker', '--worktree', str(self.base / 'new-worktree'),
@@ -628,7 +708,7 @@ class LaunchTests(Sandbox, unittest.TestCase):
         args = argparse.Namespace(role='worker', route='advisor', family=None, model=None, effort=None)
         with patch.dict('os.environ', self.env):
             self.assertEqual(module.routing(args), ('balanced', 'gemini-4-argon-high', 'high'))
-        self.assertIn('plain command', self.launch('--route', 'advisor', ok=False).stderr)
+        self.assertIn('--packet is required', self.launch('--route', 'advisor', ok=False).stderr)
         for route in ('missing', 'conceptual', 'conceptual.9', 'conceptual.-1'):
             before = self.calls()
             self.launch('--route', route, ok=False)
@@ -775,10 +855,11 @@ class LaunchTests(Sandbox, unittest.TestCase):
                 launch.manage_hooks(False, False)
                 write.assert_not_called()
 
-    def test_schema_excludes_agy_and_argon_seats(self):
+    def test_schema_includes_agy_advisor_and_argon_seats(self):
         schema = load_launcher().SCHEMA
-        self.assertNotIn('agy', schema['properties']['family']['enum'])
-        self.assertNotIn('gemini-4-argon-high', schema['properties']['model']['enum'])
+        self.assertIn('agy', schema['properties']['family']['enum'])
+        self.assertIn('advisor', schema['properties']['role']['enum'])
+        self.assertIn('gemini-4-argon-high', schema['properties']['model']['enum'])
 
     def test_install_prints_review_and_exact_keys_with_foreign_indexes(self):
         path = Path(self.env['CODEX_HOME']) / 'hooks.json'
