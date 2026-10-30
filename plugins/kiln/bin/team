@@ -155,6 +155,13 @@ def relay(args, home, seat):
     nudge(home, receiver, row, args.recheck_seconds)
 
 
+def check_worktree(seat):
+    if not Path(seat["root"]).is_dir():
+        raise ValueError("worktree gone: cannot check this review; use --force")
+    if worktree_mark(seat["root"], seat["run"]) != seat["worktree_mark"]:
+        raise ValueError("worktree changed since launch: reject this review")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -175,6 +182,8 @@ def main():
     commands.add_parser("ledger", help="print ledger rows").add_argument("--tail", type=int)
     commands.add_parser("workers", help="list seats whose parent is this seat")
     commands.add_parser("pending", help="print received rows with no done/answer citation")
+    commands.add_parser("mark", help="refresh a read-only seat's worktree baseline").add_argument("address")
+    commands.add_parser("check", help="check a read-only review without closing its seat").add_argument("address")
     close_parser = commands.add_parser("close", help="remove an accepted worker's seat record")
     close_parser.add_argument("address")
     close_parser.add_argument("--force", action="store_true", help="also allow closing a persistent seat or changed worktree")
@@ -194,6 +203,29 @@ def main():
             else:
                 relay(args, home, seat)
             return
+        if args.command in ("check", "mark"):
+            with locked(home):
+                path = home / "seats" / f"{address(args.address)}.json"
+                target = read_json(path)
+                if target is None:
+                    raise ValueError("seat not found")
+                if not target.get("read_only"):
+                    raise ValueError(f"{args.command} requires a read-only seat")
+                if args.command == "check":
+                    if "worktree_mark" not in target:
+                        raise ValueError("check requires a worktree mark")
+                    check_worktree(target)
+                else:
+                    mark = worktree_mark(target["root"], target["run"])
+                    if mark is None:
+                        raise ValueError("mark requires a git worktree root")
+                    target["worktree_mark"] = mark
+                    temporary = path.with_suffix(".tmp")
+                    temporary.write_text(json.dumps(target, ensure_ascii=False, indent=2) + "\n")
+                    temporary.chmod(path.stat().st_mode & 0o777)
+                    temporary.replace(path)
+            print(f"team: {'checked' if args.command == 'check' else 'marked'} {args.address}")
+            return
         if args.command == "close":
             with locked(home):
                 path = home / "seats" / f"{address(args.address)}.json"
@@ -201,10 +233,7 @@ def main():
                 if target is not None and target.get("role") not in ("worker", "advisor") and not args.force:
                     raise ValueError("closing a persistent seat requires --force")
                 if target and "worktree_mark" in target and not args.force:
-                    if not Path(target["root"]).is_dir():
-                        raise ValueError("worktree gone: cannot check this review; use --force")
-                    if worktree_mark(target["root"], target["run"]) != target["worktree_mark"]:
-                        raise ValueError("worktree changed since launch: reject this review")
+                    check_worktree(target)
                 path.unlink(missing_ok=True)
             if target and target.get("pane"):
                 try:

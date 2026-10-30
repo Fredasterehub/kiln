@@ -215,6 +215,73 @@ class LaunchTests(Sandbox, unittest.TestCase):
                 self.assertFalse(seatpath.exists())
                 self.assertEqual(self.calls()[-1], ['pane', 'close', seat['pane']])
 
+    def test_mark_refreshes_retained_review_baseline_and_close_passes(self):
+        root = self.review_worktree('retained-review')
+        self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+        original = self.seat()
+        run = Path(original['run'])
+        run.mkdir()
+        (run / 'result.md').write_text('first review\n')
+        self.run_tool('team', 'check', 'build')
+        (root / 'tracked').write_text('implementer fix\n')
+        self.assertIn('worktree changed', self.run_tool('team', 'close', 'build', ok=False).stderr)
+        calls = self.calls()
+        result = self.run_tool('team', 'mark', 'build')
+        self.assertEqual(result.stdout, 'team: marked build\n')
+        self.assertEqual(result.stderr, '')
+        marked = self.seat()
+        self.assertNotEqual(marked['worktree_mark'], original['worktree_mark'])
+        self.assertEqual(marked, original | {'worktree_mark': marked['worktree_mark']})
+        self.assertEqual(self.calls(), calls)
+        (run / 'result.md').write_text('fix re-read\n')
+        self.run_tool('team', 'check', 'build')
+        self.run_tool('team', 'close', 'build')
+        self.assertFalse((self.home / 'seats/build.json').exists())
+        self.assertEqual(self.calls()[-1], ['pane', 'close', original['pane']])
+
+    def test_check_passes_unchanged_and_rejects_reviewer_edit_without_mutation(self):
+        root = self.review_worktree('checked-review')
+        self.launch('--role', 'worker', '--read-only', '--worktree', str(root))
+        path = self.home / 'seats/build.json'
+        original = path.read_bytes()
+        calls = self.calls()
+        result = self.run_tool('team', 'check', 'build')
+        self.assertEqual((result.stdout, result.stderr), ('team: checked build\n', ''))
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(self.calls(), calls)
+        subprocess.run(['sh', '-c', 'printf "reviewer edit\\n" >> "$1"',
+                        'review', str(root / 'tracked')], check=True)
+        result = self.run_tool('team', 'check', 'build', ok=False)
+        self.assertEqual(result.stdout, '')
+        self.assertEqual(result.stderr, 'team: worktree changed since launch: reject this review\n')
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(self.calls(), calls)
+
+    def test_check_requires_read_only_seat_and_worktree_mark(self):
+        for read_only in (False, True):
+            with self.subTest(read_only=read_only):
+                self.launch('--role', 'worker', *(['--read-only'] if read_only else []))
+                path = self.home / 'seats/build.json'
+                original = path.read_bytes()
+                calls = self.calls()
+                result = self.run_tool('team', 'check', 'build', ok=False)
+                message = 'check requires a worktree mark' if read_only else 'check requires a read-only seat'
+                self.assertEqual(result.stderr, f'team: {message}\n')
+                self.assertEqual(path.read_bytes(), original)
+                self.assertEqual(self.calls(), calls)
+
+    def test_mark_refuses_non_read_only_seat(self):
+        root = self.review_worktree('builder')
+        self.launch('--role', 'worker', '--worktree', str(root))
+        path = self.home / 'seats/build.json'
+        original = path.read_bytes()
+        calls = self.calls()
+        result = self.run_tool('team', 'mark', 'build', ok=False)
+        self.assertEqual(result.stderr, 'team: mark requires a read-only seat\n')
+        self.assertEqual(result.stdout, '')
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(self.calls(), calls)
+
     def test_read_only_run_inside_worktree_is_excluded_from_every_input(self):
         for tracked in (False, True):
             with self.subTest(tracked=tracked):

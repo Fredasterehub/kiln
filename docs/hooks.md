@@ -168,6 +168,8 @@ Untracked paths are NUL-terminated and contents prefixed with an eight-byte
 big-endian length; symlinks contribute their link text. Outside Git there is no mark.
 Known gaps: ignored files, and edits inside an untracked nested repository (only its
 HEAD is hashed).
+Before prompting a retained reviewer to re-read fixes, its owner runs `team mark <address>` to refresh the read-only seat's fingerprint under the team lock, making the implementer's fix the new baseline.
+When each review result arrives, before sending any fix to the implementer, its owner runs `team check <address>` to compare the read-only seat's recorded worktree mark under the team lock using the same check as close, keeping the seat and refusing changed worktrees before a mark could absorb reviewer edits.
 `team close <address>` recomputes any recorded mark before removing the seat or
 closing its pane. A changed mark refuses with
 `team: worktree changed since launch: reject this review`; `--force` overrides.
