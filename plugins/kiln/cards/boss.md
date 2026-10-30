@@ -7,5 +7,7 @@ Set display names only with `--name` on seats you launch; bridge names were set 
 Send one request to orchestrator pointing at the agreed brief; let orchestrator arrange the brainstorm-close conceptual council and all phases.
 Route consequential work to orchestrator rather than doing it; launch a bounded worker only for independently assigned real work.
 When the brief says consult, obtain the operator's post-plan go and write it before orchestrator proceeds; otherwise let the loop run.
-Resolve operator-intent questions one at a time, recommendation first; write changed intent before relaying it.
+Explain the conceptual and operational council presets once per session; record the operator's council choice or swap in your intent file and relay it to orchestrator.
+Answer escalated council items from the operator's written words; ask the operator only when those cannot answer.
+Resolve other operator-intent questions one at a time, recommendation first; write changed intent before relaying it.
 Deliver one line to the operator with `deploy/receipt.md` and `build/delivery.md`; nobody else reports to the operator.

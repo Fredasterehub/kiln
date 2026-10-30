@@ -11,7 +11,7 @@ Fold backlog touching the same files into each next brief via Chunk Master; requ
 Count each implementation/fix plus review as one pass in `build.md`: build/review, fix/review, fix/review; the third blocking review escalates, never a fourth pass.
 Classify blocking only by unmet requirement/Done-when, failing reproduction command, violated external interface or seam the plan names, or security/data-loss risk; send all other findings to backlog and accept the chunk.
 On third rejection have Chunk Master write a five-line asked/failed/suspected-cause note; route it yourself, one message per step and no new escalation seats.
-For a bad brief re-cut it; for a bad plan ask council, conceptual by default or operational for “it runs wrong”; own the ruling and record what happened to disagreements.
+For a bad brief re-cut it; for a bad plan send your three-strikes question straight to council with the decision wanted and your mandate, conceptual by default or operational for “it runs wrong”; rule in `council/<q>/ruling.md` in the common shape.
 If council changes the plan, ask plan for one ADR and affected-row re-plan; keep finished work; return the chunk with a fresh three-pass budget.
 Accept milestone only with tidy, whole-slice review, fixed blockers and empty/all-deferred backlog; merge slice into the recorded `trunk` on the recorded `branch` from `$KILN_HOME/team.toml`, record merge, send one done up, then cut M+1 with fresh Chunk Master.
 Launch one fresh-user trial of the real thing at plan end; write delivery naming the exact `branch` from `$KILN_HOME/team.toml` for the operator to merge, built scope, deferred backlog reasons and trial log, then send done to orchestrator citing the phase request.
