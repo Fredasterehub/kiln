@@ -229,7 +229,7 @@ class B2Tests(unittest.TestCase):
         self.assertEqual(self.accept('plan', 'plan/plan.md')[0], 1)
 
     def test_milestone_requires_current_green_gate_and_build_entry(self):
-        self.write('build/build.md', 'M1: greeting built, gate and review recorded.')
+        self.write('build/build.md', 'M1: greeting built, gate and review recorded.\nClose read: call 7, clean.')
         self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 1)
         self.green()
         self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 0)
@@ -245,6 +245,20 @@ class B2Tests(unittest.TestCase):
         self.green()
         self.write('build/build.md', 'Earlier milestone only.')
         self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 1)
+
+    def test_milestone_requires_close_read_receipt(self):
+        self.green()
+        self.write('build/build.md', 'M1: built.')
+        self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 1)
+        self.assertIn('Close read', self.accept('milestone', 'build/build.md', 'M1')[1])
+        self.write('build/build.md', 'M0: built.\nClose read: call 1, clean.\nM1: built.')
+        self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 1)  # the receipt belongs to M0
+        self.write('build/build.md', 'M1: built.\n## M2: built.\nClose read: call 7, clean.')
+        self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 1)  # the receipt belongs to M2
+        self.write('build/build.md', 'M1: built.\n### M1 closed\nClose read: call 7, clean.\n## M10: built.\nClose read: skipped (one chunk, no blocking, empty backlog).')
+        self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 0)  # M1 closed is still M1; M10 is another entry
+        self.write('build/build.md', 'M1: built.\n- Close read: skipped (one chunk, no blocking, empty backlog).')
+        self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 0)
 
     def test_build_accepts_delivery_artifact(self):
         self.write('build/delivery.md', '## Built scope\nGreeting.\n## Deferred\nNone.\n## Trial\nGreeting observed.\n## Branch\nkiln/slice\n')
@@ -472,7 +486,7 @@ class B2Tests(unittest.TestCase):
         wt = self.home / 'wt'
         self.write('wt/.gitignore', 'ignored.txt\n')
         path = self.write('wt/product.txt', 'hello')
-        self.write('build/build.md', 'M1: product built.')
+        self.write('build/build.md', 'M1: product built.\nClose read: skipped (one chunk, no blocking, empty backlog).')
         self.green()
         mark = worktree_mark(wt, self.home)
         for args in (['add', '.'], ['commit', '-qm', 'product']):
@@ -535,7 +549,7 @@ class B2Tests(unittest.TestCase):
         self.green()
         self.write('build/build.md', 'M10: C10 built.')
         self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 1)
-        self.write('build/build.md', 'M1: C1 built.\nM10: C10 built.')
+        self.write('build/build.md', 'M1: C1 built.\nClose read: call 3, fixed in C2.\nM10: C10 built.')
         self.write('build/chunks/C10/report.md', 'Milestone: M10\nOpen blocking: broken')
         self.write('build/chunks/C1/report.md', 'Milestone: M1\nblocking: historical finding\nOpen blocking: none\n')
         self.assertEqual(self.accept('milestone', 'build/build.md', 'M1')[0], 0)

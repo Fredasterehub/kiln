@@ -122,8 +122,15 @@ def accept_artifact(args, home):
             raise ValueError('milestone requires the last gate green on the current worktree fingerprint')
         build = content(home / 'build/build.md')
         exact = r'(?<![\w.-])' + re.escape(args.milestone) + r'(?![\w.-])'
-        if not re.search(exact, build):
+        entry = re.search(exact, build)
+        if not entry:
             raise ValueError('build/build.md requires an exact milestone entry')
+        # The entry ends where the next milestone's entry begins (a line starting with another M<n>).
+        other = re.search(r'^[ \t]*(?:#{1,6}[ \t]*)?[-*]?[ \t]*(?!' + re.escape(args.milestone) + r'(?![\w.-]))M\d+(?![\w.-])',
+                          build[entry.end():], re.M)
+        section = build[entry.start():entry.end() + other.start()] if other else build[entry.start():]
+        if not re.search(r'^[ \t]*[-*]?[ \t]*Close read[ \t]*:[ \t]*\S', section, re.M | re.I):
+            raise ValueError('build/build.md requires a Close read: line under the milestone entry (clean, fixed in <chunk>, or skipped with why)')
         # Reports name their milestone explicitly; legacy reports can be mapped
         # by chunk id on the milestone's build entry, never by substring M1/M10.
         for report in (home / 'build/chunks').glob('*/report.md'):
