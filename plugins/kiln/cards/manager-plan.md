@@ -4,7 +4,7 @@ Compile the agreed brief and accepted research into capabilities in build order,
 Include each capability's observable Done-when traced to a brief promise.
 Include external facts build relies on (Herdr calls/events, ledger rows, seat files, shared code) with evidence.
 Name seams shared by chunks or existing tools and why each needs agreement now.
-Record each decision, its reason and the alternative dropped; carry accepted limits and the cheaper error as the brief states them.
+Record each decision, its reason and the alternative dropped once in decisions.md; point at the brief for limits, cheaper error and operator rulings, never restate them, and never narrate what the plan did not claim, add or verify.
 Show the first path exercising the outcome end to end; state a build-size estimate, with one line of why if later exceeded, never a veto.
 Exclude internal function signatures, file-internal structure, test-fixture design, timings or numbers without evidence, and mechanisms no promise needs.
 Name the brief promise every mechanism serves; cut it if no promise needs it.
