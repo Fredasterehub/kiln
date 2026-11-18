@@ -134,6 +134,7 @@ def pad(text, width):
 # Quota reads are passive and keep only numeric quota projections in memory.
 CLAUDE_QUOTA = '/tank/dump/claude/tmp/root/claude-0/statusline/quota.json'
 CODEX_SESSIONS = '/root/.codex/sessions'
+AGY_QUOTA = os.path.expanduser('~/.gemini/antigravity-cli/quota.json')
 
 
 def number(value):
@@ -185,7 +186,7 @@ def quota_window(raw, observed, now, claude=False, duration=None, source_reason=
             'label': label, 'reset': reset, 'observed': observed, 'reason': reason}
 
 
-def read_claude(path, now):
+def read_quota_file(path, now, windows, *, optional=False):
     reason, observed, data = 'missing', None, {}
     try:
         with open(path, encoding='utf-8') as handle: data = json.load(handle)
@@ -195,10 +196,15 @@ def read_claude(path, now):
             observed = epoch(data.get('observed_at'))
             if observed is None or observed > now:
                 reason, observed = 'invalid observation time', None
-    except FileNotFoundError: pass
+    except FileNotFoundError:
+        if optional: return []
     except (OSError, ValueError, UnicodeError): reason = 'unreadable or malformed'
     return [quota_window(data.get(key) if isinstance(data, dict) else None, observed, now, True, duration, reason)
-            for key, duration in (('five_hour', 300), ('seven_day', 10080))]
+            for key, duration in windows]
+
+
+def read_claude(path, now):
+    return read_quota_file(path, now, (('five_hour', 300), ('seven_day', 10080)))
 
 
 def project_window(raw):
@@ -287,6 +293,8 @@ def read_quota(reader=None, now=None, claude_path=None):
     reader = reader or CodexQuota(os.environ.get('WIRE_CODEX_SESSIONS', CODEX_SESSIONS))
     windows, other = reader.read(now)
     return {'claude': read_claude(claude_path or os.environ.get('WIRE_CLAUDE_QUOTA', CLAUDE_QUOTA), now),
+            'gemini': read_quota_file(os.environ.get('WIRE_AGY_QUOTA', AGY_QUOTA), now,
+                                      (('weekly', 10080),), optional=True),
             'codex': windows, 'other': other, 'now': now}
 
 
@@ -316,20 +324,27 @@ QUOTA_ACCENT = paint(75, 94)
 QUOTA_UNKNOWN = paint(178, 33)
 
 
-def quota_parts(quota):
+def quota_parts(quota, compact=False):
     if quota is None:
         quota = {'codex': [{'label': None, 'reason': 'missing'}],
+                 'gemini': [],
                  'claude': [{'label': '5h', 'reason': 'missing'}, {'label': 'wk', 'reason': 'missing'}]}
     parts = []
-    for provider_index, (provider, windows) in enumerate((('Codex', quota['codex']), ('Claude', quota['claude']))):
-        if provider_index: parts.append((GREY, '  '))
+    for provider, windows in (('Codex', quota['codex']), ('Gemini', quota.get('gemini', [])), ('Claude', quota['claude'])):
+        if not windows: continue
+        if parts: parts.append((GREY, '  '))
         parts.append((QUOTA_BOLD, provider + ' '))
         for index, window in enumerate(windows):
             if index: parts.append((GREY, ' · '))
-            label = 'week' if window['label'] == 'wk' and provider == 'Codex' else '7d' if window['label'] == 'wk' else window['label']
+            label = window['label']
+            if label == 'wk':
+                label = {'Codex': 'week', 'Claude': '7d'}.get(provider, label)
             if label: parts.append(('', label + ' '))
             if window['reason']:
                 parts.append((QUOTA_UNKNOWN, 'expired' if window['reason'] == 'expired' else '--'))
+                continue
+            if compact:
+                parts.append(('', quota_value(window)))
                 continue
             used = window['used']
             filled = min(QUOTA_METER_CELLS, round(used * QUOTA_METER_CELLS / 100))
@@ -351,17 +366,21 @@ def iso_time(value):
 
 
 def quota_details(quota):
-    lines = ['Used percentages; scope: local root Claude and Codex contexts.',
+    lines = ['Used percentages from local Claude, Codex and Antigravity observations.',
              'Every prefix percentage is used; unfilled meter capacity is remaining.',
-             'Meter: floor(32 × used / 100) eighths across four cells, at least one eighth for positive use; full only at 100% used.',
-             'One blue fill grows without warning thresholds. Percentages round to nearest integer; positive <1% and true 100% stay distinct.',
+             'The ten-cell meter fills in proportion to use, with at least one cell for positive use.',
+             'Percentages round to nearest integer; positive <1% and true 100% stay distinct.',
              'Unknown -- and expired have no meter. Old unexpired records retain their used value.',
-             'Codex record age does not establish provider measurement freshness; Claude age is producer observation age.']
-    for provider, windows in (('Claude', quota['claude']), ('Codex', quota['codex']), ('Codex other shape (details only)', quota['other'])):
+             'Age measures time since the local record or last observed value change.']
+    for provider, windows in (('Claude', quota['claude']), ('Gemini', quota.get('gemini', [])),
+                              ('Codex', quota['codex']), ('Codex other shape (details only)', quota['other'])):
         for index, window in enumerate(windows):
             observed = window['observed']
             value = '-- (' + window['reason'] + ')' if window['reason'] else str(window['used']) + '% used, ' + format(100 - window['used'], '.10g') + '% remaining'
-            bucket = ('five_hour', 'seven_day')[index] if provider == 'Claude' else ('primary' if index == 0 else 'secondary') if provider == 'Codex' else str(index + 1)
+            if provider == 'Claude': bucket = ('five_hour', 'seven_day')[index]
+            elif provider == 'Gemini': bucket = 'weekly'
+            elif provider == 'Codex': bucket = ('primary' if index == 0 else 'secondary')
+            else: bucket = str(index + 1)
             lines.append(f"{provider} {bucket}: "
                          f"duration={str(window['minutes'])+'m' if window['minutes'] is not None else '--'} {value}; {'recorded' if provider.startswith('Codex') else 'observed'}={iso_time(observed)}; "
                          f"age={age_text(observed, quota['now']) if observed is not None else '--'}; reset={iso_time(window['reset'])}")
@@ -631,7 +650,10 @@ def legend(width, health=(), quota=None):
         kinds += [(color, glyph), (GREY, ' '+kind+' ')]
     tabs = []
     for tab, frames in TAB_SPINNERS.items(): tabs += [(TAB_COLORS[tab], frames[0]+' '+tab+' ')]
-    prefix = quota_parts(quota) + [(GREY, ' │ ')] + diagnostics + ([(GREY, ' │ ')] if diagnostics else [])
+    suffix = [(GREY, ' │ ')] + diagnostics + ([(GREY, ' │ ')] if diagnostics else [])
+    prefix = quota_parts(quota) + suffix
+    if quota and quota.get('gemini') and sum(visible_cells(text) for _, text in prefix + states) > width - 1:
+        prefix = quota_parts(quota, compact=True) + suffix
     choices = [kinds + states, states]
     parts = prefix + states
     full_legend = False
